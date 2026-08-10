@@ -257,7 +257,8 @@ cmake --build .
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is available under the [European Union Public Licence 1.2](LICENSE), or under separate
+commercial terms. See [LICENSING.md](LICENSING.md).
 
 ## Contributing
 
