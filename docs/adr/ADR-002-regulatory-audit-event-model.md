@@ -113,12 +113,31 @@ Field kinds follow ADR-001 Decision 2: `action`, `target`, `actor`, `requirement
 `correlationId` are **identifier-kind** (over-long values are refused, never truncated); `detail` is
 descriptive text (truncatable, with the truncation flagged).
 
-**Nothing `logAudit()` records today may be lost in the migration.** Its current inputs map as:
-`message` → `detail`; `eventType` → `action`; `userId` → `actor`; `deviceId` → `target` (or the
-stream identity of Decision 5, where the device is the emitter rather than the object acted on);
-`riskLevel` → `riskRef`; `complianceStandard` → dropped from the record as a per-event field, since
-a literal `"IEC_62304"` on every event carries no information — if a real per-event standard
-reference is needed it belongs in `requirementRef`.
+**The migration discards no field, but it does constrain values — and the difference matters.** The
+current inputs map as: `message` → `detail`; `eventType` → `action`; `userId` → `actor`; `deviceId`
+→ `target` (or the stream identity of Decision 5, where the device is the emitter rather than the
+object acted on); `riskLevel` → `riskRef`; `complianceStandard` → dropped from the record as a
+per-event field, since a literal `"IEC_62304"` on every event carries no information — if a real
+per-event standard reference is needed it belongs in `requirementRef`.
+
+An earlier revision claimed "nothing may be lost" without qualification, which is not sustainable
+against ADR-001 Decision 2: `logAudit()` today takes unconstrained `std::string_view` values, while
+`action`, `actor` and `target` become identifier-kind fields that **refuse** an over-long value
+rather than storing part of it. A caller passing a 4 KiB `eventType` gets a refused event, not a
+truncated one — and calling that "lossless" would be exactly the kind of wording this record is
+supposed to avoid. So the migration owes three things the implementing issue must supply:
+
+- **A stated grammar and limit per identifier field** (permitted bytes and maximum length), chosen
+  from what real call sites pass rather than guessed, and documented as a public constraint — a
+  limit callers cannot see is a limit they will violate.
+- **A refusal that names the field**, per ADR-001 Decision 3, so an over-long `eventType` is
+  distinguishable from a full ring at the call site.
+- **A documented fallback for free-text values that legitimately exceed a limit**: they belong in
+  `detail`, which truncates and flags, not in an identifier field. A migration note should say so
+  for `message`, which is the only current input with no length expectation at all.
+
+The honest summary is therefore: no field is dropped, every value is either stored whole or refused
+with a reason, and nothing is silently shortened except `detail`.
 
 ### 2. Audit capture bypasses ordinary logger filtering — stated, not incidental
 
@@ -188,8 +207,33 @@ workflow has one), `Executed` or `Failed` (reported by the host after acting).
 | `nodeId` | `target` |
 | `requirement` | `requirementRef` |
 | `event` (`SystemEvent`) | `action` — the closed `SystemEvent` set maps to stable action identifiers; `category`/`phase` do **not** substitute for it |
-| `sequence` | `sequence` (and seeds `correlationId` for the follow-up events) |
+| `sequence` | `sourceSequence` (provenance only) — **not** `AuditEvent.sequence` |
+| — | `correlationId`, derived from the source's own stream identity and `sequence` |
+| — | `sequence`, allocated fresh from the audit stream for this event and for every follow-up |
 | — | `phase = Requested`; the host emits the matching `Executed`/`Failed` itself |
+
+**The two counters are not the same unit, and an earlier revision wrongly equated them.** One
+source action becomes several audit events (Decision 4), while `AuditEvent.sequence` must be
+monotonic and unique per audit stream (Decision 5). Copying `ActionTrace.sequence` across breaks
+both ways: source action 41 emits `Requested`, and if its `Executed` takes the next number 42, the
+conversion of source action 42 then collides with it; reusing 41 for the result duplicates instead.
+Adding `Confirmed`, or interleaving two actions, makes it worse — a counter that only counts source
+actions reserves no room for the events each one produces.
+
+So **every emitted event draws a fresh audit sequence number**, and the source counter is kept as
+provenance. Correlation, not sequence, is what ties an action's events together — and
+`correlationId` must be derived from `(source stream identity, source sequence)`, or allocated
+independently, never from a bare `sequence` value: sequences restart per stream (Decision 5), so
+two streams would otherwise mint the same id and a reader would group unrelated events.
+
+**Worked example.** Audit stream `S`. Source action 41 (`emergency-halt`) produces `Requested`,
+`Confirmed`, then `Executed` — audit sequences 100, 101, 102, all carrying
+`correlationId = C(src, 41)` and `sourceSequence = 41`. Source action 42 follows with `Requested`
+and `Failed` — audit sequences 103 and 104, `correlationId = C(src, 42)`. Now interleave: action 43
+is requested (105, `C(src, 43)`), action 44 is requested (106, `C(src, 44)`), 44 executes (107,
+`C(src, 44)`), 43 fails (108, `C(src, 43)`). Audit sequences are unique and increasing throughout;
+each action's events remain joinable by `correlationId` regardless of interleaving; and no source
+sequence value was ever used to order the audit stream.
 
 These references stay generic and bounded: mddlog imports nothing from MduX, and no consumer is
 required to populate `requirementRef`/`riskRef`. The conversion is documented here so the category
@@ -212,8 +256,19 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   producer within one boot session. Its exhaustion behavior and width must be stated by the
   implementing issue (a 64-bit counter at any plausible event rate does not wrap within device
   lifetime, which is the intended answer, but it should be written down rather than assumed).
-- **Stream identity** accompanies every event: a boot-session identifier that changes on restart. No
-  global order is promised across independent producers or across devices.
+- **Stream identity must identify the producer, not only the boot.** An earlier revision described
+  it as "a boot-session identifier that changes on restart", which distinguishes restarts but not
+  the concurrent producers ADR-001 Decision 4 explicitly allows (one ring each, aggregated by the
+  adapter). Two producers A and B in boot session `S` each emitting their event 1 would both carry
+  `(S, 1)`, and after aggregation nothing says which stream an event came from: the
+  `(stream, sequence)` ordering below becomes ambiguous, and so does the per-stream scoping ADR-004
+  gives its chains. The identity is therefore unique **per stream instance** —
+  `(deviceId, bootSessionId, producerInstanceId)`, or an opaque identifier with the same uniqueness
+  property, where a globally unique identifier may leave some components implicit but must not give
+  up the uniqueness. It is preserved through serialization, and **a producer destroyed and recreated
+  within one boot session gets a new stream identity** whenever its counter restarts.
+- No global order is promised across independent producers or across devices; `(streamId, sequence)`
+  identifies an event unambiguously, and that is the whole promise.
 
 **Worked example.** Two events are recorded in the same millisecond: identical rendered timestamps,
 `sequence` 41 and 42 in one stream — order is unambiguous within the stream. The clock is then
@@ -222,6 +277,16 @@ corrected backwards by two seconds: event 43 renders with an *earlier* timestamp
 (stream, sequence) and treat the timestamp as an attribute, not as the ordering key. The device
 restarts: a new stream identity appears and `sequence` restarts, so 41/42 of the old stream and
 41/42 of the new one are never confused, and the gap is visible instead of implied.
+
+**Second worked example — two concurrent producers, then one of them restarts.** Producers A and B
+run in boot session `S` on device `D`, each with its own ring. Both emit their first event, so both
+hold `sequence = 1`; they are distinguishable only because their stream identities differ —
+`(D, S, A)` and `(D, S, B)`. After the adapter aggregates both rings, every event still answers
+"which stream" unambiguously, and a reader sorting by `(streamId, sequence)` gets two well-ordered
+sequences rather than one interleaved guess. Producer A is then torn down and recreated inside the
+same boot session; its counter restarts at 1, so it receives a **new** producer instance identity
+`(D, S, A')` — otherwise its new event 1 would be indistinguishable from its old one. Nothing here
+claims A's events and B's events have a defined relative order; only that no event is ambiguous.
 
 ### 6. Scope limits, stated from the start
 

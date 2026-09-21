@@ -42,8 +42,9 @@ structural change rather than an incremental one:
   should not be duplicated into it once it is either deleted or reconciled.
 - Issue #5 separately documents the unbounded queue as an accepted limitation ("Document the
   existing unbounded queue as a limitation; bounded real-time queue design is outside this issue")
-  and treats "persistent/cryptographically protected audit storage" as out of its own scope — both
-  are exactly the gap this ADR and ADR-002 exist to close.
+  and treats "persistent/cryptographically protected audit storage" as out of its own scope. The
+  queue half is what this ADR closes; the audit record and its delivery contract are ADR-002's, and
+  persistent/tamper-evident storage is ADR-004's.
 
 None of this is a criticism of what exists — a synchronous/asynchronous best-effort logger with a
 console sink is a reasonable first module set. The point of this ADR is that "zero-allocation
@@ -73,8 +74,11 @@ boundary between code that is allowed to allocate, throw, or block, and code tha
   is a hazard in its own right for the audit-relevant levels: a caller believes an `AUDIT` or
   `ERROR` record was recorded when it may not have reached any sink at all. ADR-002 addresses the
   audit path specifically; the governed core defined here must not add a *second* unreported failure
-  mode of its own — every refusal and every post-admission loss must be observable through the
-  contract in Decision 3, not swallowed.
+  mode of its own. Note the split, because Decision 3 alone cannot carry it: a **refusal** is
+  synchronous and is reported by the call's own result, while a loss **after** admission — a sink
+  that fails once the record has already been accepted — is outside that result by construction and
+  is reported through ADR-002 Decision 3's asynchronous audit-health signal. Neither may be
+  swallowed; they are simply not reported by the same mechanism.
 
 ## Decision
 
@@ -152,13 +156,31 @@ one:
   producers use one ring each, and the adapter aggregates across rings; this keeps the governed side
   lock-free without making cross-ring ordering a promise (ADR-002 Decision 5 covers ordering).
 - **Cursors**: a write cursor and a **read cursor**, both monotonically increasing sequence counters
-  rather than wrapped indices, so "empty", "full" and "how many were lost" are all derivable by
-  subtraction and wrap-around is not ambiguous.
-- **Publication**: a slot becomes visible to the consumer only when the write cursor is published
-  (release), and becomes reusable by the producer only after the consumer advances the read cursor
-  past it (acquire). A slot between those two points is never rewritten.
+  rather than wrapped indices, so "empty", "full" and current occupancy are derivable by subtraction
+  and wrap-around is not ambiguous. Refusals are **not** derivable this way: under refuse-new a
+  rejected write does not advance the write cursor, so the difference measures unread occupancy and
+  nothing else. Refused writes are counted separately (see Overflow).
+- **Publication — two release/acquire exchanges, not one.** The first orders the producer's writes
+  before the consumer's reads; the second orders the consumer's reads before the producer's reuse of
+  the same storage. Both are required, and naming only the first is the mistake this bullet
+  previously made:
+  1. the producer fills a slot, then publishes the write cursor with a **release** store;
+  2. the consumer **acquire**-loads the write cursor before reading any published slot;
+  3. after its last read or copy out of those slots, the consumer publishes the read cursor with a
+     **release** store;
+  4. the producer **acquire**-loads the read cursor before rewriting any freed slot.
+
+  Step 3 is what makes step 4 safe: without it there is no happens-before edge from the consumer's
+  reads to the producer's next writes, and the non-atomic slot contents are racy however carefully
+  the cursors are handled. Note that a `store(memory_order_acquire)` is not valid, and an
+  acquire-only read-modify-write would not publish the consumer's preceding reads — step 3 must
+  carry release semantics. A slot between publication and release is never rewritten.
 - **Overflow**: **refuse-new**, not drop-oldest. A ring with no reusable slot refuses the write with
-  `Refused(RingFull)` and increments an observable refusal counter. Refusing a new record keeps
+  `Refused(RingFull)` and increments a refusal counter. That counter is written by the producer and
+  read by an observer on another thread, so it is not covered by the cursor protocol above and needs
+  its own rule: an atomic counter (relaxed increment is sufficient — it is a statistic, not a
+  synchronisation point), or a snapshot published alongside the write cursor. A plain `std::size_t`
+  incremented by the producer and read by a monitor is a data race. Refusing a new record keeps
   every already-admitted record intact, which is the behavior ADR-002's audit lane requires; the
   earlier draft left drop-oldest open as an option, and this revision closes it, because an audit
   event that was accepted and then silently overwritten is strictly worse than one that was never
@@ -183,8 +205,8 @@ be, by construction. What it does require is that the boundary be stated rather 
   (`sinks/ConsoleSink.cppm:71-87`) emits `userId`, `deviceId`, `operationId`, `auditEventType` and
   `riskLevel`, but not `complianceStandard`, and its output is a human-readable line, not a
   round-trippable encoding. Nothing in this ADR should be read as implying that routing a governed
-  record through today's sinks preserves it; the sink that is responsible for complete audit-field
-  preservation is the one ADR-002's deferred persistence ADR will have to specify.
+  record through today's sinks preserves it; the sink responsible for complete audit-field
+  preservation is ADR-004's to specify.
 
 ### 6. The boundary is materialised as modules *and* CMake targets
 
@@ -195,7 +217,15 @@ split to mean anything:
 
 - The governed modules move under names that only contain governed code (`mddlog.core.record`,
   `mddlog.core.ring`). `SimpleLogger` moves out of the `mddlog.core.*` namespace to an adapter
-  module — a rename, not a rewrite; the existing facade keeps working for existing callers.
+  module — a rename, not a rewrite. **A module rename is a breaking change for anyone writing
+  `import mddlog.core.logger` directly**, which keeping the class intact does not soften: the class
+  survives, the import path does not. This record chooses the migration rather than a permanent
+  compatibility module, because a `mddlog.core.logger` that re-exports an adapter type would
+  reintroduce exactly the "core means governed" ambiguity Decision 6 exists to remove. Consumers
+  that import the umbrella `mddlog` module are unaffected; direct importers of the submodule change
+  one line. If that trade turns out to be wrong for a real consumer, the alternative is a
+  deprecated-but-present shim module, and it should be decided deliberately rather than by
+  accident.
 - Two CMake targets with a **one-way** dependency: `mddlog-core` (governed, no sink modules) and
   `mddlog` (adapter, links `mddlog-core`). A consumer — MduX being the motivating one — must be able
   to import and link the governed core without pulling in `SimpleLogger`, the sinks, or their
@@ -261,8 +291,9 @@ a mode of this one.
   to document and keep in sync than the current single struct.
 - Fixed capacities make some inputs refusable that are accepted today (Decision 2), which is a
   behavioral change for existing callers, not only an internal one.
-- The module rename and target split (Decision 6) touch the public module names, so they need a
-  migration note for any existing consumer.
+- The module rename and target split (Decision 6) are a breaking change for any consumer importing
+  `mddlog.core.logger` directly — the type survives the move, the import path does not, and this
+  record chooses migration over a permanent compatibility module.
 - No mechanical enforcement exists yet; this ADR makes the boundary reviewable, not enforced.
 
 ### Risks and Mitigations
@@ -290,7 +321,8 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - [MduX `Trace.cppm`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/medui/Trace.cppm) — `SampleRing`, cited in Decision 4 for what it is *not* a precedent for.
 - [MduX `cmake/MduXNoHeapScan.cmake`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/cmake/MduXNoHeapScan.cmake) — the two scan profiles and their different scopes.
 - mddlog issue #5 — the unbounded queue, the root-level `mddlog.cppm` ambiguity, and the absent CI this ADR's Decision 6 depends on.
-- ADR-002 (this repository) — the audit delivery contract built on Decision 3 and Decision 4.
+- ADR-002 (this repository) — the audit delivery contract built on Decision 3 and Decision 4, and the audit-health signal that reports losses occurring after admission.
+- ADR-004 (this repository) — persistence and tamper evidence, including the sink that would have to preserve every audit field.
 
 ## Approval
 - **Decision Date**: not yet approved — drafted for review.

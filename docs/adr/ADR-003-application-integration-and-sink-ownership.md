@@ -158,8 +158,26 @@ boundary with a registry where:
 - slots are reclaimed rather than leaked one per connection;
 - registering several sinks returns one handle **per sink**, fixing the `size() - 1` defect.
 
-The facade keeps `addSinks`/`removeSinks` spellings so call sites do not change; only the guarantee
-underneath changes.
+**Self-removal must be defined before quiescent removal is safe.** A sink callback that removes its
+own handle would wait for an invocation that cannot finish until the wait returns — a deadlock
+introduced by the very guarantee above. The rule adopted here is **deferred self-removal**: a
+removal issued from inside the sink being removed returns immediately, marks the handle as retiring
+so no new invocation starts, and completes once the current invocation returns. Removal from any
+other context waits as described. The two remaining options — rejecting the self-call, or a
+non-waiting self path with no completion guarantee — are worse: the first makes a sink unable to
+retire itself in response to its own transport error, which Decision 5 needs; the second gives back
+the guarantee the decision exists for. A removal issued from inside a *different* sink's callback
+still waits, and an implementation must not let two sinks removing each other wait in a cycle.
+
+**The handle change is a breaking change for multi-sink call sites, deliberately.** Today
+`addSinks(a, b, c)` returns one `size_t`; the replacement returns one handle per sink, so a call
+site registering several sinks at once must bind several handles and pass them individually to
+`removeSinks`. Keeping the function names does not keep those call sites compiling. This record
+chooses the break rather than a compatibility wrapper, because the single-id return is not a
+convenience to preserve — it is the defect that makes every sink but the last unremovable. For
+single-sink registration, which is what `WebLink.hpp:120` and both example programs actually do, the
+shape is unchanged. A variadic call returning a tuple or array of handles is the recommended
+spelling; the implementing issue picks it.
 
 ### 5. The transport consumer is bounded, non-reentrant, and fails quietly
 
