@@ -187,6 +187,36 @@ shape, so Decision 1's test contract still holds while the identifiers survive t
 `AuditEvent` (ADR-002) is not reachable through this facade. A consumer that wants an audit lane opts
 into it explicitly, and it does not share the browser sink.
 
+**Worked example — one call's request, response and error, across two simultaneous connections.**
+The identifier that matters is the **pair**, not the `CallId`: `WebLinkId` is allocated per
+connection (`WebFront.hpp:347-348`) while `CallId` restarts from `nextCallId{1}` inside each
+`WebLink` (`WebLink.hpp:52`), so call 1 on link 1 and call 1 on link 2 are unrelated calls that today
+render as indistinguishable text.
+
+Two browsers are connected as links 1 and 2. Each invokes a JS function; `expectResult()` allocates
+a `CallId` per link and returns a future (`WebLink.hpp:84-99`), `JsFunction` stamps it on the outgoing
+command (`JsFunction.hpp:41`), the reply arrives as `functionReturn` and settles through
+`completePending` (`WebLink.hpp:112`), and a failure arrives instead as an encoded exception or an
+error (`sendException`/`sendError`, lines 139-153) — or, if the browser disconnects mid-call, as
+`rejectPending` from the close handler (line 64):
+
+| Event | component | webLinkId | callId |
+|---|---|---|---|
+| request sent to browser A | `jsFunction` | 1 | 1 |
+| request sent to browser B | `jsFunction` | 2 | 1 |
+| response settles for B | `jsFunction` | 2 | 1 |
+| error returned for A | `jsFunction` | 1 | 1 |
+| A disconnects, pending rejected | `weblink` | 1 | 1 |
+
+Interleaved arbitrarily in one stream, those five lines are today five strings whose only relation is
+whatever the call site happened to interpolate. With the identifiers carried as fields, a reader
+filters on `(webLinkId, callId)` and gets one call's life without parsing text — and the last two
+rows, which belong to the same call but are emitted from different components, stay joined.
+
+Capturing them at emission rather than at drain is what makes this work: by the time a bounded
+consumer drains the ring, link 1 may already be destroyed (`~WebLink`, line 74), so there is nothing
+left to ask.
+
 ## Alternatives Considered
 
 ### 1. WebFront depends on mddlog directly (Rejected)
