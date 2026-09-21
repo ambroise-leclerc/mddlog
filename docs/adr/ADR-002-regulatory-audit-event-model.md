@@ -3,203 +3,306 @@
 ## Status
 Proposed — drafted for maintainer review, not yet acted on.
 
+All MduX references in this record are pinned to commit
+[`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
+the baseline mddlog issue #5 verifies against.
+
 ## Context
 
 `README.md` lists, under Medical Device Compliance: "Audit Trail: Tamper-proof logging with
 cryptographic signatures", "Risk Management: Hazard tracking and mitigation logging per ISO 14971",
-"Regulatory Reporting: Automated compliance report generation", and under Advanced Sink System an
-`AuditSink` marked `(planned)`. None of this exists in the current module set. What exists instead:
+"Regulatory Reporting: Automated compliance report generation", and an `AuditSink` marked
+`(planned)`. None of it exists in the current module set. What exists instead:
 
 - `AUDIT` is one more value of the `LogLevel` enum (`include/mddlog/core/LogLevel.cppm:24`), ordered
-  as the *highest-severity* level, sitting above `FATAL`. Severity and audit-relevance are
-  conflated: nothing distinguishes "this is unusually severe" from "this must be retained for
-  regulatory purposes regardless of severity."
+  as the **highest** severity, above `FATAL`. Severity and audit-relevance are conflated: nothing
+  distinguishes "unusually severe" from "must be retained for regulatory purposes regardless of
+  severity."
 - `SimpleLogger::logAudit()` (`include/mddlog/core/Logger.cppm:133-141`) builds an ordinary
-  `LogRecord` with `level = LogLevel::AUDIT`, sets three free-text fields
-  (`auditEventType`, `riskLevel`, `complianceStandard` — `LogRecord.cppm:39-42`, defaulted to the
-  literal string `"IEC_62304"` in `setAuditInfo()`), and pushes it through the exact same
-  best-effort pipeline as a `trace()` call: the same unbounded queue, the same silently-swallowed
-  sink exceptions (`writeToSinks()`, `Logger.cppm:269-280`), the same `shouldLog()` gate — meaning
-  `logAudit()` is **not** exempt from `setMinLevel()` filtering or from `setEnabled(false)` today,
-  even though nothing states whether that is intended.
-- There is no schema, no requirement/hazard linkage, no cryptographic sealing, and no export path
-  distinct from `ConsoleSink`'s human-readable line format (`sinks/ConsoleSink.cppm:64-99`).
+  `LogRecord` with `level = LogLevel::AUDIT`, sets three free-text fields (`auditEventType`,
+  `riskLevel`, `complianceStandard` — `LogRecord.cppm:39-42`, the last defaulted to the literal
+  `"IEC_62304"` in `setAuditInfo()`), and calls `processLogRecord()` **directly**.
+- **What that means for filtering, precisely** — an earlier draft of this ADR got this backwards and
+  it matters, because the decision below rests on it. `logAudit()` does *not* call `shouldLog()`, and
+  `processLogRecord()` (line 252) does not consult it either; only the other `log()` overloads do
+  (line 98). So today `logAudit()` **already bypasses** `setEnabled(false)` and the logger's
+  `minLevel_` threshold. Two filters still apply downstream: `writeToSinks()` (lines 269-280) checks
+  `sink->shouldLog(record.level)` and `sink->isEnabled()` per sink. And because `AUDIT` is the
+  maximum `LogLevel` value, no valid severity threshold could exclude it on severity alone anyway.
+  The gap is therefore not "audit events are wrongly filtered" but "the existing bypass is
+  incidental, unstated and untested, and sink-level filtering still silently applies."
+- Beyond filtering, an audit record shares every best-effort property of ordinary logging: the same
+  unbounded queue, and the same `catch (...)` that discards a sink failure without counting it.
+- There is no schema, no requirement or hazard linkage, no correlation between a requested action
+  and its outcome, no cryptographic sealing, and no export path distinct from `ConsoleSink`'s
+  human-readable line format (`sinks/ConsoleSink.cppm:64-99`).
 - mddlog's own tracked work already names this gap without closing it: issue #5's "Audit policy" row
   asks to "Define and test whether `logAudit()` intentionally bypasses ordinary logger disablement/
-  filtering" as a *specification* of current behavior, and its Boundaries section explicitly
-  excludes "persistent/cryptographically protected audit storage" from that issue's scope. Both
-  statements are consistent with there being no audit *model* yet to specify or persist — only a log
-  level with a suggestive name.
+  filtering", and its Boundaries section excludes "persistent/cryptographically protected audit
+  storage" from that issue's scope.
 
-This ADR does not implement cryptographic sealing or persistent storage — those remain out of scope
-here too, for the same reason issue #5 gives: they are a distinct, larger concern (key management,
-storage medium, tamper-evidence guarantees) that deserves its own ADR once this one settles what an
-audit event *is*.
+This ADR does not implement cryptographic sealing or persistent storage — those stay out of scope
+here too, for the reason issue #5 gives: they are a distinct, larger concern (key management,
+storage medium, tamper-evidence guarantees) deserving its own ADR once this one settles what an
+audit event *is* and what its delivery contract promises.
 
 ## Medical Device Considerations
 
 ### IEC 62304 / ISO 13485 / ISO 14971 implications
-- **IEC 62304 §9 (problem resolution) and §5.8 (release)** both depend on being able to answer "what
-  happened, when, and was it verified" from a record — the same question MduX's
-  `mdux.governance.AuditEvent`/`ComplianceProgram` types exist to answer for that project's design
-  history, generalized here to runtime events a deployed device produces.
-- **ISO 14971 §7 (risk control) / §9 (post-market surveillance)**: a hazard-relevant runtime event
-  (an alarm silenced, a safety interlock overridden, a configuration changed) is exactly the class of
-  event a regulator or a post-market surveillance process expects to be able to reconstruct. A log
-  line that can be filtered out by `setMinLevel()` or lost when a sink throws cannot serve that
-  purpose, which is why "audit" cannot remain a `LogLevel` value subject to the same filtering as
-  `TRACE`/`DEBUG`.
-- **Fail-closed delivery, not fail-open severity.** The current design conflates "important enough
-  to always show" (a severity concern) with "must never be silently dropped" (a delivery-guarantee
-  concern). An audit event needs the second property; it does not need to be the numerically highest
-  severity to need it — a `LogLevel::INFO`-severity "user acknowledged alarm" event is exactly as
-  audit-relevant as a `FATAL` one, and today's ordering (`AUDIT` above `FATAL`) does not express
-  that distinction at all.
+- **Problem resolution and release** both depend on reconstructing "what happened, when, and was it
+  verified" from a record — the question MduX's `mdux.governance::AuditEvent`/`ComplianceProgram`
+  types answer for that project's *design history*, generalized here to runtime events a deployed
+  device produces.
+- **Risk control and post-market surveillance**: a hazard-relevant runtime event (an alarm silenced,
+  an interlock overridden, a configuration changed) is exactly what a post-market process expects to
+  be able to reconstruct. A record that a sink can drop without counting it cannot serve that
+  purpose.
+- **Fail-closed delivery, not fail-open severity.** "Important enough to always show" is a severity
+  question; "must never be silently lost" is a delivery-guarantee question. An audit event needs the
+  second, and does not need to be the numerically highest severity to need it: an `INFO`-severity
+  "operator acknowledged alarm" event is as audit-relevant as a `FATAL` one. Today's ordering, with
+  `AUDIT` above `FATAL`, cannot express that at all.
 
 ### Risk management considerations
-- Recording a fabricated or double-counted audit event is its own hazard (a device that claims an
-  interlock was overridden with operator confirmation when it was not, or reports one confirmation
-  twice, is worse than reporting the same event as an unremarkable log line would be). This is why
-  Decision 3 below requires an audit event to identify what it attests to, not only that something
-  happened.
+- A fabricated, duplicated or mis-attributed audit event is its own hazard. A device that records
+  "interlock overridden, operator confirmed" when no confirmation occurred, or records one
+  confirmation twice, is worse than one that logged nothing. This is why Decision 4 separates the
+  *request* for a critical action from its *confirmation* and its *execution result*, rather than
+  emitting one event that implies all three.
+- **The logger does not decide device behavior.** Nothing in this ADR lets mddlog inhibit an action
+  or drive the device to a safe state. It reports outcomes; the application decides what an audit
+  refusal means for the procedure in progress. A boolean from a logging call is not a risk-control
+  decision, and must not be treated as one.
 
 ## Decision
 
 ### 1. `AuditEvent` is a distinct type, not a `LogLevel` value
 
-Remove `AUDIT` from the severity ordering's use as a filtering threshold (or keep the enumerator
-for backward display purposes, but stop using it as `logAudit()`'s gate). Introduce a separate
-`AuditEvent` type, shaped after
-[MduX's `mdux.governance::AuditEvent`](https://github.com/ambroise-leclerc/MduX/blob/main/include/mdux/governance/Governance.cppm#L304)
-but adapted for a runtime record instead of a design-history one:
+Introduce an `AuditEvent` record separate from `LogRecord`, shaped after
+[MduX's `mdux.governance::AuditEvent`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/governance/Governance.cppm)
+but adapted for a runtime record rather than a design-history one:
 
 ```text
-AuditCategory  { Lifecycle, Configuration, Access, RiskControl, Operator }
 AuditEvent {
-    category     AuditCategory
-    timestamp    single ISO-8601 UTC spelling — one format, so two events order by string comparison
-    subject      what the event is about (a control id, a user/session reference, a configuration key)
-    outcome      what happened (e.g. Confirmed | Overridden | Failed) — an enum, not free text
-    sequence     a monotonic counter, the same role as MduX's ActionTrace::sequence
+    category        AuditCategory   — see Decision 6 on why this set is provisional
+    action          a stable event/action identifier (what happened), not free text
+    phase           Requested | Confirmed | Executed | Failed   — see Decision 4
+    target          what the action applies to (a control, a setting, a data object)
+    actor           who or what initiated it, when known
+    requirementRef  bounded, optional reference to a requirement this action discharges
+    riskRef         bounded, optional reference to a hazard/risk control
+    correlationId   ties Requested/Confirmed/Executed/Failed events of one action together
+    sequence        monotonic, scoped per Decision 5
+    time            raw host-supplied time value, serialized by the adapter (Decision 5)
+    detail          bounded descriptive text (truncatable, unlike the identifier fields)
 }
 ```
 
-Compare to MduX's precedent explicitly: `mdux.governance::AuditEvent` is a *design-history* record
-(three categories: Lifecycle, Verification, Change) populated by a build-time compliance program,
-and it allocates (`std::string` fields) because it lives in the `governed-throw` tier, not the
-no-heap tier. mddlog's `AuditEvent` is a *runtime* record a deployed device produces, so it should
-default to the fixed-capacity field shapes from ADR-001 rather than `std::string`, and it needs a
-`sequence` field MduX's design-history record does not, for the same reason MduX added `sequence` to
-`medui::ActionTrace` rather than to `governance::AuditEvent`: an ordered runtime stream needs a
-tamper-evidence-adjacent ordering property a document-style record does not.
+Two properties of MduX's type deliberately do not carry over, and one does. Its
+`mdux.governance::AuditEvent` is a design-history record with three categories (Lifecycle,
+Verification, Change), populated by a build-time compliance program, and it allocates
+(`std::string` fields) — which is unremarkable there because it is not on a device's runtime path.
+(For accuracy: `governed-throw` in MduX names a *scan profile* that checks for throws and does not
+forbid allocation; it is not a "tier" that authorizes exceptions. The first draft of this ADR used
+that phrase loosely.) What does carry over is the single-spelling timestamp discipline and the
+monotonic `sequence`, the latter borrowed from MduX's runtime
+[`medui::ActionTrace`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/medui/Input.cppm)
+rather than from its design-history record, for the same reason MduX put it there.
 
-### 2. An audit event is never subject to the ordinary logger's severity filter or best-effort delivery
+Field kinds follow ADR-001 Decision 2: `action`, `target`, `actor`, `requirementRef`, `riskRef` and
+`correlationId` are **identifier-kind** (over-long values are refused, never truncated); `detail` is
+descriptive text (truncatable, with the truncation flagged).
 
-`logAudit()` (or its replacement) does not go through `shouldLog()`/`setMinLevel()`, and does not
-share the unbounded `std::queue<LogRecord>` or the swallowed-exception path in `writeToSinks()`. This
-directly answers issue #5's "Audit policy" question: **yes, intentionally bypasses** ordinary
-filtering — because severity and audit-relevance are different axes (see Medical Device
-Considerations), not because audit events are simply "more severe." What replaces best-effort
-delivery is a delivery-outcome contract: recording an audit event returns whether it was accepted,
-following the same bounded-result idea as ADR-001 Decision 3, so a caller on a Class C path can
-observe and react to a refused audit write rather than have it silently disappear into a `catch (...)`.
+**Nothing `logAudit()` records today may be lost in the migration.** Its current inputs map as:
+`message` → `detail`; `eventType` → `action`; `userId` → `actor`; `deviceId` → `target` (or the
+stream identity of Decision 5, where the device is the emitter rather than the object acted on);
+`riskLevel` → `riskRef`; `complianceStandard` → dropped from the record as a per-event field, since
+a literal `"IEC_62304"` on every event carries no information — if a real per-event standard
+reference is needed it belongs in `requirementRef`.
 
-### 3. Persistence, signing, and export are explicitly a separate, later ADR
+### 2. Audit capture bypasses ordinary logger filtering — stated, not incidental
 
-This ADR defines the shape and the delivery contract of an `AuditEvent`. It does **not** define:
-- where audit events are stored durably (file, flash, remote sink),
-- how "tamper-proof... cryptographic signatures" (README) would be implemented (hash chaining,
-  signing key management, and where that key material can live are all governed-zone-incompatible
-  concerns — key handling is not allocation-free or side-effect-free by nature),
-- the wire/export schema a "regulatory reporting: automated compliance report generation" feature
-  would consume.
+Formalize the bypass that already exists (see Context): recording an audit event does not consult
+the logger's `minLevel_` or `setEnabled(false)`. Severity and audit-relevance are different axes;
+an audit event is not "more severe", it is *non-optional*.
 
-Each is a real, larger design question that deserves review on its own, the same way MduX split its
-trust-zone ADR (004), its error-handling ADR (005), and its evidence-pipeline ADR (007) into three
-documents rather than one. Bundling them here would either block this ADR on unresolved key-
-management questions or force premature answers to them.
+Sink-level filtering is a **separate** question and is decided separately: an audit-carrying sink
+may not silently drop an audit event via `shouldLog()`/`isEnabled()`. Either it accepts audit events
+or it is not registered on the audit path at all; a sink that is disabled while audit events are
+routed to it is a configuration error the host must be told about, not a silent filter.
 
-### 4. State the same scope limits MduX had to state explicitly, from the start
+Tests for this (issue #5's "Audit policy" row) must distinguish four cases that today's code
+conflates: logger disabled, logger threshold, sink disabled, and sink failure.
 
-MduX's `docs/regulatory-compliance.md` had to be written specifically to correct its own README's
-overclaiming (marking Risk Management System / Quality Management System / DHF / RMF as
-"Completed" when no such code existed). mddlog's README already uses honest `(planned)` markers for
-most of this area, which this ADR should preserve rather than erode: an `AuditEvent` type existing
-does not mean mddlog operates an audit trail, provides tamper-evidence, or satisfies any clause of
-IEC 62304/ISO 13485/ISO 14971 by itself. A manufacturer integrating mddlog remains responsible for
-their own risk file, their own QMS, and their own regulatory engagement — mddlog supplies a record
-shape and a delivery contract, not a certified audit subsystem.
+### 3. Delivery is a three-level contract, and only the first level is promised today
+
+The first draft claimed audit events are "never subject to best-effort delivery" and returned an
+`accepted` result. That is not a contract — it names only the instant of admission and says nothing
+about what happens afterwards. Replace it with three explicitly separated levels:
+
+1. **Admitted** — the event was inserted into the bounded audit buffer (ADR-001 Decision 4). This is
+   what the call's return value reports, and it is the only level this ADR promises.
+2. **Handed off** — a consumer took the event and acknowledged it. Reported asynchronously, not by
+   the producing call.
+3. **Durably confirmed** — a storage backend confirmed it survives restart. **No backend offers this
+   today**; the level exists in the contract so that a future persistence ADR has somewhere to
+   attach it, and so that nothing in the meantime can be read as promising it.
+
+Three consequences follow, and they are the substance of this decision:
+
+- **The audit lane refuses rather than overwrites.** ADR-001 Decision 4 settles on refuse-new for
+  exactly this reason: an event that was admitted and then silently overwritten to make room is
+  worse than one that was refused up front, because its producer was told it succeeded.
+- **Post-admission losses have a reporting channel.** Anything lost after admission — a consumer
+  that fails, a sink that throws — is counted and surfaced through a dedicated audit-health signal,
+  not through the producing call's return value and never through a bare `catch (...)`.
+- **Power loss is explicitly outside every guarantee** while persistence is deferred. In-memory
+  admission survives nothing.
+
+**Worked scenario — ring full, then consumer unavailable.** (a) Steady state: `record()` returns
+`Admitted`; the host observes a stable refusal counter. (b) The consumer stalls; the buffer fills;
+subsequent `record()` calls return `Refused(RingFull)` and the refusal counter climbs — the host
+sees refusals *at the call site*, immediately, and can decide (its decision, not the logger's) to
+inhibit the operation, degrade, or continue. (c) The consumer then fails outright after having taken
+events it never acknowledged: those events are not durable and not confirmed; the audit-health
+signal reports unacknowledged-at-failure, and the events already admitted but undrained remain in
+the buffer until a consumer returns or the device restarts. (d) Restart: everything in memory is
+gone, and the new stream identity (Decision 5) makes the discontinuity visible rather than letting
+the sequence appear continuous across the gap.
+
+### 4. Request, confirmation and execution result are separate events
+
+MduX's `ActionTrace{nodeId, requirement, event, sequence}` describes a critical action the host is
+*about to* execute; MduX explicitly does not confirm that the device carried it out (`Input.cppm`'s
+own comment: the host "owns the orderly-stop behavior, its timing and its audit persistence"). A
+model that collapses that into one audit event would record an intention as if it were an outcome.
+
+So a critical action produces up to four correlated events sharing one `correlationId`:
+`Requested` (resolved from the UI/host input), `Confirmed` (operator acknowledgement, where the
+workflow has one), `Executed` or `Failed` (reported by the host after acting).
+
+**Concrete conversion from an MduX `ActionTrace`**:
+
+| ActionTrace field | AuditEvent field |
+|---|---|
+| `nodeId` | `target` |
+| `requirement` | `requirementRef` |
+| `event` (`SystemEvent`) | `action` — the closed `SystemEvent` set maps to stable action identifiers; `category`/`phase` do **not** substitute for it |
+| `sequence` | `sequence` (and seeds `correlationId` for the follow-up events) |
+| — | `phase = Requested`; the host emits the matching `Executed`/`Failed` itself |
+
+These references stay generic and bounded: mddlog imports nothing from MduX, and no consumer is
+required to populate `requirementRef`/`riskRef`. The conversion is documented here so the category
+set can be validated against a real need rather than assumed (Decision 6).
+
+### 5. Time and sequence: the host supplies time; the sequence is scoped and stream-identified
+
+A canonical UTC rendering makes timestamps comparable; it does **not** establish emission order.
+Civil time can step backwards, several events can share one instant, and a counter restarts after
+reboot. A sequence number is also not cryptographic integrity — it orders, it does not attest.
+
+- **The governed core stores a raw host-supplied time value**; ISO-8601 rendering happens in the
+  adapter at serialization (consistent with ADR-001 Decision 1). When the adapter renders it, it
+  uses one spelling only — fixed fractional-second width, UTC — so that two rendered timestamps
+  order by string comparison.
+- **A distinct monotonic value** may be carried for durations and ordering when civil time is
+  unreliable; an explicit "civil time unavailable/unreliable" state is representable, rather than
+  being encoded as a zero or an epoch value.
+- **Sequence scope**: assigned by the producer, monotonic **per stream**, where a stream is one
+  producer within one boot session. Its exhaustion behavior and width must be stated by the
+  implementing issue (a 64-bit counter at any plausible event rate does not wrap within device
+  lifetime, which is the intended answer, but it should be written down rather than assumed).
+- **Stream identity** accompanies every event: a boot-session identifier that changes on restart. No
+  global order is promised across independent producers or across devices.
+
+**Worked example.** Two events are recorded in the same millisecond: identical rendered timestamps,
+`sequence` 41 and 42 in one stream — order is unambiguous within the stream. The clock is then
+corrected backwards by two seconds: event 43 renders with an *earlier* timestamp than 42, and
+`sequence` is what tells a reader 43 came after; an analysis tool must therefore order by
+(stream, sequence) and treat the timestamp as an attribute, not as the ordering key. The device
+restarts: a new stream identity appears and `sequence` restarts, so 41/42 of the old stream and
+41/42 of the new one are never confused, and the gap is visible instead of implied.
+
+### 6. Scope limits, stated from the start
+
+The provisional category set — `Lifecycle`, `Configuration`, `Access`, `RiskControl`, `Operator` —
+is **drafted, not requirements-derived**. It must be validated against the three scenarios the
+maintainer's review asks for (critical action with a distinct execution result; saturation then
+consumer failure; clock correction and restart) before this ADR moves to Accepted. MduX's own
+`AuditCategory` was scoped to that project's actual use rather than invented speculatively.
+
+And the limit that matters most: an `AuditEvent` type existing does not mean mddlog operates an
+audit trail, provides tamper-evidence, or satisfies any clause of IEC 62304/ISO 13485/ISO 14971. A
+manufacturer integrating mddlog remains responsible for their own risk file, their own QMS, and
+their own regulatory engagement. mddlog supplies a record shape and a bounded delivery contract —
+not a certified audit subsystem. MduX had to write
+[`docs/regulatory-compliance.md`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/docs/regulatory-compliance.md)
+specifically to walk back its own README's "Completed" claims; mddlog's README uses honest
+`(planned)` markers today, and this ADR must not erode them.
 
 ## Alternatives Considered
 
-### 1. Keep `AUDIT` as the top `LogLevel`, document the filtering behavior as-is (Rejected)
-**Pros:** No new type; answers issue #5's open question with "no change."
-**Cons:** Cannot express "this INFO-severity event must never be dropped" — severity and
-audit-relevance are different questions, and collapsing them into one enum forces every audit-worthy
-event to also be reported as maximally severe, which degrades the severity axis's own usefulness for
-triage.
+### 1. Keep `AUDIT` as the top `LogLevel` and document current behavior (Rejected)
+**Pros:** No new type; answers issue #5's question with "no change".
+**Cons:** Cannot express "this INFO-severity event must not be lost", cannot carry
+requirement/hazard linkage or request-vs-result correlation, and leaves the existing bypass
+incidental. It also leaves sink-level filtering silently applicable to audit events.
 
-### 2. Depend on MduX's `mdux.governance` module directly (Rejected)
-**Pros:** Reuses a reviewed, tested type instead of designing a new one.
-**Cons:** `README.md` states "No dependencies except `import std`" as a Technical Requirement; taking
-a dependency on another C++23-modules project (itself experimental, per MduX's own README warning)
-would also make mddlog's compiler/CMake floor a function of MduX's, which is a much larger coupling
-than an audit record needs. Where the *shape* is worth reusing (categories, single timestamp
-spelling, sequence numbers), this ADR copies the pattern rather than the dependency, and could later
-converge on a shared JSON schema between the two projects without a code dependency, if useful.
+### 2. Depend on MduX's `mdux.governance` directly (Rejected)
+**Pros:** Reuses a reviewed, tested type.
+**Cons:** `README.md` requires "No dependencies except `import std`", and MduX's own README calls it
+experimental; taking the dependency would also couple mddlog's compiler/CMake floor to MduX's. This
+ADR copies the *shape* and documents a conversion (Decision 4) instead. A shared JSON schema between
+the two projects remains possible later without a code dependency.
 
-### 3. Cryptographic signing in this same ADR (Rejected — deferred to Decision 3)
-**Pros:** One document covering the whole "regulatory audit" README claim at once.
-**Cons:** Key management, signing algorithm choice, and storage medium are independent decisions
-with their own alternatives and risks; forcing them into this ADR either blocks it on those
-unresolved questions or answers them too quickly. MduX's own evidence pipeline (ADR-007) took the
-opposite approach for a related problem — SHA-256 digests without commit-SHA self-reference — and
-explicitly rejected embedding a stronger, harder-to-get-right guarantee in the same document as the
-weaker one it could actually deliver (see ADR-007 Decision 5 in that project).
+### 3. Cryptographic signing and persistence in this ADR (Rejected — deferred)
+**Pros:** One document covering the whole README claim.
+**Cons:** Key management, algorithm choice and storage medium are independent decisions with their
+own risks; bundling them either blocks this ADR or answers them too quickly. Decision 3's third
+level is the attachment point for that future ADR.
 
 ## Consequences
 
 ### Positive
-- Gives issue #5's open "Audit policy" question a concrete, motivated answer instead of leaving it
-  to be decided ad hoc when the corresponding tests are written.
-- Separates "how severe" from "must not be lost", which the current single-enum design cannot
-  express, without requiring the allocation-free work of ADR-001 to be finished first (the two
-  ADRs are complementary, not sequential — `AuditEvent` can start with `std::string` fields and move
-  to fixed-capacity ones when ADR-001 lands).
-- Keeps the door open to a future MduX/mddlog shared audit-record *schema* (JSON-level
-  interoperability) without taking on a compile-time dependency between the two projects.
+- Gives issue #5's open "Audit policy" question a documented answer grounded in what the code
+  actually does, and names the four test cases that answer needs.
+- Separates severity from must-not-be-lost, and separates admission from delivery — neither of which
+  the current single-enum, best-effort design can express.
+- The ActionTrace conversion (Decision 4) gives the category set a real workload to be validated
+  against instead of remaining a guess.
 
 ### Negative
-- A second delivery path (bypassing the ordinary sink pipeline) is more code to maintain than routing
-  everything through one queue, and needs its own tests — which issue #5 does not currently scope,
-  since it predates this ADR.
-- Deferring persistence/signing means the README's "tamper-proof... cryptographic signatures" and
-  "Automated compliance report generation" claims remain `(planned)` after this ADR, not delivered by
-  it — this ADR only makes the eventual signing/export ADR easier to write by fixing what it would
-  operate on.
+- A second delivery path (bypassing the ordinary sink pipeline) is more code and more tests than one
+  queue, and issue #5 does not currently scope them.
+- The record grows several identifier fields, each with a capacity that must be chosen; too small
+  refuses legitimate values (ADR-001 Decision 2), too large wastes fixed footprint.
+- The README's "tamper-proof... cryptographic signatures" and "automated compliance report
+  generation" remain `(planned)` after this ADR — it only fixes what a future signing/export ADR
+  would operate on.
 
 ### Risks and Mitigations
-- **"Bypasses filtering" is read as "audit events cannot be disabled/tested", making them awkward in
-  unit tests.** *Mitigation*: the delivery-outcome contract (Decision 2) still lets a test sink
-  observe and count audit events normally; "bypasses `setMinLevel()`" is not the same as "cannot be
-  redirected to an in-memory sink for testing", which issue #5's own "Targeted regression coverage"
-  table already expects ("Audit policy: Define and test whether `logAudit()` intentionally
-  bypasses...").
-- **The category set (`Lifecycle, Configuration, Access, RiskControl, Operator`) is guessed, not
-  requirements-driven.** *Mitigation*: treat it as a draft closed set to be revised before
-  "Accepted", the same way MduX's `AuditCategory` (`Lifecycle, Verification, Change`) was scoped to
-  that project's actual design-history use rather than invented speculatively — mddlog's set should
-  be checked against a real device scenario before this ADR is accepted, not assumed correct here.
+- **"Bypasses filtering" is read as "cannot be tested or redirected".** *Mitigation*: bypassing
+  `setMinLevel()` is not the same as being unobservable — an in-memory recording sink still sees
+  every audit event, which is what issue #5's regression table needs.
+- **The three-level delivery contract is read as three delivered guarantees.** *Mitigation*: only
+  level 1 is promised; level 3 has no backend at all today, and Decision 3 says so in the same
+  paragraph that introduces it.
+- **The category set is wrong because it was guessed.** *Mitigation*: Decision 6 makes validation
+  against three concrete scenarios a precondition for Accepted status, not a follow-up.
+- **A host treats a refusal as a risk-control decision.** *Mitigation*: the Medical Device
+  Considerations section states that the application owns that decision; the logger reports, it does
+  not inhibit.
 
 ## References
-- [MduX ADR-007: Evidence pipeline doctrine](https://github.com/ambroise-leclerc/MduX/blob/main/docs/adr/ADR-007-evidence-pipeline-doctrine.md) — precedent for splitting a weaker, deliverable guarantee from a stronger, deferred one across separate decisions (Decision 5 there; Decision 3 here).
-- [MduX `mdux.governance::AuditEvent`/`ComplianceProgram`](https://github.com/ambroise-leclerc/MduX/blob/main/include/mdux/governance/Governance.cppm) — the design-history record this runtime record adapts, and the reason the two are not the same type.
-- [MduX `medui::ActionTrace`](https://github.com/ambroise-leclerc/MduX/blob/main/include/mdux/medui/Input.cppm#L846) — precedent for a `sequence`-numbered runtime trace whose persistence is explicitly left to the host/caller.
-- [MduX `docs/regulatory-compliance.md`](https://github.com/ambroise-leclerc/MduX/blob/main/docs/regulatory-compliance.md) — the scope-limits framing this ADR's Decision 4 follows.
-- mddlog issue #5 — the "Audit policy" open question this ADR answers, and the persistence/crypto exclusion this ADR preserves.
-- ADR-001 (this repository) — the allocation-free field shapes `AuditEvent` should adopt once available.
+All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
+- [MduX `mdux.governance::AuditEvent`/`ComplianceProgram`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/governance/Governance.cppm) — the design-history record this runtime record adapts, and why the two differ.
+- [MduX `medui::ActionTrace`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/medui/Input.cppm) — the request-only trace Decision 4 converts from, and its explicit "the host owns execution and audit persistence" boundary.
+- [MduX ADR-007: Evidence pipeline doctrine](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/docs/adr/ADR-007-evidence-pipeline-doctrine.md) — precedent for splitting a deliverable guarantee from a deferred stronger one.
+- [MduX `docs/regulatory-compliance.md`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/docs/regulatory-compliance.md) — the scope-limits framing Decision 6 follows.
+- mddlog issue #5 — the "Audit policy" question this ADR answers, and the persistence/crypto exclusion it preserves.
+- ADR-001 (this repository) — the bounded ring, the refuse-new overflow policy, and the field-kind truncation rules this ADR relies on.
 
 ## Approval
 - **Decision Date**: not yet approved — drafted for review.
 - **Approved By**: pending (project maintainer).
-- **Review Date**: before any work implementing persistent or cryptographically-sealed audit storage begins — that work needs its own ADR, and should not start from an unreviewed draft of what an audit event even is.
+- **Review Date**: before any work on persistent or cryptographically-sealed audit storage begins, and after the three validation scenarios in Decision 6 are documented.
