@@ -255,6 +255,11 @@ if(MDDLOG_BUILD_TESTS)
         # default: on Linux libc++ is not Clang's default, so a consumer built without this flag
         # scans libc++'s std.cppm with libstdc++'s include path and fails on a missing '__config'.
         -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        # MSVC's runtime-library selection (/MD vs /MT, Release vs Debug) is driven by
+        # CMAKE_BUILD_TYPE. Without forwarding it, the consumer configures with an empty build
+        # type while this build used Release, the two pick different default runtime libraries,
+        # and linking the consumer against the installed mddlog.lib fails with LNK4098/LNK1319.
+        -D "BUILD_TYPE=${CMAKE_BUILD_TYPE}"
         -D "GENERATOR=${CMAKE_GENERATOR}"
         -D "EXPECTED_VERSION=${PROJECT_VERSION}"
         -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"

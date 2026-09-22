@@ -105,6 +105,12 @@ if(DEFINED CXX_FLAGS AND NOT CXX_FLAGS STREQUAL "")
     # the compiler's default standard library while linking an mddlog built against another one.
     list(APPEND consumer_toolchain_arguments "-DCMAKE_CXX_FLAGS=${CXX_FLAGS}")
 endif()
+if(DEFINED BUILD_TYPE AND NOT BUILD_TYPE STREQUAL "")
+    # On MSVC in particular, CMAKE_BUILD_TYPE selects the runtime library (/MD vs /MT, Release vs
+    # Debug). A consumer configured without it links against a different default runtime than the
+    # installed mddlog.lib was built with and fails with LNK4098/LNK1319.
+    list(APPEND consumer_toolchain_arguments "-DCMAKE_BUILD_TYPE=${BUILD_TYPE}")
+endif()
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -B "${consumer_build}" -S "${consumer_src}"
             -G "${GENERATOR}"
