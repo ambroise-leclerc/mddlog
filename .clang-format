@@ -102,8 +102,9 @@ SortIncludes: CaseInsensitive
 SortUsingDeclarations: Lexicographic
 IncludeBlocks: Regroup
 IncludeCategories:
-  # Project headers
-  - Regex: '^".*\.hpp"$|^<.*\.hpp>$'
+  # Project headers (quoted only - an angle-bracket "<...>hpp" is a third-party header,
+  # e.g. <fmt/format.hpp>, not a project one; MduX's regex at d972d77 also matched those)
+  - Regex: '^".*\.hpp"$'
     Priority: 1
     SortPriority: 1
   # C++ standard library

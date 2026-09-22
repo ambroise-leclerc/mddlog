@@ -122,12 +122,13 @@ CheckOptions:
   - key: readability-identifier-naming.NamespaceCase
     value: lower_case
 
-  # Enum constants: CamelCase (e.g. LogLevel::Info, LogLevel::Debug). Deviates from MduX at
-  # d972d77, which uses camelBack (readability-identifier-naming.EnumConstantCase: camelBack)
-  # for enum constants. mddlog's severity levels (Trace/Debug/Info/Warn/Error/Fatal/Audit)
-  # read as named states rather than function-like identifiers, matching the CamelCase used
-  # for the enum type itself; this only affects future naming, it does not require renaming
-  # the current ALL_CAPS LogLevel members in this batch.
+  # Enum constants: CamelCase (target: LogLevel::Info, LogLevel::Debug, ...). Deviates from
+  # MduX at d972d77, which uses camelBack (readability-identifier-naming.EnumConstantCase:
+  # camelBack) for enum constants. mddlog's severity levels are meant to read as named states
+  # rather than function-like identifiers, matching the CamelCase already used for the enum
+  # type itself. This is a config-only batch - no source is renamed here - so clang-tidy will
+  # flag the existing ALL_CAPS LogLevel members (TRACE, DEBUG, ...) as violations of this rule
+  # until a follow-up rename lands; that is expected, not a bug in this check.
   - key: readability-identifier-naming.EnumConstantCase
     value: CamelCase
 
