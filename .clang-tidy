@@ -1,13 +1,19 @@
 ---
-# Clang-Tidy configuration for IvanaeSoftware
-# Based on Google C++ Style Guide and C++ Core Guidelines
-# Enforces coding standards from CONTRIBUTING.md
+# Clang-Tidy configuration for mddlog
+# Based on C++ Core Guidelines; enforces the naming conventions from CONTRIBUTING.md
+# Imported and adapted from MduX at d972d77bc5cefdbe105ad7933ee61746fb5eb45b.
+#
+# bugprone-exception-escape is left enabled here (MduX at d972d77 enables it too; mddlog's
+# prior config, inherited from IvanaeSoftware, had suppressed it). mddlog's allocation-free
+# core is built around noexcept guarantees (see ADR-001's InlineString<N>, `constexpr
+# noexcept`), so a check that flags an implicit or explicit noexcept violation is directly
+# relevant. No CI job runs clang-tidy yet - that wiring is tracked separately (see #18, #19)
+# - so today this only catches a violation for a developer running clang-tidy locally.
 
 Checks: >
   -*,
   bugprone-*,
   -bugprone-easily-swappable-parameters,
-  -bugprone-exception-escape,
   cert-*,
   -cert-dcl21-cpp,
   -cert-dcl50-cpp,
@@ -19,22 +25,14 @@ Checks: >
   -clang-analyzer-optin.cplusplus.VirtualCall,
   concurrency-*,
   cppcoreguidelines-*,
-  -cppcoreguidelines-avoid-c-arrays,
-  -cppcoreguidelines-avoid-magic-numbers,
-  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-avoid-using-namespace,
   -cppcoreguidelines-non-private-member-variables-in-classes,
-  -cppcoreguidelines-owning-memory,
-  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
-  -cppcoreguidelines-pro-bounds-constant-array-index,
-  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
-  -cppcoreguidelines-pro-type-reinterpret-cast,
-  -cppcoreguidelines-pro-type-union-access,
-  -cppcoreguidelines-pro-type-vararg,
   google-*,
+  -google-build-using-namespace,
   -google-readability-avoid-underscore-in-googletest-name,
+  -google-readability-braces-around-statements,
   -google-readability-todo,
   hicpp-*,
-  -hicpp-avoid-c-arrays,
   -hicpp-braces-around-statements,
   -hicpp-named-parameter,
   -hicpp-no-array-decay,
@@ -48,8 +46,6 @@ Checks: >
   -misc-non-private-member-variables-in-classes,
   -misc-use-anonymous-namespace,
   modernize-*,
-  -modernize-avoid-c-arrays,
-  -modernize-use-auto,
   -modernize-use-trailing-return-type,
   performance-*,
   portability-*,
@@ -58,7 +54,6 @@ Checks: >
   -readability-braces-around-statements,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
-  -readability-magic-numbers,
   -readability-named-parameter,
   -readability-uppercase-literal-suffix
 
@@ -78,7 +73,7 @@ CheckOptions:
     value: CamelCase
   - key: readability-identifier-naming.TemplateParameterCase
     value: CamelCase
-  
+
   # Functions/Methods: lowerCamelCase
   - key: readability-identifier-naming.FunctionCase
     value: camelBack
@@ -92,7 +87,7 @@ CheckOptions:
     value: camelBack
   - key: readability-identifier-naming.VirtualMethodCase
     value: camelBack
-  
+
   # Variables: lowerCamelCase
   - key: readability-identifier-naming.VariableCase
     value: camelBack
@@ -110,7 +105,7 @@ CheckOptions:
     value: camelBack
   - key: readability-identifier-naming.GlobalVariableCase
     value: camelBack
-  
+
   # Constants: lowerCamelCase
   - key: readability-identifier-naming.ConstantCase
     value: camelBack
@@ -122,21 +117,26 @@ CheckOptions:
     value: camelBack
   - key: readability-identifier-naming.ConstantMemberCase
     value: camelBack
-  
+
   # Namespaces: lowercase
   - key: readability-identifier-naming.NamespaceCase
     value: lower_case
-  
-  # Enums: CamelCase for type, lowerCamelCase for values
+
+  # Enum constants: CamelCase (e.g. LogLevel::Info, LogLevel::Debug). Deviates from MduX at
+  # d972d77, which uses camelBack (readability-identifier-naming.EnumConstantCase: camelBack)
+  # for enum constants. mddlog's severity levels (Trace/Debug/Info/Warn/Error/Fatal/Audit)
+  # read as named states rather than function-like identifiers, matching the CamelCase used
+  # for the enum type itself; this only affects future naming, it does not require renaming
+  # the current ALL_CAPS LogLevel members in this batch.
   - key: readability-identifier-naming.EnumConstantCase
-    value: camelBack
-  
+    value: CamelCase
+
   # Macros: ALL_CAPS_WITH_UNDERSCORES (but discouraged)
   - key: readability-identifier-naming.MacroDefinitionCase
     value: UPPER_CASE
-  
+
   # File naming: UpperCamelCase (handled by file system, not clang-tidy)
-  
+
   # Google Style Guide specific settings
   - key: google-readability-function-size.StatementThreshold
     value: 800
@@ -146,7 +146,7 @@ CheckOptions:
     value: 10
   - key: google-readability-function-size.NestingThreshold
     value: 10
-  
+
   # Readability settings
   - key: readability-function-size.LineThreshold
     value: 200
@@ -158,31 +158,30 @@ CheckOptions:
     value: 10
   - key: readability-function-size.NestingThreshold
     value: 10
-  
+
   # Performance settings
   - key: performance-for-range-copy.WarnOnAllAutoCopies
     value: true
   - key: performance-unnecessary-value-param.AllowedTypes
     value: 'std::function;std::unique_ptr;std::shared_ptr'
-  
+
   # Modernize settings for C++23
   - key: modernize-use-nullptr.NullMacros
     value: 'NULL'
   - key: modernize-replace-auto-ptr.IncludeStyle
     value: google
-  
+
   # Core Guidelines settings
   - key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
     value: true
   - key: cppcoreguidelines-special-member-functions.AllowMissingMoveFunctions
     value: false
-  
+
   # Misc settings
   - key: misc-throw-by-value-catch-by-reference.CheckThrowTemporaries
     value: true
 
-# Header filter for project files only
-HeaderFilterRegex: '^.*/(backend|IVANAE_IHM)/.*\.(hpp|h)$'
-
-# Exclude external dependencies and generated files
-FormatStyle: google
+# Header filter for mddlog's own sources: module interfaces under include/mddlog, spec and
+# framework files under tests/, and the examples. CPM dependencies and build-*/ output are
+# excluded implicitly - they never fall under these paths.
+HeaderFilterRegex: '^.*/(include/mddlog|tests/spec|tests/framework|examples)/.*\.(cppm|cpp|hpp)$'
