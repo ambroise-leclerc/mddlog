@@ -57,7 +57,7 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
 #### 1. Core Logging Infrastructure
 - **Structured logging** with `LogRecord` containing timestamp, severity, category, message, and metadata
 - **Multiple severity levels**: TRACE, DEBUG, INFO, WARN, ERROR, FATAL, AUDIT
-- **Thread-safe operations** using C++23 `std::jthread` and atomic operations
+- **Thread-safe operations** using `std::thread`, `std::mutex`, and atomic operations
 
 #### 2. Medical Device Compliance
 - **Audit Trail**: `logAudit()` records intentionally bypass the logger's own

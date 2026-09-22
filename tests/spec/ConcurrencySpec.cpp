@@ -52,9 +52,11 @@ const speclab::Register consoleSinkOptionsSurviveConcurrentAccess{
             .Then("no crash or corruption occurred and the sink still reports a valid state",
                   [](State& s) {
                       // The assertion is that the mutex-guarded getters/setters above completed
-                      // without a crash or a sanitizer-detected data race (see the ASan/TSan CI
-                      // job); reading the final state once more here documents that the object is
-                      // still in a well-defined state afterward.
+                      // without a crash (this repo's sanitizer CI job runs ASan+UBSan, which catch
+                      // memory errors and undefined behavior but not data races on their own -
+                      // ThreadSanitizer would be the tool for that and is not part of this suite);
+                      // reading the final state once more here documents that the object is still
+                      // in a well-defined state afterward.
                       [[maybe_unused]] bool color = s.sink.isColorEnabled();
                       [[maybe_unused]] bool useStderr = s.sink.isStderrEnabled();
                   })

@@ -40,6 +40,12 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # .github/workflows/linux-gcc16-build.yml.
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.1")
         message(FATAL_ERROR "GCC 16.1 or later is required for C++23 modules support. Current version: ${CMAKE_CXX_COMPILER_VERSION}")
+    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.2" AND
+           CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.3")
+        message(FATAL_ERROR
+            "GCC 16.2 is unsupported: it corrupts this project's module BMIs ('failed to read "
+            "compiled module cluster ... Bad file data'). Use GCC 16.1 (CI pins gcc:16.1.0 "
+            "exactly for the same reason). Current version: ${CMAKE_CXX_COMPILER_VERSION}")
     endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "20.0")

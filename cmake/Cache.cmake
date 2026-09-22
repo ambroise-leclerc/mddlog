@@ -25,6 +25,11 @@ if(CACHE_OPTION_INDEX EQUAL -1)
 endif()
 
 if(CACHE_BINARY)
+    if(NOT EXISTS "${CACHE_BINARY}")
+        message(FATAL_ERROR
+            "CACHE_BINARY was explicitly set to '${CACHE_BINARY}', which does not exist. Fix the "
+            "path, or clear CACHE_BINARY to search for '${CACHE_OPTION}' automatically.")
+    endif()
     set(mddlog_resolved_cache_binary "${CACHE_BINARY}")
 else()
     find_program(mddlog_resolved_cache_binary NAMES "${CACHE_OPTION}" NO_CACHE)

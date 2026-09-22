@@ -91,6 +91,25 @@ jobs:
     - name: Verify ccache invalidates named-module consumers
       run: ctest --preset ninja-clang -R '^build\.cache\.namedModuleIntegrity$' -V --no-tests=error
 
+    # The Debug/sanitizer reference configuration for this toolchain (issue #5): libc++'s own
+    # instrumentation differs from libstdc++'s, so this is not redundant with sanitizers.yml's
+    # GCC 16.1 Debug leg.
+    - name: Configure ASan and UBSan
+      run: |
+        cmake --preset ninja-clang-debug \
+          -DMDDLOG_BUILD_EXAMPLES=OFF \
+          -DENABLE_SANITIZER_ADDRESS=ON \
+          -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
+
+    - name: Build ASan and UBSan
+      run: cmake --build --preset ninja-clang-debug
+
+    - name: Run tests under ASan and UBSan
+      env:
+        ASAN_OPTIONS: detect_leaks=1
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      run: ctest --preset ninja-clang-debug -E 'InstallTreeConsumer' --output-on-failure --no-tests=error --timeout 120
+
     - name: Verify no source-tree writes
       run: |
         status="$(git status --porcelain)"

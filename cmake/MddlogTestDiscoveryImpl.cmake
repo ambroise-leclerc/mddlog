@@ -29,6 +29,10 @@ foreach(test_record IN LISTS test_names)
         string(SUBSTRING "${test_record}" 0 ${label_separator} name)
         math(EXPR labels_start "${label_separator} + 1")
         string(SUBSTRING "${test_record}" ${labels_start} -1 labels)
+        # Strips a trailing \r left behind when --list-tests emits CRLF line endings (Windows);
+        # without this the generated LABELS property carries an invisible carriage return and an
+        # exact `ctest -L <label>` filter silently matches nothing.
+        string(STRIP "${labels}" labels)
     endif()
 
     string(STRIP "${name}" name)

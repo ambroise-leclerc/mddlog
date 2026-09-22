@@ -15,11 +15,11 @@ export namespace mddlog {
 
     /**
      * @brief Static Log helper class providing simplified global logging interface
-     * 
+     *
      * This class provides a convenient static interface for logging without
      * requiring explicit logger instantiation. Perfect for simple applications
      * and medical device prototyping.
-     * 
+     *
      * @code
      * using namespace mddlog;
      * Log::setMinLevel(LogLevel::INFO);
@@ -35,18 +35,18 @@ export namespace mddlog {
          * @param enableColors Enable colored console output (default: true)
          * @param asyncLogging Enable asynchronous logging (default: true)
          */
-        static void initialize(std::string_view loggerName = "GlobalLogger", 
-                             bool enableColors = true, 
+        static void initialize(std::string_view loggerName = "GlobalLogger",
+                             bool enableColors = true,
                              bool asyncLogging = true) {
             std::lock_guard<std::mutex> lock(mutex_);
-            
+
             if (!globalLogger_) {
-                globalLogger_ = std::make_unique<core::SimpleLogger>(loggerName, asyncLogging);
-                
+                globalLogger_ = std::make_shared<core::SimpleLogger>(loggerName, asyncLogging);
+
                 // Add default console sink
                 auto consoleSink = sinks::createConsoleSink(enableColors, true);
                 globalLogger_->addSink(consoleSink);
-                
+
                 // Set default level to INFO for medical devices
                 globalLogger_->setMinLevel(core::LogLevel::INFO);
             }
@@ -57,8 +57,7 @@ export namespace mddlog {
          * @param level Minimum level to log
          */
         static void setMinLevel(core::LogLevel level) {
-            ensureInitialized();
-            globalLogger_->setMinLevel(level);
+            snapshot()->setMinLevel(level);
         }
 
         /**
@@ -66,8 +65,7 @@ export namespace mddlog {
          * @param sink Sink to add
          */
         static void addSink(sinks::SinkPtr sink) {
-            ensureInitialized();
-            globalLogger_->addSink(std::move(sink));
+            snapshot()->addSink(std::move(sink));
         }
 
         /**
@@ -75,54 +73,52 @@ export namespace mddlog {
          * @param enabled New enabled state
          */
         static void setEnabled(bool enabled) {
-            ensureInitialized();
-            globalLogger_->setEnabled(enabled);
+            snapshot()->setEnabled(enabled);
         }
 
         /**
          * @brief Flush all sinks
          */
         static void flush() {
-            ensureInitialized();
-            globalLogger_->flush();
+            snapshot()->flush();
         }
 
         // Convenience logging methods
-        
+
         /** @brief Log a trace message */
-        static void trace(std::string_view message, std::string_view category = "default") {
-            ensureInitialized();
-            globalLogger_->trace(message, category);
+        static void trace(std::string_view message, std::string_view category = "default",
+                          const std::source_location& loc = std::source_location::current()) {
+            snapshot()->trace(message, category, loc);
         }
 
         /** @brief Log a debug message */
-        static void debug(std::string_view message, std::string_view category = "default") {
-            ensureInitialized();
-            globalLogger_->debug(message, category);
+        static void debug(std::string_view message, std::string_view category = "default",
+                          const std::source_location& loc = std::source_location::current()) {
+            snapshot()->debug(message, category, loc);
         }
 
         /** @brief Log an info message */
-        static void info(std::string_view message, std::string_view category = "default") {
-            ensureInitialized();
-            globalLogger_->info(message, category);
+        static void info(std::string_view message, std::string_view category = "default",
+                         const std::source_location& loc = std::source_location::current()) {
+            snapshot()->info(message, category, loc);
         }
 
         /** @brief Log a warning message */
-        static void warn(std::string_view message, std::string_view category = "default") {
-            ensureInitialized();
-            globalLogger_->warn(message, category);
+        static void warn(std::string_view message, std::string_view category = "default",
+                         const std::source_location& loc = std::source_location::current()) {
+            snapshot()->warn(message, category, loc);
         }
 
         /** @brief Log an error message */
-        static void error(std::string_view message, std::string_view category = "default") {
-            ensureInitialized();
-            globalLogger_->error(message, category);
+        static void error(std::string_view message, std::string_view category = "default",
+                          const std::source_location& loc = std::source_location::current()) {
+            snapshot()->error(message, category, loc);
         }
 
         /** @brief Log a fatal message */
-        static void fatal(std::string_view message, std::string_view category = "default") {
-            ensureInitialized();
-            globalLogger_->fatal(message, category);
+        static void fatal(std::string_view message, std::string_view category = "default",
+                          const std::source_location& loc = std::source_location::current()) {
+            snapshot()->fatal(message, category, loc);
         }
 
         /**
@@ -133,15 +129,16 @@ export namespace mddlog {
          * @param userId User identifier
          * @param sessionId Session identifier
          * @param deviceId Device identifier
+         * @param loc Caller's source location (auto-filled)
          */
         static void logMedical(core::LogLevel level,
                               std::string_view message,
                               std::string_view category,
                               std::string_view userId,
                               std::string_view sessionId,
-                              std::string_view deviceId) {
-            ensureInitialized();
-            globalLogger_->logMedical(level, message, category, userId, sessionId, deviceId);
+                              std::string_view deviceId,
+                              const std::source_location& loc = std::source_location::current()) {
+            snapshot()->logMedical(level, message, category, userId, sessionId, deviceId, loc);
         }
 
         /**
@@ -151,23 +148,27 @@ export namespace mddlog {
          * @param userId User who triggered the event
          * @param deviceId Device identifier
          * @param riskLevel Associated risk level
+         * @param loc Caller's source location (auto-filled)
          */
         static void logAudit(std::string_view message,
                             std::string_view eventType,
                             std::string_view userId,
                             std::string_view deviceId,
-                            std::string_view riskLevel = "") {
-            ensureInitialized();
-            globalLogger_->logAudit(message, eventType, userId, deviceId, riskLevel);
+                            std::string_view riskLevel = "",
+                            const std::source_location& loc = std::source_location::current()) {
+            snapshot()->logAudit(message, eventType, userId, deviceId, riskLevel, loc);
         }
 
         /**
-         * @brief Get the global logger instance
-         * @return Reference to the global logger (auto-initializes if needed)
+         * @brief Get a shared handle to the global logger
+         * @return Shared ownership of the global logger (auto-initializes if needed)
+         *
+         * Returns a shared_ptr rather than a reference: a reference could dangle if shutdown()
+         * ran on another thread between the caller obtaining it and using it, whereas shared
+         * ownership keeps the logger alive for as long as the caller's copy is.
          */
-        static core::SimpleLogger& getLogger() {
-            ensureInitialized();
-            return *globalLogger_;
+        static std::shared_ptr<core::SimpleLogger> getLogger() {
+            return snapshot();
         }
 
         /**
@@ -181,15 +182,23 @@ export namespace mddlog {
 
         /**
          * @brief Shutdown the global logger
-         * 
+         *
          * This will flush all pending messages and clean up resources.
          * After calling this, the logger can be re-initialized if needed.
+         *
+         * Resetting the shared static handle does not affect a call already in flight on another
+         * thread: that call holds its own shared_ptr copy (see snapshot()), so the logger object
+         * itself stays alive until every such call has returned.
          */
         static void shutdown() {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (globalLogger_) {
-                globalLogger_->flush();
+            std::shared_ptr<core::SimpleLogger> toShutdown;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                toShutdown = std::move(globalLogger_);
                 globalLogger_.reset();
+            }
+            if (toShutdown) {
+                toShutdown->flush();
             }
         }
 
@@ -202,24 +211,29 @@ export namespace mddlog {
 
     private:
         /**
-         * @brief Ensure the global logger is initialized
+         * @brief Ensure the global logger is initialized and return a shared handle to it
+         *
+         * Every public method routes through this rather than dereferencing globalLogger_
+         * directly: taking the shared_ptr copy while holding mutex_ is what prevents a concurrent
+         * shutdown() from destroying the logger out from under a call already in progress.
          */
-        static void ensureInitialized() {
+        static std::shared_ptr<core::SimpleLogger> snapshot() {
             std::lock_guard<std::mutex> lock(mutex_);
             if (!globalLogger_) {
                 // Auto-initialize with default settings
-                globalLogger_ = std::make_unique<core::SimpleLogger>("GlobalLogger", true);
-                
+                globalLogger_ = std::make_shared<core::SimpleLogger>("GlobalLogger", true);
+
                 // Add default console sink
                 auto consoleSink = sinks::createConsoleSink(true, true);
                 globalLogger_->addSink(consoleSink);
-                
+
                 // Set default level to INFO for medical devices
                 globalLogger_->setMinLevel(core::LogLevel::INFO);
             }
+            return globalLogger_;
         }
 
-        static inline std::unique_ptr<core::SimpleLogger> globalLogger_;
+        static inline std::shared_ptr<core::SimpleLogger> globalLogger_;
         static inline std::mutex mutex_;
     };
 

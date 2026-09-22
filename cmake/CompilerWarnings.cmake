@@ -49,15 +49,6 @@ function(set_project_warnings project_name)
       -Wdouble-promotion # warn if float is implicit promoted to double
       -Wformat=2 # warn on security issues around functions that format output (ie printf)
       -Wimplicit-fallthrough # warn on statements that fallthrough without an explicit annotation
-      # CMake's C++ module support installs FILE_SET CXX_MODULES sources and re-derives their BMI
-      # in every consumer, which requires replicating this target's *private* compile options too
-      # (a module's BMI has to be produced identically wherever it is compiled) - so this project's
-      # own -Werror reaches even an external consumer's rebuild of mddlog's modules. When CMake
-      # precompiles a BMI on Clang it passes a redundant `-c` alongside `--precompile`; Clang only
-      # warns about it, but that warning would otherwise fail an installed-package consumer's build
-      # over a command line this project's own CMakeLists.txt never wrote. Reproduced and verified
-      # against the InstallTreeConsumer test (cmake/TestInstallConsumer.cmake) with upstream Clang 21.
-      -Wno-unused-command-line-argument
   )
   if(NOT WARNINGS_CUDA)
     set(CLANG_WARNINGS
@@ -95,7 +86,20 @@ function(set_project_warnings project_name)
   if(MSVC)
     set(PROJECT_WARNINGS ${MSVC_WARNINGS})
   elseif(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-    set(PROJECT_WARNINGS ${CLANG_WARNINGS})
+    set(PROJECT_WARNINGS
+        ${CLANG_WARNINGS}
+        # CMake's C++ module support installs FILE_SET CXX_MODULES sources and re-derives their
+        # BMI in every consumer, which requires replicating this target's *private* compile
+        # options too (a module's BMI has to be produced identically wherever it is compiled) - so
+        # this project's own -Werror reaches even an external consumer's rebuild of mddlog's
+        # modules. When CMake precompiles a BMI on Clang it passes a redundant `-c` alongside
+        # `--precompile`; Clang only warns about it, but that warning would otherwise fail an
+        # installed-package consumer's build over a command line this project's own CMakeLists.txt
+        # never wrote. Reproduced and verified against the InstallTreeConsumer test
+        # (cmake/TestInstallConsumer.cmake) with upstream Clang 21. Clang-only: GCC's own module
+        # invocation has no such argument, and GCC does not define this warning name at all.
+        -Wno-unused-command-line-argument
+    )
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(PROJECT_WARNINGS ${GCC_WARNINGS})
   else()
