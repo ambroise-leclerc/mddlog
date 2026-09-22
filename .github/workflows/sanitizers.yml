@@ -1,0 +1,76 @@
+name: Sanitizers
+
+# AddressSanitizer and UndefinedBehaviorSanitizer over the test suite. A green ordinary build
+# proves less than it looks like it does here: this is the leg that actually exercises the
+# concurrency- and lifetime-sensitive paths (the async worker thread, flush/destruction draining,
+# sink failure isolation) under instrumentation rather than only under CTest's pass/fail.
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Catches a regression that lands through a path with no PR, and keeps the job from rotting
+    # unnoticed between changes that happen to touch it.
+    - cron: '0 5 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sanitize:
+    name: ASan + UBSan (GCC 16.1, Debug)
+    runs-on: ubuntu-latest
+    container: gcc:16.1.0
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y cmake ninja-build wget
+
+    - name: Install pinned CMake
+      run: |
+        CMAKE_VERSION="4.1.1"
+        CMAKE_ARCHIVE="${RUNNER_TEMP}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
+        wget -O "$CMAKE_ARCHIVE" https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz
+        tar -xzf "$CMAKE_ARCHIVE" -C /opt/
+        ln -sf /opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake /usr/bin/cmake
+        ln -sf /opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/ctest /usr/bin/ctest
+        cmake --version
+
+    # Not through a preset: the sanitizer build is deliberately not one of the configurations
+    # CMakePresets.json describes, because it is not a configuration this project ships. Debug,
+    # since ASan's reports are unreadable without frame pointers and line numbers, and examples
+    # off because nothing here runs them. enable_sanitizers() in cmake/Sanitizers.cmake already
+    # carries -fno-sanitize-recover=all, so a UBSan violation aborts instead of printing into a
+    # passing log.
+    - name: Configure with ASan and UBSan
+      run: |
+        cmake -S . -B build-asan -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DMDDLOG_BUILD_TESTS=ON \
+          -DMDDLOG_BUILD_EXAMPLES=OFF \
+          -DENABLE_SANITIZER_ADDRESS=ON \
+          -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
+
+    - name: Build
+      env:
+        ASAN_OPTIONS: detect_leaks=0
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      run: cmake --build build-asan
+
+    # InstallTreeConsumer is excluded: it spawns its own nested, unsanitized configure/build/run,
+    # which is not what this job is verifying.
+    - name: Run tests under ASan and UBSan
+      env:
+        ASAN_OPTIONS: detect_leaks=1
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      run: ctest --test-dir build-asan -E 'InstallTreeConsumer' --output-on-failure --no-tests=error --timeout 120

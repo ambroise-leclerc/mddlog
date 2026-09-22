@@ -132,18 +132,15 @@ export namespace mddlog::core {
 
         /**
          * @brief Get formatted timestamp string
-         * @param format Time format (ISO 8601 by default)
-         * @return Formatted timestamp
+         * @return ISO 8601 UTC timestamp with millisecond precision, e.g. "2026-09-22T07:15:57.160Z"
+         *
+         * Formats via std::chrono's formatter rather than std::gmtime(): gmtime() returns a
+         * pointer into a static buffer that is not thread-safe, and MSVC additionally deprecates
+         * it (C4996), which fails this project's warnings-as-errors build.
          */
-        std::string getFormattedTimestamp(std::string_view format = "%Y-%m-%dT%H:%M:%S") const {
-            auto time_t = std::chrono::system_clock::to_time_t(timestamp);
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                timestamp.time_since_epoch()) % 1000;
-            
-            std::stringstream ss;
-            ss << std::put_time(std::gmtime(&time_t), format.data());
-            ss << '.' << std::setfill('0') << std::setw(3) << ms.count() << 'Z';
-            return ss.str();
+        std::string getFormattedTimestamp() const {
+            using namespace std::chrono;
+            return std::format("{:%Y-%m-%dT%H:%M:%S}Z", time_point_cast<milliseconds>(timestamp));
         }
 
         /**

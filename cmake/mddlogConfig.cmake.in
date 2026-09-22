@@ -2,19 +2,31 @@
 
 include(CMakeFindDependencyMacro)
 
-# Check for C++23 support
+# Mirrors the version-dependent import-std gate in the top-level CMakeLists.txt: the UUID CMake
+# accepts for CMAKE_EXPERIMENTAL_CXX_IMPORT_STD is specific to a CMake release series, so a
+# consumer configuring against a different CMake than the one mddlog was built with must select
+# its own gate rather than inherit a hardcoded one.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.4")
+    message(FATAL_ERROR
+        "mddlog has not qualified CMake ${CMAKE_VERSION}'s import std gate; use a 4.0-4.3 release.")
+endif()
+if(NOT DEFINED CMAKE_EXPERIMENTAL_CXX_IMPORT_STD)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.3")
+        set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b")
+    else()
+        set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "d0edc3af-4c50-42ea-a356-e2862fe7a444")
+    endif()
+endif()
+
 if(NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 23)
     set(CMAKE_CXX_STANDARD 23)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-# Check for import std support
-if(NOT DEFINED CMAKE_EXPERIMENTAL_CXX_IMPORT_STD)
-    set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "d0edc3af-4c50-42ea-a356-e2862fe7a444")
-endif()
-
-# Enable C++23 modules scanning
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)
+    set(CMAKE_CXX_MODULE_STD ON)
+endif()
 
 # Compiler-specific modules configuration
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -22,9 +34,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/experimental:module>)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/std:c++latest>)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=c++23>)
 endif()
+
+find_dependency(Threads)
 
 include("${CMAKE_CURRENT_LIST_DIR}/mddlogTargets.cmake")
 

@@ -1,0 +1,84 @@
+name: macOS Apple Silicon Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64:
+    name: macOS 15 arm64 (Clang 21.1.8)
+    # Explicitly the arm64 image; do not replace this with macos-latest, whose architecture and
+    # installed toolchain can move independently of this verified target.
+    runs-on: macos-15
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Setup pinned CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '4.3.1'
+
+    - name: Install pinned upstream LLVM and host tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        brew install llvm@21 ninja
+        llvm_root="$(brew --prefix llvm@21)"
+        test "$("$llvm_root/bin/clang++" --version | sed -n 's/.*clang version \([0-9.]*\).*/\1/p' | head -1)" = "21.1.8"
+        echo "MDDLOG_LLVM_ROOT=$llvm_root" >> "$GITHUB_ENV"
+        echo "$llvm_root/bin" >> "$GITHUB_PATH"
+
+    - name: Configure
+      run: cmake --preset ninja-macos-clang
+
+    - name: Build
+      run: cmake --build --preset ninja-macos-clang --parallel 4
+
+    - name: Run full test suite
+      run: ctest --preset ninja-macos-clang --output-on-failure --no-tests=error --timeout 120
+
+    - name: Configure ASan and UBSan
+      run: |
+        cmake --preset ninja-macos-clang-debug \
+          -DMDDLOG_BUILD_EXAMPLES=OFF \
+          -DENABLE_SANITIZER_ADDRESS=ON \
+          -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
+
+    - name: Build ASan and UBSan
+      run: cmake --build --preset ninja-macos-clang-debug --parallel 4
+
+    # detect_leaks=0: macOS's own process startup (libobjc's class-list allocation, retained via
+    # libxpc/libSystem initializers that run before any test code) leaks a fixed handful of
+    # allocations on every executable on this platform - confirmed here as three allocations
+    # totalling 120 bytes, all resolving to <unknown module> through _fetchInitializingClassList /
+    # _xpc_collect_images / dyld, with zero frames in mddlog code. That is macOS's own startup
+    # cost, not this project's, and it made every spec on this leg fail identically until this was
+    # set. The Linux sanitizer job (sanitizers.yml, detect_leaks=1) remains the leak-detection
+    # authority; this leg still catches every other ASan/UBSan class of bug (use-after-free,
+    # buffer overflow, use-after-scope, undefined behavior).
+    - name: Run tests under ASan and UBSan
+      env:
+        ASAN_OPTIONS: detect_leaks=0
+        UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      run: ctest --preset ninja-macos-clang-debug -E 'InstallTreeConsumer' --output-on-failure --no-tests=error --timeout 120
+
+    - name: Verify no source-tree writes
+      shell: bash
+      run: |
+        set -euo pipefail
+        status="$(git status --porcelain)"
+        if [ -n "$status" ]; then
+          echo "Build wrote into the source tree:"
+          echo "$status"
+          exit 1
+        fi

@@ -1,0 +1,152 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "ninja-msvc",
+            "displayName": "Ninja with MSVC",
+            "description": "Ninja generator with MSVC compiler for import std support. This is the preset .github/workflows/windows-build.yml runs.",
+            "generator": "Ninja",
+            "binaryDir": "build",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "vendor": {
+                "microsoft.com/VisualStudioSettings/CMake/1.0": {
+                    "hostOS": [ "Windows" ]
+                }
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            },
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "MDDLOG_BUILD_EXAMPLES": "ON",
+                "MDDLOG_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "ninja-msvc-debug",
+            "displayName": "Ninja with MSVC (Debug)",
+            "description": "Debug variant of ninja-msvc",
+            "inherits": "ninja-msvc",
+            "binaryDir": "build-msvc-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ninja-gcc",
+            "displayName": "Ninja with GCC",
+            "description": "Ninja generator with GCC 16.1+ for C++23 modules and import std support. This is the preset .github/workflows/linux-gcc16-build.yml runs.",
+            "generator": "Ninja",
+            "binaryDir": "build-gcc",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
+                "MDDLOG_BUILD_EXAMPLES": "ON",
+                "MDDLOG_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "ninja-gcc-debug",
+            "displayName": "Ninja with GCC (Debug)",
+            "description": "Debug variant of ninja-gcc",
+            "inherits": "ninja-gcc",
+            "binaryDir": "build-gcc-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ninja-clang",
+            "displayName": "Ninja with Clang",
+            "description": "Ninja generator with upstream Clang 21 and libc++ for C++23 modules and import std. Mirrors the Linux Clang leg in .github/workflows/clang-build.yml.",
+            "generator": "Ninja",
+            "binaryDir": "build-clang",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/linux-clang21-libcxx.cmake",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "MDDLOG_BUILD_EXAMPLES": "ON",
+                "MDDLOG_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "ninja-clang-debug",
+            "displayName": "Ninja with Clang (Debug)",
+            "description": "Debug variant of ninja-clang.",
+            "inherits": "ninja-clang",
+            "binaryDir": "build-clang-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ninja-macos-clang",
+            "displayName": "Ninja with upstream Clang on Apple Silicon",
+            "description": "Verified macOS configuration: arm64, upstream LLVM/Clang 21.1.8, libc++, CMake 4.3.1, Ninja.",
+            "generator": "Ninja",
+            "binaryDir": "build-macos-clang",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/macos-arm64-llvm.cmake",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "MDDLOG_BUILD_EXAMPLES": "ON",
+                "MDDLOG_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "ninja-macos-clang-debug",
+            "displayName": "Ninja with upstream Clang on Apple Silicon (Debug)",
+            "description": "Debug variant of ninja-macos-clang.",
+            "inherits": "ninja-macos-clang",
+            "binaryDir": "build-macos-clang-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "ninja-msvc", "configurePreset": "ninja-msvc" },
+        { "name": "ninja-msvc-debug", "configurePreset": "ninja-msvc-debug" },
+        { "name": "ninja-gcc", "configurePreset": "ninja-gcc" },
+        { "name": "ninja-gcc-debug", "configurePreset": "ninja-gcc-debug" },
+        { "name": "ninja-clang", "configurePreset": "ninja-clang" },
+        { "name": "ninja-clang-debug", "configurePreset": "ninja-clang-debug" },
+        { "name": "ninja-macos-clang", "configurePreset": "ninja-macos-clang" },
+        { "name": "ninja-macos-clang-debug", "configurePreset": "ninja-macos-clang-debug" }
+    ],
+    "testPresets": [
+        { "name": "ninja-msvc", "configurePreset": "ninja-msvc", "output": { "outputOnFailure": true } },
+        { "name": "ninja-msvc-debug", "configurePreset": "ninja-msvc-debug", "output": { "outputOnFailure": true } },
+        { "name": "ninja-gcc", "configurePreset": "ninja-gcc", "output": { "outputOnFailure": true } },
+        { "name": "ninja-gcc-debug", "configurePreset": "ninja-gcc-debug", "output": { "outputOnFailure": true } },
+        { "name": "ninja-clang", "configurePreset": "ninja-clang", "output": { "outputOnFailure": true } },
+        { "name": "ninja-clang-debug", "configurePreset": "ninja-clang-debug", "output": { "outputOnFailure": true } },
+        { "name": "ninja-macos-clang", "configurePreset": "ninja-macos-clang", "output": { "outputOnFailure": true } },
+        { "name": "ninja-macos-clang-debug", "configurePreset": "ninja-macos-clang-debug", "output": { "outputOnFailure": true } }
+    ]
+}

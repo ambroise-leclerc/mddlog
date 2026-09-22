@@ -31,15 +31,18 @@ export namespace mddlog {
     // Re-export core types
     using core::LogLevel;
     using core::LogRecord;
+    using core::LogStatistics;
     using core::SimpleLogger;
     using core::toString;
     using core::fromString;
     using core::isComplianceLevel;
     using core::getColorCode;
     using core::getResetColorCode;
-    
+
     // Re-export sinks
     using sinks::Sink;
+    using sinks::SinkPtr;
+    using sinks::WeakSinkPtr;
     using sinks::ConsoleSink;
     using sinks::createConsoleSink;
     
@@ -56,7 +59,7 @@ export namespace mddlog {
      * @return True if compliance features are active
      */
     constexpr bool isMedicalComplianceEnabled() noexcept {
-        #ifdef MDUX_MEDICAL_DEVICE_COMPLIANCE
+        #ifdef MDDLOG_MEDICAL_DEVICE_COMPLIANCE
         return true;
         #else
         return false;

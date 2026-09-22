@@ -93,11 +93,18 @@ export namespace mddlog::core {
          * @param level Log level
          * @param message Log message
          * @param category Category/component name
+         * @param loc Caller's source location (auto-filled)
+         *
+         * @c loc must be an explicit parameter here rather than relying on LogRecord's own
+         * defaulted @c std::source_location::current(): a default argument is evaluated at the
+         * call site of the function that declares it, so without this parameter every record
+         * would capture this line inside Logger, not the application's call to log()/info()/etc.
          */
-        void log(LogLevel level, std::string_view message, std::string_view category = "default") {
+        void log(LogLevel level, std::string_view message, std::string_view category = "default",
+                 const std::source_location& loc = std::source_location::current()) {
             if (!shouldLog(level)) return;
 
-            LogRecord record(level, message, category);
+            LogRecord record(level, message, category, loc);
             processLogRecord(std::move(record));
         }
 
@@ -109,16 +116,18 @@ export namespace mddlog::core {
          * @param userId User identifier
          * @param sessionId Session identifier
          * @param deviceId Device identifier
+         * @param loc Caller's source location (auto-filled)
          */
-        void logMedical(LogLevel level, 
+        void logMedical(LogLevel level,
                        std::string_view message,
                        std::string_view category,
                        std::string_view userId,
                        std::string_view sessionId,
-                       std::string_view deviceId) {
+                       std::string_view deviceId,
+                       const std::source_location& loc = std::source_location::current()) {
             if (!shouldLog(level)) return;
 
-            LogRecord record(level, message, category, userId, sessionId, deviceId);
+            LogRecord record(level, message, category, userId, sessionId, deviceId, loc);
             processLogRecord(std::move(record));
         }
 
@@ -129,40 +138,55 @@ export namespace mddlog::core {
          * @param userId User who triggered the event
          * @param deviceId Device identifier
          * @param riskLevel Associated risk level
+         * @param loc Caller's source location (auto-filled)
+         *
+         * Deliberately does not call shouldLog(): an audit trail entry must not be silenceable by
+         * disabling the logger or raising its minimum level, which would otherwise let a
+         * misconfigured or maliciously reconfigured logger erase compliance evidence. The record
+         * still goes through each sink's own shouldLog()/isEnabled() in writeToSinks() like any
+         * other record - since AUDIT is the highest LogLevel, a sink's minimum-level filter can
+         * never exclude it, but an explicitly disabled sink (Sink::setEnabled(false)) still will.
          */
         void logAudit(std::string_view message,
                      std::string_view eventType,
                      std::string_view userId,
                      std::string_view deviceId,
-                     std::string_view riskLevel = "") {
-            LogRecord record(LogLevel::AUDIT, message, "audit", userId, "", deviceId);
+                     std::string_view riskLevel = "",
+                     const std::source_location& loc = std::source_location::current()) {
+            LogRecord record(LogLevel::AUDIT, message, "audit", userId, "", deviceId, loc);
             record.setAuditInfo(eventType, riskLevel);
             processLogRecord(std::move(record));
         }
 
         // Convenience methods for different log levels
-        void trace(std::string_view message, std::string_view category = "default") {
-            log(LogLevel::TRACE, message, category);
+        void trace(std::string_view message, std::string_view category = "default",
+                   const std::source_location& loc = std::source_location::current()) {
+            log(LogLevel::TRACE, message, category, loc);
         }
 
-        void debug(std::string_view message, std::string_view category = "default") {
-            log(LogLevel::DEBUG, message, category);
+        void debug(std::string_view message, std::string_view category = "default",
+                   const std::source_location& loc = std::source_location::current()) {
+            log(LogLevel::DEBUG, message, category, loc);
         }
 
-        void info(std::string_view message, std::string_view category = "default") {
-            log(LogLevel::INFO, message, category);
+        void info(std::string_view message, std::string_view category = "default",
+                  const std::source_location& loc = std::source_location::current()) {
+            log(LogLevel::INFO, message, category, loc);
         }
 
-        void warn(std::string_view message, std::string_view category = "default") {
-            log(LogLevel::WARN, message, category);
+        void warn(std::string_view message, std::string_view category = "default",
+                  const std::source_location& loc = std::source_location::current()) {
+            log(LogLevel::WARN, message, category, loc);
         }
 
-        void error(std::string_view message, std::string_view category = "default") {
-            log(LogLevel::ERROR, message, category);
+        void error(std::string_view message, std::string_view category = "default",
+                   const std::source_location& loc = std::source_location::current()) {
+            log(LogLevel::ERROR, message, category, loc);
         }
 
-        void fatal(std::string_view message, std::string_view category = "default") {
-            log(LogLevel::FATAL, message, category);
+        void fatal(std::string_view message, std::string_view category = "default",
+                   const std::source_location& loc = std::source_location::current()) {
+            log(LogLevel::FATAL, message, category, loc);
         }
 
         /**
@@ -273,8 +297,11 @@ export namespace mddlog::core {
                     try {
                         sink->write(record);
                     } catch (...) {
-                        // Ignore sink errors to prevent logging from crashing the application
-                        // In a medical device, this might need more sophisticated error handling
+                        // A throwing sink must not stop delivery to the remaining sinks, nor
+                        // propagate into the async worker thread. The failure is still made
+                        // explicit and observable (rather than silently swallowed) through the
+                        // sink's own statistics.
+                        sink->recordWriteFailure();
                     }
                 }
             }
@@ -370,6 +397,11 @@ export namespace mddlog::core {
         std::thread asyncThread_;                       ///< Async logging thread
         std::mutex queueMutex_;                         ///< Queue mutex
         std::condition_variable queueCondition_;        ///< Queue condition variable
+        // Unbounded by design/limitation: a producer that logs faster than the sinks can drain
+        // grows this queue without bound rather than blocking or dropping records. That gives the
+        // current implementation no real-time delivery guarantee under sustained overload; a
+        // bounded, real-time-safe queue is out of scope for this change (see the build/test issue
+        // that introduced this comment) and tracked separately.
         std::queue<LogRecord> logQueue_;                ///< Log record queue
         std::queue<std::promise<void>> flushPromises_;  ///< Flush promises queue
     };
