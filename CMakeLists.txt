@@ -1,50 +1,152 @@
 cmake_minimum_required(VERSION 4.0.0)
 
-# CRITICAL: Must be the first thing after cmake_minimum_required for toolchain detection
-# Official UUID for CMake 4.0.3 import std support
-set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "d0edc3af-4c50-42ea-a356-e2862fe7a444")
+# CMake still gates import std behind an experimental UUID that is specific to a CMake release
+# series. Fail explicitly when this project has not reviewed a newer series instead of silently
+# accepting an unknown gate value - mirrors MduX's root CMakeLists.txt (the reference support
+# matrix this project targets, see issue #5).
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.4")
+    message(FATAL_ERROR
+        "CMake ${CMAKE_VERSION} has not been qualified for mddlog's import std support; use a 4.0-4.3 release.")
+endif()
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.3")
+    set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "451f2fe2-a8a2-47c3-bc32-94786d8fc91b")
+else()
+    set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "d0edc3af-4c50-42ea-a356-e2862fe7a444")
+endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/PreventInSourceBuilds.cmake)
 
 project(mddlog VERSION 0.1.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
 
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Debug: Check if import std support was detected
 message(STATUS "CMAKE_EXPERIMENTAL_CXX_IMPORT_STD: ${CMAKE_EXPERIMENTAL_CXX_IMPORT_STD}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
-if(TARGET __CMAKE::CXX23)
-    message(STATUS "__CMAKE::CXX23 target available")
-else()
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "19.40")
-        message(STATUS "__CMAKE::CXX23 target NOT available, but MSVC ${CMAKE_CXX_COMPILER_VERSION} should support import std with /experimental:module")
-    else()
-        message(WARNING "__CMAKE::CXX23 target NOT available - import std; will not work")
-    endif()
-endif()
 
-# Compiler version requirements for C++23 modules support
+# Compiler version requirements for C++23 modules support. See the reference support matrix in
+# issue #5: Windows/MSVC, Linux/GCC, Linux/Clang and macOS/Clang are the tested configurations;
+# these checks are admission floors, not a claim that every version above them is verified.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "19.40")
         message(FATAL_ERROR "MSVC 17.14 (Visual Studio 2022 version 17.10) or later is required for C++23 modules support. Current version: ${CMAKE_CXX_COMPILER_VERSION}")
     endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
-        message(FATAL_ERROR "GCC 15 or later is required for C++23 modules support. Current version: ${CMAKE_CXX_COMPILER_VERSION}")
+    # GCC 16.1, not 15 and not a bare 16.0: GCC 15 cannot round-trip libstdc++'s std module through
+    # a second-level BMI, which is exactly what building the SpecLab-based test suite requires
+    # (SpecLab's own floor is GCC 16.1 for the same reason). GCC 16.2 corrupted the BMIs this
+    # project's modules produce ("failed to read compiled module cluster ... Bad file data"), which
+    # is why CI pins the exact gcc:16.1.0 container rather than a floating gcc:16 tag - see
+    # .github/workflows/linux-gcc16-build.yml.
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.1")
+        message(FATAL_ERROR "GCC 16.1 or later is required for C++23 modules support. Current version: ${CMAKE_CXX_COMPILER_VERSION}")
     endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "20.0")
         message(FATAL_ERROR "Clang 20 or later is required for C++23 modules support. Current version: ${CMAKE_CXX_COMPILER_VERSION}")
     endif()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    message(FATAL_ERROR
+        "AppleClang is unsupported. Apple Silicon macOS requires upstream LLVM/Clang 21.1.8; "
+        "configure with --preset ninja-macos-clang.")
 else()
-    message(WARNING "Unsupported compiler: ${CMAKE_CXX_COMPILER_ID}. MduX requires MSVC 17.14+, GCC 15+, or Clang 20+ for C++23 modules support.")
+    message(FATAL_ERROR "Unsupported compiler: ${CMAKE_CXX_COMPILER_ID}. mddlog requires MSVC 17.14+, GCC 16.1+, or upstream Clang 20+ for C++23 modules support.")
 endif()
 
+if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    message(FATAL_ERROR "Unsupported Apple target '${CMAKE_SYSTEM_NAME}'. mddlog supports Apple Silicon macOS only.")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+        message(FATAL_ERROR "mddlog supports macOS only on Apple Silicon (arm64).")
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR "mddlog on macOS requires upstream LLVM/Clang 21.1.8; AppleClang and GCC are unsupported.")
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "21.1.8")
+        message(FATAL_ERROR
+            "mddlog's verified macOS compiler is upstream Clang 21.1.8 exactly; found "
+            "${CMAKE_CXX_COMPILER_VERSION}.")
+    endif()
+    if(NOT CMAKE_VERSION VERSION_EQUAL "4.3.1")
+        message(FATAL_ERROR "mddlog's verified macOS CMake is 4.3.1 exactly; found ${CMAKE_VERSION}.")
+    endif()
+    function(_mddlog_verify_llvm_archive_tool tool_path expected_name)
+        get_filename_component(tool_name "${tool_path}" NAME)
+        if(NOT tool_name STREQUAL expected_name)
+            message(FATAL_ERROR
+                "The macOS build requires ${expected_name}, but CMake selected '${tool_path}'. "
+                "Configure with --preset ninja-macos-clang.")
+        endif()
+
+        execute_process(
+            COMMAND "${tool_path}" --version
+            RESULT_VARIABLE tool_result
+            OUTPUT_VARIABLE tool_stdout
+            ERROR_VARIABLE tool_stderr
+        )
+        string(CONCAT tool_banner "${tool_stdout}" "\n" "${tool_stderr}")
+        if(NOT tool_result EQUAL 0 OR
+           NOT tool_banner MATCHES "LLVM version 21\\.1\\.8([^0-9.]|$)")
+            message(FATAL_ERROR
+                "The macOS build requires LLVM 21.1.8 ${expected_name}; '${tool_path} --version' "
+                "returned '${tool_banner}'.")
+        endif()
+    endfunction()
+
+    _mddlog_verify_llvm_archive_tool("${CMAKE_AR}" "llvm-ar")
+    _mddlog_verify_llvm_archive_tool("${CMAKE_RANLIB}" "llvm-ranlib")
+endif()
+
+# Checked after the compiler/platform diagnostics so unsupported combinations get the specific
+# remediation above rather than a generic missing-import-metadata error.
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)
+    message(STATUS "C++23 import std metadata available")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "19.40")
+    message(STATUS "__CMAKE::CXX23 target NOT available, but MSVC ${CMAKE_CXX_COMPILER_VERSION} should support import std with /experimental:module")
+else()
+    message(FATAL_ERROR
+        "The selected compiler and standard library do not provide C++23 import std support. "
+        "CMAKE_CXX_COMPILER_IMPORT_STD='${CMAKE_CXX_COMPILER_IMPORT_STD}'.")
+endif()
+
+# Generator validation.
+#
+# CMake implements C++ modules for the Ninja, Ninja Multi-Config and Visual Studio 17.4+
+# generators only, and Visual Studio is ruled out separately because it cannot do `import std`.
+# That leaves the Ninja family. Without this check, a plain `cmake ..` on Linux picks "Unix
+# Makefiles" and fails later inside a try_compile with a CMake-internal backtrace that never
+# mentions the generator.
+if(NOT CMAKE_GENERATOR MATCHES "Ninja")
+    message(FATAL_ERROR
+        "mddlog requires the Ninja generator, but CMake selected \"${CMAKE_GENERATOR}\".\n"
+        "C++23 modules and `import std` are not supported by that generator.\n"
+        "\n"
+        "Configure with:\n"
+        "    cmake .. -G Ninja\n"
+        "\n"
+        "Or set it once for the shell and omit the flag from then on:\n"
+        "    export CMAKE_GENERATOR=Ninja        # Windows: set CMAKE_GENERATOR=Ninja\n"
+        "\n"
+        "If Ninja is missing: `apt install ninja-build`, `dnf install ninja-build`,\n"
+        "or `winget install Ninja-build.Ninja`.")
+endif()
+
+# Platform validation
+if(NOT WIN32 AND
+   NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux") AND
+   NOT (CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+    message(FATAL_ERROR "mddlog only supports Windows, Linux, and Apple Silicon macOS.")
+endif()
 
 # C++23 Modules support
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+# Initialize every subsequently-created C++ target with import std support. Checking for CMake's
+# internal target here is too early on Clang: CMake creates it while applying this property.
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)
+    set(CMAKE_CXX_MODULE_STD ON)
+endif()
 
 # Compiler-specific modules configuration
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -58,13 +160,14 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(StandardProjectSettings)
 include(Cache)
+include(CPM)
 include(CompilerSettings)
 include(Linker)
 include(CompilerWarnings)
 include(Sanitizers)
 include(StaticAnalyzers)
-
-
+include(Doxygen)
+include(DependencySummaryTable)
 
 # Create module library target
 add_library(mddlog)
@@ -82,6 +185,7 @@ target_sources(mddlog
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/core/Logger.cppm
         include/mddlog/mddlog.cppm
+        include/mddlog/Log.cppm
 )
 # Configuration application
 configure_compiler_settings(mddlog_options)
@@ -99,31 +203,23 @@ target_include_directories(mddlog PUBLIC
 
 target_compile_features(mddlog PUBLIC cxx_std_23)
 
-# Build the std module first for GCC
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    # Create a custom target to build the std module
-    add_custom_target(build_std_module
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header iostream
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header vector
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header string
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header memory
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header thread
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header mutex
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header atomic
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header chrono
-        COMMAND ${CMAKE_CXX_COMPILER} -std=c++23 -fmodules-ts -x c++-system-header source_location
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Building std module for GCC"
-    )
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)
+    set_target_properties(mddlog PROPERTIES CXX_MODULE_STD ON)
 endif()
 
-# Link to the std module if available
-if(TARGET __CMAKE::CXX23)
-    target_link_libraries(mddlog PUBLIC __CMAKE::CXX23)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(mddlog PRIVATE /experimental:module /std:c++latest)
 endif()
 
-# Apply compiler settings
-target_link_libraries(mddlog PUBLIC mddlog_options mddlog_warnings)
+find_package(Threads REQUIRED)
+target_link_libraries(mddlog_options INTERFACE Threads::Threads)
+
+# Apply compiler settings. mddlog_options is PUBLIC because it carries Threads::Threads, which a
+# consumer's own final link needs too; mddlog_warnings (this project's -Wall/-Werror/etc.) is
+# PRIVATE so those flags apply while building mddlog itself and never leak into a consumer's
+# compile of its own code - a downstream project should choose its own warning policy.
+target_link_libraries(mddlog PUBLIC mddlog_options)
+target_link_libraries(mddlog PRIVATE mddlog_warnings)
 
 # Build options
 option(MDDLOG_BUILD_EXAMPLES "Build MddLog examples" ON)
@@ -137,6 +233,26 @@ endif()
 if(MDDLOG_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+
+    # Proves the install tree actually works end-to-end: installs to a scratch prefix, then
+    # configures/builds/runs a tiny external consumer project against it via
+    # find_package(mddlog CONFIG REQUIRED) and mddlog::mddlog.
+    add_test(InstallTreeConsumer
+        "${CMAKE_COMMAND}"
+        -D "BUILD_DIR=${CMAKE_BINARY_DIR}"
+        -D "CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        -D "AR=${CMAKE_AR}"
+        -D "RANLIB=${CMAKE_RANLIB}"
+        -D "STDLIB_MODULES_JSON=${CMAKE_CXX_STDLIB_MODULES_JSON}"
+        -D "OSX_SYSROOT=${CMAKE_OSX_SYSROOT}"
+        # The consumer must select the same standard library as this build, not the compiler's
+        # default: on Linux libc++ is not Clang's default, so a consumer built without this flag
+        # scans libc++'s std.cppm with libstdc++'s include path and fails on a missing '__config'.
+        -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        -D "GENERATOR=${CMAKE_GENERATOR}"
+        -D "EXPECTED_VERSION=${PROJECT_VERSION}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"
+    )
 endif()
 
 # Installation
@@ -176,4 +292,3 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/mddlogConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mddlog
 )
-

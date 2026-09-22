@@ -1,0 +1,72 @@
+name: Linux GCC 16 Build
+
+# This project requires C++23 import std support (GCC 16.1+, matching SpecLab's own floor).
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-build-gcc16:
+    name: Linux (GCC 16.1)
+    runs-on: ubuntu-latest
+    # Pinned to a patch release, not the floating `gcc:16` tag: GCC 16.2 has corrupted the module
+    # BMIs this project's sources produce ("failed to read compiled module cluster ... Bad file
+    # data") in prior evaluation, and SpecLab pins the same way for the same reason. Moving to a
+    # newer GCC patch release is a deliberate change: bump this tag in a PR of its own.
+    container: gcc:16.1.0
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y cmake ninja-build
+
+    - name: Install pinned CMake
+      run: |
+        CMAKE_VERSION="4.1.1"
+        CMAKE_ARCHIVE="${RUNNER_TEMP}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
+        wget -O "$CMAKE_ARCHIVE" https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz
+        tar -xzf "$CMAKE_ARCHIVE" -C /opt/
+        ln -sf /opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake /usr/bin/cmake
+        ln -sf /opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/ctest /usr/bin/ctest
+        cmake --version
+
+    - name: Verify compiler and tools
+      run: |
+        gcc --version
+        g++ --version
+        cmake --version
+        ninja --version
+
+    # Through the preset, not a hand-written configure line: CMakePresets.json's ninja-gcc
+    # description names this workflow, and the only way that statement stays true is for the job
+    # to actually use it.
+    - name: Configure CMake
+      run: cmake --preset ninja-gcc
+
+    - name: Build
+      run: cmake --build --preset ninja-gcc
+
+    - name: Run tests
+      run: ctest --preset ninja-gcc --output-on-failure --no-tests=error --timeout 120
+
+    - name: Verify no source-tree writes
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        status="$(git status --porcelain)"
+        if [ -n "$status" ]; then
+          echo "Build wrote into the source tree:"
+          echo "$status"
+          exit 1
+        fi

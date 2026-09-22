@@ -135,6 +135,7 @@ export namespace mddlog::sinks {
          * @return True if colored output is enabled
          */
         bool isColorEnabled() const noexcept {
+            std::lock_guard<std::mutex> lock(mutex_);
             return useColors_;
         }
 
@@ -152,6 +153,7 @@ export namespace mddlog::sinks {
          * @return True if stderr is used for ERROR and FATAL levels
          */
         bool isStderrEnabled() const noexcept {
+            std::lock_guard<std::mutex> lock(mutex_);
             return useStderr_;
         }
 

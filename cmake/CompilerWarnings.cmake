@@ -49,6 +49,15 @@ function(set_project_warnings project_name)
       -Wdouble-promotion # warn if float is implicit promoted to double
       -Wformat=2 # warn on security issues around functions that format output (ie printf)
       -Wimplicit-fallthrough # warn on statements that fallthrough without an explicit annotation
+      # CMake's C++ module support installs FILE_SET CXX_MODULES sources and re-derives their BMI
+      # in every consumer, which requires replicating this target's *private* compile options too
+      # (a module's BMI has to be produced identically wherever it is compiled) - so this project's
+      # own -Werror reaches even an external consumer's rebuild of mddlog's modules. When CMake
+      # precompiles a BMI on Clang it passes a redundant `-c` alongside `--precompile`; Clang only
+      # warns about it, but that warning would otherwise fail an installed-package consumer's build
+      # over a command line this project's own CMakeLists.txt never wrote. Reproduced and verified
+      # against the InstallTreeConsumer test (cmake/TestInstallConsumer.cmake) with upstream Clang 21.
+      -Wno-unused-command-line-argument
   )
   if(NOT WARNINGS_CUDA)
     set(CLANG_WARNINGS
@@ -69,6 +78,12 @@ function(set_project_warnings project_name)
       -Wduplicated-cond # warn if if / else chain has duplicated conditions
       -Wduplicated-branches # warn if if / else branches have duplicated code
       -Wlogical-op # warn about logical operations being used where bitwise were probably wanted
+      # GCC 16's -Warray-bounds (enabled by -Wall) reports a false positive inside libstdc++'s own
+      # inlined std::promise<void>/std::__shared_count destruction path (destroy_at on a
+      # std::_Sp_counted_ptr_inplace<...> allocated by make_shared) - the finding is entirely
+      # inside GCC's own headers, not in any code this project controls, and reproduces with
+      # nothing more exotic than a std::promise<void> member destroyed through a std::future.
+      -Wno-array-bounds
   )
   if(NOT WARNINGS_CUDA)
     set(GCC_WARNINGS

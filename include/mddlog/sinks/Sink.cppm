@@ -90,6 +90,18 @@ export namespace mddlog::sinks {
             return statistics_;
         }
 
+        /**
+         * @brief Record that a write to this sink threw and was suppressed by the caller
+         *
+         * Callers outside the sink hierarchy (the logger's dispatch loop) cannot reach the
+         * protected statistics helpers below, so this is the explicit, observable record of a
+         * caught write failure: it shows up in getStatistics().recordsDropped rather than
+         * disappearing into a silent catch(...).
+         */
+        void recordWriteFailure() noexcept {
+            statistics_.recordsDropped.fetch_add(1);
+        }
+
     protected:
         /**
          * @brief Protected constructor for derived classes

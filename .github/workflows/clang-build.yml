@@ -1,0 +1,101 @@
+name: Linux Clang Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clang-build:
+    name: Linux (Clang 21, libc++)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    # Pinned, not 'latest': the root CMakeLists.txt rejects CMake 4.4+ outright until this project
+    # has reviewed that series' import-std gate, so a floating version turns this job red the day
+    # 4.4 ships with no change to the repository.
+    - name: Setup CMake (4.3.1, within the qualified 4.0-4.3 window)
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '4.3.1'
+
+    - name: Install LLVM/Clang 21 and libc++
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        LLVM_KEY_FPR="6084F3CF814B57C1CF12EFD515CF4D18AF4F7421"
+        sudo install -d -m 0755 /etc/apt/keyrings
+        curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /tmp/llvm-snapshot.asc
+        gpg --show-keys --with-colons --fingerprint /tmp/llvm-snapshot.asc \
+          | awk -F: '/^fpr:/ {print $10}' | grep -qx "$LLVM_KEY_FPR"
+        gpg --dearmor < /tmp/llvm-snapshot.asc > /tmp/llvm.gpg
+        sudo install -m 0644 /tmp/llvm.gpg /etc/apt/keyrings/llvm.gpg
+        codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+        echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] https://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-21 main" \
+          | sudo tee /etc/apt/sources.list.d/llvm-toolchain-21.list
+        sudo apt-get update
+        sudo apt-get install -y ninja-build build-essential ccache clang-21 libc++-21-dev libc++abi-21-dev
+
+    # Verifies the binaries this build actually uses, which are not necessarily the ones on PATH:
+    # the toolchain file addresses /usr/lib/llvm-21/bin directly.
+    - name: Verify Clang 21 is the compiler this job uses
+      run: |
+        set -euo pipefail
+        clangxx=/usr/lib/llvm-21/bin/clang++
+        "$clangxx" --version
+        major="$("$clangxx" --version | sed -n 's/.*clang version \([0-9]*\).*/\1/p' | head -1)"
+        if [ "$major" != "21" ]; then
+          echo "::error::${clangxx} reports major version ${major}, expected 21."
+          exit 1
+        fi
+        ccache_version="$(ccache --version | sed -n 's/^ccache version \([0-9][0-9.]*\).*/\1/p' | head -1)"
+        if ! dpkg --compare-versions "$ccache_version" ge 4.8; then
+          echo "::error::ccache ${ccache_version:-unknown} cannot accept per-compilation BMI inputs; 4.8+ is required."
+          exit 1
+        fi
+
+    - name: Report the libc++ std module manifest
+      run: |
+        set -euo pipefail
+        found="$(find /usr/lib/llvm-21 -name 'libc++.modules.json' 2>/dev/null || true)"
+        if [ -z "$found" ]; then
+          echo "::warning::No libc++.modules.json in this packaging; import std cannot resolve for libc++."
+        else
+          echo "$found"
+        fi
+
+    # The preset, not an equivalent-looking configure line: CMakePresets.json's ninja-clang
+    # description exists precisely to keep the preset and CI from drifting apart.
+    - name: Configure CMake
+      run: cmake --preset ninja-clang
+
+    - name: Build
+      run: cmake --build --preset ninja-clang
+
+    - name: Run tests
+      run: ctest --preset ninja-clang --output-on-failure --no-tests=error --timeout 120
+
+    # #280-style negative case: only the provider changes, and the second rebuild still has to be
+    # a cache hit for the unchanged consumer. Kept as a named step with --no-tests=error so losing
+    # the registration cannot masquerade as a green run.
+    - name: Verify ccache invalidates named-module consumers
+      run: ctest --preset ninja-clang -R '^build\.cache\.namedModuleIntegrity$' -V --no-tests=error
+
+    - name: Verify no source-tree writes
+      run: |
+        status="$(git status --porcelain)"
+        if [ -n "$status" ]; then
+          echo "Build wrote into the source tree:"
+          echo "$status"
+          exit 1
+        fi

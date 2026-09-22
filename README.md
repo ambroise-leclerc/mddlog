@@ -4,16 +4,24 @@ A modern C++23 modules logging library specifically designed for medical devices
 
 ⚠️ EXPERIMENTAL PROJECT WARNING
 
-This project is an experimental early evaluation of C++23 modules feasibility for cross-platform development with rich dependencies (Vulkan graphics, medical device compliance frameworks). It represents an attempt to leverage C++23 and emerging C++26 safety evolutions for medical device software development.
+This project is an experimental early evaluation of C++23 modules feasibility for medical device
+logging. It represents an attempt to leverage C++23 (and emerging C++26 safety evolutions) for
+medical device software development.
 
 Current Status:
 
-C++23 modules support requires cutting-edge toolchains (GCC 15+, MSVC 17.14+, Clang 20+)
-CMake 4.x+ experimental support for import std;
-Cross-platform compatibility still evolving
-Medical device compliance framework is conceptual/educational
-Exploring modern C++ safety features for medical device reliability
-Not recommended for production use. This project serves as a technical proof-of-concept for modern C++ module systems and safety evolutions in complex, regulated software environments.
+- C++23 modules support requires cutting-edge toolchains (GCC 16.1+, MSVC 17.14+, Clang 20+)
+- CMake 4.0-4.3 experimental support for `import std;`
+- The reference/CI-verified configurations are the four listed under [Tested
+  Configurations](#tested-configurations) below; other toolchain/version combinations may work
+  but have not been exercised in CI.
+- Medical device compliance framework (audit trail structure, risk-level fields) is conceptual: it
+  models the shape of the data IEC 62304/ISO 13485/ISO 14971 processes care about, but nothing here
+  has been certified or independently validated against those standards.
+- Exploring modern C++ safety features for medical device reliability
+
+Not recommended for production use. This project serves as a technical proof-of-concept for modern
+C++ module systems in a regulated-software-shaped domain, not as validated medical device software.
 
 ## Core Design Principles
 
@@ -24,9 +32,14 @@ Not recommended for production use. This project serves as a technical proof-of-
 
 ### Technical Requirements
 - **Pure C++23 modules library** - No legacy headers, modern module system
-- **No dependencies** except `import std`
-- **Cross-platform**: MSVC 17.14+, GCC 15+, Clang 20+
-- **Thread-safe and real-time capable**
+- **No dependencies** except `import std` (the test suite additionally depends on
+  [SpecLab](https://github.com/ambroise-leclerc/SpecLab), pinned and test-only - see
+  [Testing](#testing))
+- **Cross-platform**: MSVC 17.14+, GCC 16.1+, Clang 20+ - see [Tested Configurations](#tested-configurations)
+- **Thread-safe**, using a mutex-protected queue for asynchronous delivery. This is *not* a
+  real-time guarantee: the queue is unbounded, so a producer that logs faster than the sinks can
+  drain it grows memory usage without bound rather than blocking or dropping records. A bounded,
+  real-time-safe queue is a known limitation, tracked as future work.
 - **Zero-macro design** using modern C++23 features
 
 ## Architecture Overview
@@ -34,9 +47,10 @@ Not recommended for production use. This project serves as a technical proof-of-
 ### C++23 Infrastructure
 - **Modules-first design**: All components as `.cppm` modules
 - **Import std**: Leveraging standard library modules
-- **Thread safety**: Using `std::jthread` and atomic operations
-- **Source location**: Automatic debug information with `std::source_location`
-- **Concepts**: Type safety with C++23 concepts and constraints
+- **Thread safety**: Using `std::thread`, `std::mutex`, and atomic operations
+- **Source location**: Automatic debug information with `std::source_location`, captured at the
+  application's actual call site (forwarded explicitly through every Logger method - see
+  `include/mddlog/core/Logger.cppm`)
 
 ### Key Features
 
@@ -46,10 +60,15 @@ Not recommended for production use. This project serves as a technical proof-of-
 - **Thread-safe operations** using C++23 `std::jthread` and atomic operations
 
 #### 2. Medical Device Compliance
-- **Audit Trail**: Tamper-proof logging with cryptographic signatures
-- **Risk Management**: Hazard tracking and mitigation logging per ISO 14971
-- **Lifecycle Logging**: Development, verification, and validation event tracking
-- **Regulatory Reporting**: Automated compliance report generation
+- **Audit Trail**: `logAudit()` records intentionally bypass the logger's own
+  enablement/minimum-level filtering, so a reconfigured or disabled logger cannot silently erase
+  compliance evidence (see `AuditPolicySpec.cpp` for the behavioral contract). Persistent,
+  tamper-evident storage of those records is *not* implemented - only the in-process record shape
+  and delivery policy are.
+- **Risk Management**: `LogRecord` carries a risk-level field associated with audit events, for
+  callers to populate per their own ISO 14971 process *(structural support only)*
+- **Lifecycle Logging**: Development, verification, and validation event tracking *(planned)*
+- **Regulatory Reporting**: Automated compliance report generation *(planned)*
 
 #### 3. Advanced Sink System
 - **FileSink** with log rotation and compression *(planned)*
@@ -64,10 +83,12 @@ Not recommended for production use. This project serves as a technical proof-of-
 - **MedicalFormatter** with compliance-specific fields
 
 #### 5. Performance & Monitoring
-- **Lock-free logging** using C++23 atomic operations
+- **Asynchronous delivery** via a mutex-protected, unbounded queue and a dedicated worker thread
+  (not lock-free - see the note under [Technical Requirements](#technical-requirements))
 - **Memory pool allocation** for zero-allocation logging *(planned)*
-- **Performance metrics** collection and reporting
-- **Real-time constraints** support
+- **Per-sink statistics**: records written/dropped, bytes written, flush count, write time
+  (`LogStatistics`, exposed via `Sink::getStatistics()`)
+- **Real-time constraints**: not currently guaranteed; see the unbounded-queue limitation above
 
 ## Quick Start
 
@@ -135,6 +156,7 @@ mddlog/
 ├── sinks/
 │   ├── Sink.cppm             # Base sink interface
 │   └── ConsoleSink.cppm      # Console output sink
+├── Log.cppm                  # Static Log:: convenience wrapper around a global logger
 └── mddlog.cppm               # Main module with exports
 ```
 
@@ -202,58 +224,97 @@ set_property(TARGET your_target PROPERTY CXX_STANDARD 23)
 
 ### Compiler Requirements
 
+These are admission floors checked by `CMakeLists.txt`, not a claim that every version above them
+is verified - see [Tested Configurations](#tested-configurations) for what CI actually exercises.
+
 - **MSVC**: 17.14+ (Visual Studio 2022 version 17.10+)
-- **GCC**: 15.0+ (for C++23 modules support)
-- **Clang**: 20.0+ (for C++23 modules support)
-- **CMake**: 4.0+ (for experimental C++23 `import std` support)
+- **GCC**: 16.1+ (GCC 15 cannot build the SpecLab-based test suite; see `tests/CMakeLists.txt`)
+- **Clang**: 20.0+ (upstream Clang only - AppleClang is rejected on macOS)
+- **CMake**: 4.0-4.3 (4.4+ is rejected until its `import std` gate has been reviewed)
+- **Ninja** is required; other generators do not implement C++ modules for this toolchain matrix
 
 ### C++23 Features Used
 
 - **Modules**: `import std` and custom modules for faster compilation
-- **Source Location**: Automatic source tracking for debugging
+- **Source Location**: Automatic source tracking for debugging, captured at the caller's site
 - **Concepts**: Type constraints and requirements for type safety
-- **Ranges**: Log filtering and processing operations
-- **jthread**: Improved thread management with cancellation tokens
-- **Atomic**: Lock-free operations for performance
 
-## Performance
+## Tested Configurations
 
-### Benchmarks
+The four configurations below are exercised in CI (`.github/workflows/`) on every push, from the
+matching CMake preset in `CMakePresets.json`:
 
-Typical performance on modern hardware:
+| Target | Compiler / standard library | Tooling |
+| --- | --- | --- |
+| Windows x64 | MSVC (from the installed VS developer environment), 19.40+ | CMake 4.1.1, Ninja, CTest |
+| Linux x86_64 / GCC | `gcc:16.1.0` container, libstdc++ | CMake 4.1.1, Ninja, CTest |
+| Linux x86_64 / Clang | Upstream Clang 21, libc++/libc++abi | CMake 4.3.1, Ninja, CTest |
+| macOS arm64 | Upstream LLVM/Clang 21.1.8 exactly, libc++ | CMake 4.3.1 exactly, Ninja, CTest, `macos-15` runner |
 
-- **Synchronous logging**: ~1-2 μs per message
-- **Asynchronous logging**: ~100-200 ns per message
-- **Memory usage**: ~50-100 bytes per log record
-- **Thread contention**: Minimal with lock-free queues
+A dedicated `sanitizers.yml` workflow additionally runs the full test suite under
+AddressSanitizer + UndefinedBehaviorSanitizer on GCC 16.1 Debug. AppleClang, Intel macOS, and GCC
+on macOS are explicitly rejected by the top-level `CMakeLists.txt`, not merely untested.
 
-### Optimization Features
+The Linux/GCC and Linux/Clang lanes (including the ASan/UBSan build, and the ccache
+module-integrity regression) have additionally been run and pass locally against `gcc 16.1.0` and
+upstream `clang 21.1.8`/`libc++-21-dev`. Windows/MSVC and macOS/Clang have not been exercised
+outside CI.
 
-- **Lock-free queues** for async logging
-- **Memory pools** for allocation efficiency *(planned)*
-- **Batch processing** for sink operations
-- **Lazy formatting** for unused log levels
-- **SIMD optimizations** for string operations *(planned)*
+## Testing
+
+Tests are written as [SpecLab](https://github.com/ambroise-leclerc/SpecLab) Given/When/Then
+specifications (`tests/spec/*.cpp`), pinned to an exact upstream commit and fetched only when
+`MDDLOG_BUILD_TESTS=ON` - SpecLab is never a dependency of the installed library. Each scenario is
+registered as its own CTest entry (`ctest -R "<scenario name>"` selects one) via
+`cmake/MddlogTestDiscovery.cmake`, which drives SpecLab's own `--list-tests` / `--run=<name>`
+contract.
+
+```bash
+cmake --preset ninja-gcc      # or ninja-clang / ninja-msvc / ninja-macos-clang
+cmake --build --preset ninja-gcc
+ctest --preset ninja-gcc --output-on-failure
+```
+
+Coverage includes: logger/sink filtering and routing; record fidelity (severity, message,
+category, medical/audit fields, producer thread id, caller source location); synchronous and
+asynchronous delivery with per-producer ordering; flush-as-barrier and destruction-drains-queue
+semantics; concurrent producers under a shared logger; sink failure isolation (a throwing sink
+does not block other sinks or crash the async worker, and the failure is recorded explicitly in
+that sink's statistics); and the audit-bypass policy described above. `InstallTreeConsumer`
+additionally proves the installed package (`find_package(mddlog CONFIG REQUIRED)`,
+`mddlog::mddlog`) builds and runs outside this source tree.
 
 ## Examples
 
-See the `examples/` directory for comprehensive usage examples:
+See the `examples/` directory for usage examples:
 
-- `basic_usage.cpp` - Basic logging functionality with C++23 modules
+- `basic_usage.cpp` - `SimpleLogger` with a console sink, medical/audit logging, and multi-threaded usage
+- `simple_usage.cpp` - The static `Log::` convenience wrapper
 
 ## Building from Source
 
+Building requires Ninja and one of the toolchains listed under [Tested
+Configurations](#tested-configurations) - the top-level `CMakeLists.txt` rejects any other
+generator or an unsupported compiler/CMake combination with an explicit error rather than failing
+deep inside module scanning.
+
 ```bash
-# Configure with CMake (requires CMake 4.0+ for C++23 modules)
-mkdir build && cd build
-cmake .. -DMDDLOG_BUILD_EXAMPLES=ON
+# Configure via the preset matching your platform/compiler (see CMakePresets.json)
+cmake --preset ninja-gcc      # Linux/GCC; also: ninja-clang, ninja-msvc, ninja-macos-clang
 
-# Build the project
-cmake --build .
+# Build
+cmake --build --preset ninja-gcc
 
-# Run example
-./examples/basic_usage
+# Run the examples
+./build-gcc/examples/basic_usage
+./build-gcc/examples/simple_usage
+
+# Run the test suite (see Testing above)
+ctest --preset ninja-gcc --output-on-failure
 ```
+
+A plain `cmake -S . -B build -G Ninja ...` also works if you pass the equivalent cache variables
+by hand; the presets exist so CI and local builds cannot silently drift apart.
 
 ## License
 
