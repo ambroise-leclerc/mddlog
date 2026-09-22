@@ -111,8 +111,13 @@ IncludeCategories:
   - Regex: '^<[a-z_]+>$'
     Priority: 2
     SortPriority: 2
-  # Third-party headers
-  - Regex: '^<(?!std).*>$'
+  # Third-party headers. clang-format's IncludeCategories regexes are POSIX ERE (llvm::Regex),
+  # which has no negative lookahead - MduX's '^<(?!std).*>$' at d972d77 silently matches
+  # nothing under clang-format 21.1.8, so e.g. <fmt/format.hpp> falls through to the "System
+  # headers" catch-all instead of its own group (reproduced locally). Categories are matched
+  # in list order, so a plain '^<.*>$' listed after the C++ standard library regex above still
+  # only catches non-std angle-bracket headers.
+  - Regex: '^<.*>$'
     Priority: 3
     SortPriority: 3
   # System headers
