@@ -1,9 +1,9 @@
 /**
  * @brief MddLog - Modern C++23 Medical Device Logger
- * 
+ *
  * A header-only logging library designed for medical devices,
  * conformant to IEC 62304 and ISO 13485 standards.
- * 
+ *
  * Features:
  * - Thread-safe logging with C++23 features
  * - Multiple sink support (file, console, network, audit)
@@ -28,41 +28,41 @@ import mddlog.sinks.console;
 
 // Re-export for convenience
 export namespace mddlog {
-    // Re-export core types
-    using core::LogLevel;
-    using core::LogRecord;
-    using core::LogStatistics;
-    using core::SimpleLogger;
-    using core::toString;
-    using core::fromString;
-    using core::isComplianceLevel;
-    using core::getColorCode;
-    using core::getResetColorCode;
+// Re-export core types
+using core::fromString;
+using core::getColorCode;
+using core::getResetColorCode;
+using core::isComplianceLevel;
+using core::LogLevel;
+using core::LogRecord;
+using core::LogStatistics;
+using core::SimpleLogger;
+using core::toString;
 
-    // Re-export sinks
-    using sinks::Sink;
-    using sinks::SinkPtr;
-    using sinks::WeakSinkPtr;
-    using sinks::ConsoleSink;
-    using sinks::createConsoleSink;
-    
-    /**
-     * @brief Get the library version
-     * @return Version string in format "major.minor.patch"
-     */
-    constexpr std::string_view getVersion() noexcept {
-        return "0.1.0";
-    }
-    
-    /**
-     * @brief Check if medical device compliance is enabled
-     * @return True if compliance features are active
-     */
-    constexpr bool isMedicalComplianceEnabled() noexcept {
-        #ifdef MDDLOG_MEDICAL_DEVICE_COMPLIANCE
-        return true;
-        #else
-        return false;
-        #endif
-    }
+// Re-export sinks
+using sinks::ConsoleSink;
+using sinks::createConsoleSink;
+using sinks::Sink;
+using sinks::SinkPtr;
+using sinks::WeakSinkPtr;
+
+/**
+ * @brief Get the library version
+ * @return Version string in format "major.minor.patch"
+ */
+constexpr std::string_view getVersion() noexcept {
+    return "0.1.0";
 }
+
+/**
+ * @brief Check if medical device compliance is enabled
+ * @return True if compliance features are active
+ */
+constexpr bool isMedicalComplianceEnabled() noexcept {
+#ifdef MDDLOG_MEDICAL_DEVICE_COMPLIANCE
+    return true;
+#else
+    return false;
+#endif
+}
+}  // namespace mddlog

@@ -14,42 +14,35 @@ int main() {
 
     // Initialize with custom settings (optional - auto-initializes if not called)
     Log::initialize("MedicalApp", true, true);
-    
+
     // Set minimum log level
     Log::setMinLevel(LogLevel::DEBUG);
-    
+
     std::cout << "1. Basic logging with static Log helper:\n";
-    
+
     // Simple logging - no boilerplate!
     Log::trace("Starting system initialization");
-    Log::debug("Loading configuration files"); 
+    Log::debug("Loading configuration files");
     Log::info("Medical device system ready");
     Log::warn("Temperature sensor reading elevated");
     Log::error("Failed to connect to monitoring server");
     Log::fatal("Critical system failure detected");
 
     std::cout << "\n2. Medical compliance logging:\n";
-    
+
     // Medical compliance logging
-    Log::logMedical(
-        LogLevel::INFO,
-        "Patient monitoring session started",
-        "patient_monitor", 
-        "user123",      // User ID
-        "session_456",  // Session ID
-        "device_789"    // Device ID
-    );
-    
-    Log::logAudit(
-        "Configuration changed by administrator",
-        "CONFIG_CHANGE",
-        "admin456",
-        "device_789", 
-        "MEDIUM"
+    Log::logMedical(LogLevel::INFO,
+                    "Patient monitoring session started",
+                    "patient_monitor",
+                    "user123",      // User ID
+                    "session_456",  // Session ID
+                    "device_789"    // Device ID
     );
 
+    Log::logAudit("Configuration changed by administrator", "CONFIG_CHANGE", "admin456", "device_789", "MEDIUM");
+
     std::cout << "\n3. Multi-threaded logging test:\n";
-    
+
     // Test thread safety
     std::vector<std::thread> threads;
     for (int i = 0; i < 3; ++i) {
@@ -60,14 +53,14 @@ int main() {
             }
         });
     }
-    
+
     for (auto& thread : threads) {
         thread.join();
     }
 
     std::cout << "\n4. Category-based logging:\n";
-    
-    // Different categories 
+
+    // Different categories
     Log::info("Network connection established", "network");
     Log::debug("Processing sensor data", "sensors");
     Log::warn("Battery level low", "hardware");
@@ -75,7 +68,7 @@ int main() {
 
     // Flush and cleanup
     Log::flush();
-    
+
     std::cout << "\nSimple logging example completed!\n";
     return 0;
 }

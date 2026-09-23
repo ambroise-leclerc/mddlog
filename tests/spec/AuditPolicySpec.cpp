@@ -17,66 +17,66 @@ using mddlog::SimpleLogger;
 using mddlog::spec::RecordingSink;
 
 struct SingleSinkState {
-    SimpleLogger logger{"audit-policy-test", false};
+    SimpleLogger                   logger{"audit-policy-test", false};
     std::shared_ptr<RecordingSink> sink = std::make_shared<RecordingSink>();
 };
 
-const speclab::Register auditBypassesDisabledLogger{
-    "logAudit() is delivered even while the logger is disabled", "unit", [] {
-        return speclab::Test<SingleSinkState>("audit-bypasses-disabled-logger")
-            .Given("a disabled logger with a sink attached",
-                   [](SingleSinkState& s) {
-                       s.logger.addSink(s.sink);
-                       s.logger.setEnabled(false);
-                   })
-            .When("an ordinary message and an audit event are both logged",
-                  [](SingleSinkState& s) {
-                      s.logger.info("this must be dropped");
-                      s.logger.logAudit("this must survive", "DATA_ACCESS", "user123", "device789");
-                  })
-            .Then("only the audit record was delivered",
-                  [](SingleSinkState& s) {
-                      speclab::core::Checks checks;
-                      const auto records = s.sink->records();
-                      checks.expect(records.size() == 1,
-                                    std::format("expected exactly 1 record, got {}", records.size()));
-                      if (!records.empty()) {
-                          checks.expect(records.front().level == LogLevel::AUDIT,
-                                        "the surviving record is the AUDIT one");
-                          checks.expect(records.front().auditEventType == "DATA_ACCESS",
-                                        "its event type is intact");
-                      }
-                      checks.raise();
-                  })
-            .Execute();
-    }};
+const speclab::Register auditBypassesDisabledLogger{"logAudit() is delivered even while the logger is disabled", "unit", [] {
+                                                        return speclab::Test<SingleSinkState>("audit-bypasses-disabled-logger")
+                                                            .Given("a disabled logger with a sink attached",
+                                                                   [](SingleSinkState& s) {
+                                                                       s.logger.addSink(s.sink);
+                                                                       s.logger.setEnabled(false);
+                                                                   })
+                                                            .When("an ordinary message and an audit event are both logged",
+                                                                  [](SingleSinkState& s) {
+                                                                      s.logger.info("this must be dropped");
+                                                                      s.logger.logAudit("this must survive", "DATA_ACCESS", "user123", "device789");
+                                                                  })
+                                                            .Then("only the audit record was delivered",
+                                                                  [](SingleSinkState& s) {
+                                                                      speclab::core::Checks checks;
+                                                                      const auto            records = s.sink->records();
+                                                                      checks.expect(records.size() == 1,
+                                                                                    std::format("expected exactly 1 record, got {}", records.size()));
+                                                                      if (!records.empty()) {
+                                                                          checks.expect(records.front().level == LogLevel::AUDIT,
+                                                                                        "the surviving record is the AUDIT one");
+                                                                          checks.expect(records.front().auditEventType == "DATA_ACCESS",
+                                                                                        "its event type is intact");
+                                                                      }
+                                                                      checks.raise();
+                                                                  })
+                                                            .Execute();
+                                                    }};
 
-const speclab::Register auditBypassesMinimumLevel{
-    "logAudit() is delivered regardless of the logger's minimum level", "unit", [] {
-        return speclab::Test<SingleSinkState>("audit-bypasses-min-level")
-            .Given("a logger whose minimum level is set above ordinary severities",
-                   [](SingleSinkState& s) {
-                       s.logger.addSink(s.sink);
-                       s.logger.setMinLevel(LogLevel::FATAL);
-                   })
-            .When("an audit event is logged",
-                  [](SingleSinkState& s) {
-                      s.logger.logAudit("configuration changed", "CONFIG_CHANGE", "admin", "device789");
-                  })
-            .Then("it was delivered",
-                  [](SingleSinkState& s) {
-                      if (s.sink->size() != 1) {
-                          throw speclab::core::AssertionFailure(
-                              std::format("expected the audit record to be delivered, got {} records",
-                                          s.sink->size()),
-                              std::source_location::current());
-                      }
-                  })
-            .Execute();
-    }};
+const speclab::Register auditBypassesMinimumLevel{"logAudit() is delivered regardless of the logger's minimum level", "unit", [] {
+                                                      return speclab::Test<SingleSinkState>("audit-bypasses-min-level")
+                                                          .Given("a logger whose minimum level is set above ordinary severities",
+                                                                 [](SingleSinkState& s) {
+                                                                     s.logger.addSink(s.sink);
+                                                                     s.logger.setMinLevel(LogLevel::FATAL);
+                                                                 })
+                                                          .When("an audit event is logged",
+                                                                [](SingleSinkState& s) {
+                                                                    s.logger.logAudit("configuration changed", "CONFIG_CHANGE", "admin", "device789");
+                                                                })
+                                                          .Then("it was delivered",
+                                                                [](SingleSinkState& s) {
+                                                                    if (s.sink->size() != 1) {
+                                                                        throw speclab::core::AssertionFailure(
+                                                                            std::format("expected the audit record to be delivered, got {} records",
+                                                                                        s.sink->size()),
+                                                                            std::source_location::current());
+                                                                    }
+                                                                })
+                                                          .Execute();
+                                                  }};
 
 const speclab::Register auditStillRespectsDisabledSink{
-    "logAudit() does not bypass an explicitly disabled sink", "unit", [] {
+    "logAudit() does not bypass an explicitly disabled sink",
+    "unit",
+    [] {
         return speclab::Test<SingleSinkState>("audit-respects-disabled-sink")
             .Given("a sink that is itself disabled",
                    [](SingleSinkState& s) {
@@ -85,15 +85,13 @@ const speclab::Register auditStillRespectsDisabledSink{
                    })
             .When("an audit event is logged",
                   [](SingleSinkState& s) {
-                      s.logger.logAudit("should not reach a disabled sink", "DATA_ACCESS", "user123",
-                                        "device789");
+                      s.logger.logAudit("should not reach a disabled sink", "DATA_ACCESS", "user123", "device789");
                   })
             .Then("the disabled sink received nothing: the audit bypass is logger-level, not sink-level",
                   [](SingleSinkState& s) {
                       if (s.sink->size() != 0) {
-                          throw speclab::core::AssertionFailure(
-                              std::format("expected 0 records on a disabled sink, got {}", s.sink->size()),
-                              std::source_location::current());
+                          throw speclab::core::AssertionFailure(std::format("expected 0 records on a disabled sink, got {}", s.sink->size()),
+                                                                std::source_location::current());
                       }
                   })
             .Execute();
