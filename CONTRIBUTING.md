@@ -150,11 +150,29 @@ prints the effective clang-format version in its log.
 
 ### Analysing a change
 
-clang-tidy needs a compilation database and, for C++ named modules, built module interfaces from a
-matching Clang toolchain, so run it after building with the Clang preset (`ninja-clang`).
-Analysing a GCC build or using a different LLVM major version fails on the module interfaces
-(`module 'std' not found`, or a BMI built by another compiler build); that limitation is why
-clang-tidy is not yet a CI gate.
+Run the reference analysis with the same entry point CI uses (added by the clang-tidy CI change, #19):
+
+```bash
+cmake --preset ninja-clang && cmake --build --preset ninja-clang   # builds the module interfaces
+scripts/run-clang-tidy.sh build-clang
+```
+
+- **Version**: clang-tidy 21 (`clang-tidy-21`), verified at run time; any other major version fails.
+- **Scope** (translation units): `include/mddlog/**/*.cppm`, `tests/spec/*.cpp`, `examples/*.cpp`.
+  `tests/framework/*.hpp` is a header, analysed through the specs that include it.
+- **What fails the run**: any diagnostic (findings are promoted to errors), any tool failure, a
+  missing or unbuilt Clang preset, a file of the scope absent from `compile_commands.json`, or an
+  empty scope. The report (tool version, units analysed, `.cppm` units covered,
+  `clang-diagnostic-error` count) is printed and, in CI, added to the job summary.
+- **Known limitations**: C++ named modules (`import std`, `mddlog.*`) can only be analysed against
+  BMIs built by a matching Clang, so the analysis needs the *built* Clang preset; a GCC build's
+  `compile_commands.json`, or a clang-tidy of another LLVM major, fails on the module interfaces
+  (`module 'std' not found`, or a BMI built by another compiler build) and is rejected up front.
+- **Suppressions**: fix a finding when possible. Otherwise use a targeted, justified
+  `NOLINT(check-name): reason` at the site (e.g. the module's exported `using` declarations, `main`
+  in examples, the deliberately out-of-range enum cast in `LogLevelSpec.cpp`), never a blanket one.
+  `tests/.clang-tidy` and `examples/.clang-tidy` (inheriting the root config) turn off only the two
+  magic-number checks there, because scenario data are literals; `include/` keeps them.
 
 ## Pull Requests
 
