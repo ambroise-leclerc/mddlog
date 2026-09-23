@@ -135,8 +135,18 @@ clang-format-21 --style=file -i \
   $(find examples -name '*.cpp')
 ```
 
-Add `--dry-run --Werror` instead of `-i` to check without modifying files. Automated checks in CI
-are tracked in the tooling issues under epic #7 and will replace this manual recipe.
+To check without modifying anything, use the same entry point CI runs (added by the formatting-check
+change, #18):
+
+```bash
+scripts/check-format.sh
+```
+
+It verifies at run time that clang-format is present and is major version 21, checks every file in
+the scope above with `--dry-run --Werror`, and fails (rather than passing) if the tool is missing or
+the scope resolves to no files. Override the binary with `CLANG_FORMAT=/path/to/clang-format`. The
+`Format Check` workflow (`.github/workflows/format-check.yml`) runs it on every pull request and
+prints the effective clang-format version in its log.
 
 ### Analysing a change
 
