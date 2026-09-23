@@ -23,6 +23,15 @@ We follow the **C++ Core Guidelines** to ensure conformance with modern C++23 ge
   - Use `lowerCamelCase` (e.g., `processData()`, `getValue()`).
 - **Variables (including const, constexpr, and constinit variables):**
   - Use `lowerCamelCase` (e.g., `dataBuffer`, `isReady`).
+- **Class/struct data members (public, protected, and private):**
+  - Use `lowerCamelCase` with no leading or trailing underscore (e.g., `minLevel`, `enabled`),
+    same as any other variable. `.clang-tidy`'s `readability-identifier-naming` enforces this
+    strictly - a trailing `_` is a violation, not an accepted suffix.
+  - A constructor or setter parameter must not be given the exact same name as a member it
+    initializes or assigns: `-Werror=shadow` rejects that at compile time regardless of whether
+    the body still behaves correctly. Rename the parameter instead (e.g.
+    `void setEnabled(bool value) { enabled = value; }`, `explicit Sink(LogLevel initialMinLevel)
+    : minLevel(initialMinLevel) {}`).
 - **Namespaces:**
   - Use 'lowercase' (e.g., 'mui', 'backend').
 - **Macros:**

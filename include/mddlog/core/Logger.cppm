@@ -24,14 +24,14 @@ public:
 
     /**
      * @brief Constructor
-     * @param name Logger name/identifier
-     * @param asyncLogging Enable asynchronous logging (default: true)
+     * @param loggerName Logger name/identifier
+     * @param enableAsyncLogging Enable asynchronous logging (default: true)
      */
-    explicit SimpleLogger(std::string_view name, bool asyncLogging = true)
-        : name_(name), asyncLogging_(asyncLogging), enabled_(true), minLevel_(LogLevel::INFO), shutdown_(false) {
-        if (asyncLogging_) {
+    explicit SimpleLogger(std::string_view loggerName, bool enableAsyncLogging = true)
+        : name(loggerName), asyncLogging(enableAsyncLogging), enabled(true), minLevel(LogLevel::INFO), shuttingDown(false) {
+        if (asyncLogging) {
             // Start async logging thread
-            asyncThread_ = std::thread([this]() {
+            asyncThread = std::thread([this]() {
                 asyncLoggerThread();
             });
         }
@@ -58,8 +58,8 @@ public:
         if (!sink)
             return;
 
-        std::lock_guard<std::mutex> lock(sinksMutex_);
-        sinks_.push_back(std::move(sink));
+        std::lock_guard<std::mutex> lock(sinksMutex);
+        sinks.push_back(std::move(sink));
     }
 
     /**
@@ -67,21 +67,21 @@ public:
      * @param sinkName Name of sink to remove
      */
     void removeSink(std::string_view sinkName) {
-        std::lock_guard<std::mutex> lock(sinksMutex_);
-        sinks_.erase(std::remove_if(sinks_.begin(),
-                                    sinks_.end(),
-                                    [sinkName](const SinkPtr& sink) {
-                                        return sink->getName() == sinkName;
-                                    }),
-                     sinks_.end());
+        std::lock_guard<std::mutex> lock(sinksMutex);
+        sinks.erase(std::remove_if(sinks.begin(),
+                                   sinks.end(),
+                                   [sinkName](const SinkPtr& sink) {
+                                       return sink->getName() == sinkName;
+                                   }),
+                    sinks.end());
     }
 
     /**
      * @brief Clear all sinks
      */
     void clearSinks() {
-        std::lock_guard<std::mutex> lock(sinksMutex_);
-        sinks_.clear();
+        std::lock_guard<std::mutex> lock(sinksMutex);
+        sinks.clear();
     }
 
     /**
@@ -185,16 +185,16 @@ public:
      * @brief Flush all sinks
      */
     void flush() {
-        if (asyncLogging_) {
+        if (asyncLogging) {
             // For async logging, add a flush command to the queue
             std::promise<void> flushPromise;
             auto               flushFuture = flushPromise.get_future();
 
             {
-                std::lock_guard<std::mutex> lock(queueMutex_);
-                flushPromises_.push(std::move(flushPromise));
+                std::lock_guard<std::mutex> lock(queueMutex);
+                flushPromises.push(std::move(flushPromise));
             }
-            queueCondition_.notify_one();
+            queueCondition.notify_one();
 
             // Wait for flush to complete
             flushFuture.wait();
@@ -208,50 +208,50 @@ public:
      * @brief Check if logger is enabled
      */
     bool isEnabled() const noexcept {
-        return enabled_.load();
+        return enabled.load();
     }
 
     /**
      * @brief Enable or disable the logger
      */
-    void setEnabled(bool enabled) noexcept {
-        enabled_.store(enabled);
+    void setEnabled(bool value) noexcept {
+        enabled.store(value);
     }
 
     /**
      * @brief Get minimum log level
      */
     LogLevel getMinLevel() const noexcept {
-        return minLevel_.load();
+        return minLevel.load();
     }
 
     /**
      * @brief Set minimum log level
      */
     void setMinLevel(LogLevel level) noexcept {
-        minLevel_.store(level);
+        minLevel.store(level);
     }
 
     /**
      * @brief Get logger name
      */
     std::string_view getName() const noexcept {
-        return name_;
+        return name;
     }
 
     /**
      * @brief Check if asynchronous logging is enabled
      */
     bool isAsyncLogging() const noexcept {
-        return asyncLogging_;
+        return asyncLogging;
     }
 
     /**
      * @brief Get number of sinks
      */
     std::size_t getSinkCount() const {
-        std::lock_guard<std::mutex> lock(sinksMutex_);
-        return sinks_.size();
+        std::lock_guard<std::mutex> lock(sinksMutex);
+        return sinks.size();
     }
 
 private:
@@ -259,20 +259,20 @@ private:
      * @brief Check if a log level should be processed
      */
     bool shouldLog(LogLevel level) const noexcept {
-        return enabled_.load() && level >= minLevel_.load();
+        return enabled.load() && level >= minLevel.load();
     }
 
     /**
      * @brief Process a log record (sync or async)
      */
     void processLogRecord(LogRecord record) {
-        if (asyncLogging_) {
+        if (asyncLogging) {
             // Add to async queue
             {
-                std::lock_guard<std::mutex> lock(queueMutex_);
-                logQueue_.push(std::move(record));
+                std::lock_guard<std::mutex> lock(queueMutex);
+                logQueue.push(std::move(record));
             }
-            queueCondition_.notify_one();
+            queueCondition.notify_one();
         } else {
             // Process synchronously
             writeToSinks(record);
@@ -283,8 +283,8 @@ private:
      * @brief Write log record to all sinks
      */
     void writeToSinks(const LogRecord& record) {
-        std::lock_guard<std::mutex> lock(sinksMutex_);
-        for (auto& sink : sinks_) {
+        std::lock_guard<std::mutex> lock(sinksMutex);
+        for (auto& sink : sinks) {
             if (sink && sink->shouldLog(record.level) && sink->isEnabled()) {
                 try {
                     sink->write(record);
@@ -303,8 +303,8 @@ private:
      * @brief Flush all sinks
      */
     void flushSinks() {
-        std::lock_guard<std::mutex> lock(sinksMutex_);
-        for (auto& sink : sinks_) {
+        std::lock_guard<std::mutex> lock(sinksMutex);
+        for (auto& sink : sinks) {
             if (sink) {
                 try {
                     sink->flush();
@@ -319,18 +319,18 @@ private:
      * @brief Async logger thread function
      */
     void asyncLoggerThread() {
-        while (!shutdown_.load()) {
-            std::unique_lock<std::mutex> lock(queueMutex_);
+        while (!shuttingDown.load()) {
+            std::unique_lock<std::mutex> lock(queueMutex);
 
             // Wait for log records or flush requests
-            queueCondition_.wait(lock, [this] {
-                return !logQueue_.empty() || !flushPromises_.empty() || shutdown_.load();
+            queueCondition.wait(lock, [this] {
+                return !logQueue.empty() || !flushPromises.empty() || shuttingDown.load();
             });
 
             // Process all queued log records
-            while (!logQueue_.empty()) {
-                auto record = std::move(logQueue_.front());
-                logQueue_.pop();
+            while (!logQueue.empty()) {
+                auto record = std::move(logQueue.front());
+                logQueue.pop();
                 lock.unlock();
 
                 writeToSinks(record);
@@ -339,9 +339,9 @@ private:
             }
 
             // Process flush requests
-            while (!flushPromises_.empty()) {
-                auto promise = std::move(flushPromises_.front());
-                flushPromises_.pop();
+            while (!flushPromises.empty()) {
+                auto promise = std::move(flushPromises.front());
+                flushPromises.pop();
                 lock.unlock();
 
                 flushSinks();
@@ -352,10 +352,10 @@ private:
         }
 
         // Process remaining items before shutdown
-        std::lock_guard<std::mutex> lock(queueMutex_);
-        while (!logQueue_.empty()) {
-            writeToSinks(logQueue_.front());
-            logQueue_.pop();
+        std::lock_guard<std::mutex> lock(queueMutex);
+        while (!logQueue.empty()) {
+            writeToSinks(logQueue.front());
+            logQueue.pop();
         }
         flushSinks();
     }
@@ -364,39 +364,39 @@ private:
      * @brief Shutdown the logger
      */
     void shutdown() {
-        if (shutdown_.exchange(true))
+        if (shuttingDown.exchange(true))
             return;
 
-        if (asyncThread_.joinable()) {
-            queueCondition_.notify_all();
-            asyncThread_.join();
+        if (asyncThread.joinable()) {
+            queueCondition.notify_all();
+            asyncThread.join();
         }
 
         // Final flush
         flushSinks();
     }
 
-    std::string           name_;          ///< Logger name
-    bool                  asyncLogging_;  ///< Async logging enabled
-    std::atomic<bool>     enabled_;       ///< Logger enabled state
-    std::atomic<LogLevel> minLevel_;      ///< Minimum log level
-    std::atomic<bool>     shutdown_;      ///< Shutdown flag
+    std::string           name;          ///< Logger name
+    bool                  asyncLogging;  ///< Async logging enabled
+    std::atomic<bool>     enabled;       ///< Logger enabled state
+    std::atomic<LogLevel> minLevel;      ///< Minimum log level
+    std::atomic<bool>     shuttingDown;  ///< Set once shutdown() has been entered
 
     // Sinks management
-    mutable std::mutex sinksMutex_;  ///< Sinks container mutex
-    SinkContainer      sinks_;       ///< Collection of sinks
+    mutable std::mutex sinksMutex;  ///< Sinks container mutex
+    SinkContainer      sinks;       ///< Collection of sinks
 
     // Async logging
-    std::thread             asyncThread_;     ///< Async logging thread
-    std::mutex              queueMutex_;      ///< Queue mutex
-    std::condition_variable queueCondition_;  ///< Queue condition variable
+    std::thread             asyncThread;     ///< Async logging thread
+    std::mutex              queueMutex;      ///< Queue mutex
+    std::condition_variable queueCondition;  ///< Queue condition variable
     // Unbounded by design/limitation: a producer that logs faster than the sinks can drain
     // grows this queue without bound rather than blocking or dropping records. That gives the
     // current implementation no real-time delivery guarantee under sustained overload; a
     // bounded, real-time-safe queue is out of scope for this change (see the build/test issue
     // that introduced this comment) and tracked separately.
-    std::queue<LogRecord>          logQueue_;       ///< Log record queue
-    std::queue<std::promise<void>> flushPromises_;  ///< Flush promises queue
+    std::queue<LogRecord>          logQueue;       ///< Log record queue
+    std::queue<std::promise<void>> flushPromises;  ///< Flush promises queue
 };
 
 }  // namespace mddlog::core
