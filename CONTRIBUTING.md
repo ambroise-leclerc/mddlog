@@ -32,8 +32,15 @@ We follow the **C++ Core Guidelines** to ensure conformance with modern C++23 ge
     the body still behaves correctly. Rename the parameter instead (e.g.
     `void setEnabled(bool value) { enabled.store(value); }`, `explicit Sink(LogLevel
     initialMinLevel) : minLevel(initialMinLevel) {}`).
+- **Enumeration values (enumerators):**
+  - Use `UpperCamelCase` (e.g., `LogLevel::Info`, `LogLevel::Audit`), enforced by
+    `readability-identifier-naming.EnumConstantCase: CamelCase` in `.clang-tidy`.
+  - This is a deliberate deviation from MduX, whose `.clang-tidy` at the imported revision uses
+    `camelBack` for enumerators; mddlog's severity levels read as named states, like the enum type
+    itself. Old ALL_CAPS spellings (`LogLevel::INFO`, ...) no longer exist; see
+    [the migration table](docs/migration/loglevel-rename.md).
 - **Namespaces:**
-  - Use 'lowercase' (e.g., 'mui', 'backend').
+  - Use `lowercase` (e.g., `mddlog::core`, `mddlog::sinks`).
 - **Macros:**
   - Use `ALL_CAPS_WITH_UNDERSCORES`. But do not use macros.
 
@@ -104,12 +111,77 @@ To ensure consistency, we use `.clang-format` and `.clang-tidy` to enforce our c
 
 Please run these tools on your code before submitting a pull request.
 
+### Origin and reference versions
+
+`.clang-format` and `.clang-tidy` are imported from MduX at the immutable revision
+`d972d77bc5cefdbe105ad7933ee61746fb5eb45b` ("Bump SpecLab to v0.4.0 [#365] (#374)"), then adapted
+to mddlog. Every deviation is commented in the file itself; the notable ones are `Standard: Latest`
+(clang-format has no literal `c++23` value), a project-specific `HeaderFilterRegex`, a POSIX-valid
+third-party include category, `EnumConstantCase: CamelCase`, and the strict no-`_` member rule
+above. Replacing the revision requires citing the new SHA and justifying each difference.
+
+The reference tool version is **LLVM 21** (the same toolchain `clang-build.yml` installs):
+`clang-format` 21.x and `clang-tidy` 21.x. Other versions may format or diagnose differently.
+
+### Formatting a change
+
+Run clang-format 21 over the formatted scope (`include/**/*.cppm`, `tests/**/*.cpp`,
+`tests/**/*.hpp`, `examples/**/*.cpp`):
+
+```bash
+clang-format-21 --style=file -i \
+  $(find include -type f -name '*.cppm') \
+  $(find tests -type f \( -name '*.cpp' -o -name '*.hpp' \)) \
+  $(find examples -type f -name '*.cpp')
+```
+
+To check without modifying anything, use the same entry point CI runs (added by the formatting-check
+change, #18):
+
+```bash
+scripts/check-format.sh
+```
+
+It verifies at run time that clang-format is present and is major version 21, checks every file in
+the scope above with `--dry-run --Werror`, and fails (rather than passing) if the tool is missing or
+the scope resolves to no files. Override the binary with `CLANG_FORMAT=/path/to/clang-format`. The
+`Format Check` workflow (`.github/workflows/format-check.yml`) runs it on every pull request and
+prints the effective clang-format version in its log.
+
+### Analysing a change
+
+Run the reference analysis with the same entry point CI uses (added by the clang-tidy CI change, #19):
+
+```bash
+cmake --preset ninja-clang && cmake --build --preset ninja-clang   # builds the module interfaces
+scripts/run-clang-tidy.sh build-clang
+```
+
+- **Version**: clang-tidy 21 (`clang-tidy-21`), verified at run time; any other major version fails.
+- **Scope** (translation units): `include/mddlog/**/*.cppm`, `tests/spec/*.cpp`, `examples/*.cpp`.
+  `tests/framework/*.hpp` is a header, analysed through the specs that include it.
+- **What fails the run**: any diagnostic (findings are promoted to errors), any tool failure, a
+  missing or unbuilt Clang preset, a file of the scope absent from `compile_commands.json`, or an
+  empty scope. The report (tool version, units analysed, `.cppm` units covered,
+  `clang-diagnostic-error` count) is printed and, in CI, added to the job summary.
+- **Known limitations**: C++ named modules (`import std`, `mddlog.*`) can only be analysed against
+  BMIs built by a matching Clang, so the analysis needs the *built* Clang preset; a GCC build's
+  `compile_commands.json`, or a clang-tidy of another LLVM major, fails on the module interfaces
+  (`module 'std' not found`, or a BMI built by another compiler build) and is rejected up front.
+- **Suppressions**: fix a finding when possible. Otherwise use a targeted, justified
+  `NOLINT(check-name): reason` at the site (e.g. the module's exported `using` declarations, `main`
+  in examples, the deliberately out-of-range enum cast in `LogLevelSpec.cpp`), never a blanket one.
+  `tests/.clang-tidy` and `examples/.clang-tidy` (inheriting the root config) turn off only the two
+  magic-number checks there, because scenario data are literals; `include/` keeps them.
+
 ## Pull Requests
 
 - **One commit per pull request.**
+- Keep purely mechanical changes (reformatting, renames) in their own pull request, separate from
+  semantic changes, and merge them first so the semantic diff stays readable.
 - The pull request (PR) title must reference the related issue or feature (e.g., `Add CameraManager class [#42]`).
 - Provide a clear description of the changes and the motivation.
-- Ensure your branch is up to date with `develop` before submitting.
+- Ensure your branch is up to date with `main` before submitting.
 - All code must pass CI checks and tests before merging.
 - Request a review from at least one maintainer.
 

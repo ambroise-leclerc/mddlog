@@ -143,6 +143,9 @@ logger->logAudit(
 );
 ```
 
+> **Migrating from `LogLevel::INFO`-style names?** The enumerators are now CamelCase
+> (`LogLevel::Info`); see the [migration table](docs/migration/loglevel-rename.md).
+
 ## Module Architecture
 
 ### Core Components
