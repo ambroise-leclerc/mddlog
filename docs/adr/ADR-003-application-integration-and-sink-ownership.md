@@ -30,7 +30,7 @@ record moves to Accepted.
   with `set()`, `is()` and `setLogLevel()` (lines 55-57). `test/LoggerTests.cpp:37-69` pins this
   precisely — it disables `Warn` and `Error` while leaving `Info` and `Debug` on, then inverts the
   combination, and asserts the resulting level characters in order (`{'I','D','W','E','W','I','E'}`).
-  mddlog's single `minLevel_` threshold **cannot express that**; this is a capability difference, not
+  mddlog's single `minLevel` threshold **cannot express that**; this is a capability difference, not
   a naming difference.
 - **Formatting is eager, at the call site**: `std::format`/`vformat` produce a `std::string` which is
   passed to every sink synchronously (lines 36-53). The rendered shape is
@@ -114,7 +114,7 @@ suite, and the suite is right to break.
 
 ### 2. Per-level enablement, not a threshold
 
-mddlog's `minLevel_` cannot express "Warn off, Error on". The adapter therefore carries a per-level
+mddlog's `minLevel` cannot express "Warn off, Error on". The adapter therefore carries a per-level
 enable mask and maps it explicitly:
 
 | WebFront | mddlog |
@@ -125,9 +125,10 @@ enable mask and maps it explicitly:
 | `webfront::log::Debug` (4) | `LogLevel::Debug` (1) |
 | `webfront::log::Disabled` (0) | all levels masked off |
 
-`LogLevel::Trace`, `LogLevel::Fatal` and `LogLevel::Audit` have no WebFront equivalent: `Trace` maps
-into `webfront::log::Debug` for display, `Fatal` into `webfront::log::Error`, and `Audit` is **not routed to this facade at all** (Decision 6). Whether
-mddlog's own logger should gain a per-level mask, rather than leaving it in the adapter, is an open
+`LogLevel::Trace`, `LogLevel::Fatal` and `LogLevel::Audit` have no WebFront equivalent:
+`LogLevel::Trace` maps into `webfront::log::Debug` for display, `LogLevel::Fatal` into
+`webfront::log::Error`, and `LogLevel::Audit` is **not routed to this facade at all** (Decision 6).
+Whether mddlog's own logger should gain a per-level mask, rather than leaving it in the adapter, is an open
 question this record deliberately leaves to the implementing issue — the adapter can carry it either
 way.
 

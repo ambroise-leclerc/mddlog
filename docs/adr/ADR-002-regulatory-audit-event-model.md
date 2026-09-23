@@ -26,7 +26,7 @@ cryptographic signatures", "Risk Management: Hazard tracking and mitigation logg
   it matters, because the decision below rests on it. `logAudit()` does *not* call `shouldLog()`, and
   `processLogRecord()` (line 252) does not consult it either; only the other `log()` overloads do
   (line 98). So today `logAudit()` **already bypasses** `setEnabled(false)` and the logger's
-  `minLevel_` threshold. Two filters still apply downstream: `writeToSinks()` (lines 269-280) checks
+  `minLevel` threshold. Two filters still apply downstream: `writeToSinks()` (lines 269-280) checks
   `sink->shouldLog(record.level)` and `sink->isEnabled()` per sink. And because `Audit` is the
   maximum `LogLevel` value, no valid severity threshold could exclude it on severity alone anyway.
   The gap is therefore not "audit events are wrongly filtered" but "the existing bypass is
@@ -142,7 +142,7 @@ with a reason, and nothing is silently shortened except `detail`.
 ### 2. Audit capture bypasses ordinary logger filtering — stated, not incidental
 
 Formalize the bypass that already exists (see Context): recording an audit event does not consult
-the logger's `minLevel_` or `setEnabled(false)`. Severity and audit-relevance are different axes;
+the logger's `minLevel` or `setEnabled(false)`. Severity and audit-relevance are different axes;
 an audit event is not "more severe", it is *non-optional*.
 
 Sink-level filtering is a **separate** question and is decided separately: an audit-carrying sink

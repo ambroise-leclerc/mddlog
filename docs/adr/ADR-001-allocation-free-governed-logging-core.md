@@ -28,7 +28,7 @@ structural change rather than an incremental one:
   claim this same type is meant to support.
 - `SimpleLogger` (`include/mddlog/core/Logger.cppm`) stores sinks as
   `std::vector<std::shared_ptr<Sink>>` (`SinkPtr`, `sinks/Sink.cppm:136`), queues records in an
-  **unbounded** `std::queue<LogRecord>` (`logQueue_`, `Logger.cppm:373`), and swallows sink
+  **unbounded** `std::queue<LogRecord>` (`logQueue`, `Logger.cppm:373`), and swallows sink
   exceptions with bare `catch (...)` (`writeToSinks()`, lines 273-279; `flushSinks()`, lines
   290-294) — comments in both admit "In a medical device, this might need more sophisticated error
   handling" without providing it.
@@ -63,7 +63,7 @@ boundary between code that is allowed to allocate, throw, or block, and code tha
   revision may cite the precise clause once someone with the standard in hand confirms it.
 - **Fail-closed behavior**: a governed logging call must have a bounded, defined outcome under
   resource exhaustion (refuse-and-count, never allocate-and-hope) rather than an unbounded queue
-  that defers the failure to an unpredictable later moment, as `logQueue_` does today.
+  that defers the failure to an unpredictable later moment, as `logQueue` does today.
 - **Bounded time is a separate property from bounded memory.** An allocation-free call is not
   automatically a time-bounded one. The governed path must therefore also exclude unbounded retry
   loops and blocking waits, and Decision 6's verification criteria must not be read as covering
