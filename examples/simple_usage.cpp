@@ -8,7 +8,7 @@ import mddlog.log;
 
 using namespace mddlog;
 
-int main() {
+int main() {  // NOLINT(bugprone-exception-escape): example code; an uncaught exception terminating the demo is acceptable
     std::cout << "Simple Log Helper Example\n";
     std::cout << "=========================\n\n";
 
@@ -45,6 +45,7 @@ int main() {
 
     // Test thread safety
     std::vector<std::thread> threads;
+    threads.reserve(3);
     for (int i = 0; i < 3; ++i) {
         threads.emplace_back([i]() {
             for (int j = 0; j < 3; ++j) {

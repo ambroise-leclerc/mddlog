@@ -21,11 +21,11 @@ struct LogRecord {
     using Metadata  = std::unordered_map<std::string, std::string>;
 
     // Core logging information
-    TimePoint   timestamp;  ///< When the log was created
-    LogLevel    level;      ///< Severity level
-    std::string message;    ///< Log message content
-    std::string category;   ///< Log category/component
-    ThreadId    threadId;   ///< Thread that created the log
+    TimePoint   timestamp;              ///< When the log was created
+    LogLevel    level{LogLevel::Info};  ///< Severity level
+    std::string message;                ///< Log message content
+    std::string category;               ///< Log category/component
+    ThreadId    threadId;               ///< Thread that created the log
 
     // Source location information (C++20 feature)
     std::source_location location;  ///< Source code location
@@ -114,7 +114,7 @@ struct LogRecord {
      * @brief Check if this record requires compliance logging
      * @return True if compliance features should be applied
      */
-    bool isComplianceRequired() const noexcept {
+    [[nodiscard]] bool isComplianceRequired() const noexcept {
         return isComplianceLevel(level) || !userId.empty() || !auditEventType.empty();
     }
 
@@ -126,7 +126,7 @@ struct LogRecord {
      * pointer into a static buffer that is not thread-safe, and MSVC additionally deprecates
      * it (C4996), which fails this project's warnings-as-errors build.
      */
-    std::string getFormattedTimestamp() const {
+    [[nodiscard]] std::string getFormattedTimestamp() const {
         using namespace std::chrono;
         return std::format("{:%Y-%m-%dT%H:%M:%S}Z", time_point_cast<milliseconds>(timestamp));
     }
@@ -135,7 +135,7 @@ struct LogRecord {
      * @brief Get source location as string
      * @return Formatted source location
      */
-    std::string getSourceLocationString() const {
+    [[nodiscard]] std::string getSourceLocationString() const {
         std::stringstream ss;
         ss << location.file_name() << ':' << location.line() << ':' << location.column() << " in " << location.function_name();
         return ss.str();
@@ -154,6 +154,7 @@ struct LogStatistics {
 
     // Make non-copyable because of atomic members
     LogStatistics()                                = default;
+    ~LogStatistics()                               = default;
     LogStatistics(const LogStatistics&)            = delete;
     LogStatistics& operator=(const LogStatistics&) = delete;
     LogStatistics(LogStatistics&&)                 = delete;

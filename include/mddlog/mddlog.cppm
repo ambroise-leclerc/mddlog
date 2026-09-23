@@ -28,6 +28,8 @@ import mddlog.sinks.console;
 
 // Re-export for convenience
 export namespace mddlog {
+// NOLINTBEGIN(misc-unused-using-decls): these using-declarations ARE the module's exported API; nothing
+// in this interface unit uses them, only importers do.
 // Re-export core types
 using core::fromString;
 using core::getColorCode;
@@ -45,6 +47,7 @@ using sinks::createConsoleSink;
 using sinks::Sink;
 using sinks::SinkPtr;
 using sinks::WeakSinkPtr;
+// NOLINTEND(misc-unused-using-decls)
 
 /**
  * @brief Get the library version

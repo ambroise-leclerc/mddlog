@@ -36,7 +36,7 @@ public:
      * @param asyncLogging Enable asynchronous logging (default: true)
      */
     static void initialize(std::string_view loggerName = "GlobalLogger", bool enableColors = true, bool asyncLogging = true) {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
 
         if (!globalLogger) {
             globalLogger = std::make_shared<core::SimpleLogger>(loggerName, asyncLogging);
@@ -168,7 +168,7 @@ public:
      * @return True if initialized
      */
     static bool isInitialized() noexcept {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         return globalLogger != nullptr;
     }
 
@@ -185,7 +185,7 @@ public:
     static void shutdown() {
         std::shared_ptr<core::SimpleLogger> toShutdown;
         {
-            std::lock_guard<std::mutex> lock(mutex);
+            std::scoped_lock lock(mutex);
             toShutdown = std::move(globalLogger);
             globalLogger.reset();
         }
@@ -196,6 +196,7 @@ public:
 
     // Delete copy/move constructors for static class
     Log()                      = delete;
+    ~Log()                     = default;
     Log(const Log&)            = delete;
     Log& operator=(const Log&) = delete;
     Log(Log&&)                 = delete;
@@ -210,7 +211,7 @@ private:
      * shutdown() from destroying the logger out from under a call already in progress.
      */
     static std::shared_ptr<core::SimpleLogger> snapshot() {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         if (!globalLogger) {
             // Auto-initialize with default settings
             globalLogger = std::make_shared<core::SimpleLogger>("GlobalLogger", true);

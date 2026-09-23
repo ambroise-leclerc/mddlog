@@ -81,6 +81,7 @@ const speclab::Register concurrentProducersNeitherLoseNorDuplicate{
             .When("8 threads each log 100 uniquely-identified messages concurrently",
                   [](State& s) {
                       std::vector<std::thread> producers;
+                      producers.reserve(kConcurrencyProducers);
                       for (int p = 0; p < kConcurrencyProducers; ++p) {
                           producers.emplace_back([&s, p] {
                               for (int i = 0; i < kConcurrencyPerProducer; ++i) {

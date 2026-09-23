@@ -8,6 +8,8 @@
 import std;
 import speclab;
 
+// runMain reports scenario failures itself; anything else escaping is a harness bug worth terminating on.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char** argv) {
     return speclab::runMain(argc, argv, "mddlog specs");
 }

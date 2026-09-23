@@ -48,6 +48,8 @@ struct StdStreamCapture {
     }
     StdStreamCapture(const StdStreamCapture&)            = delete;
     StdStreamCapture& operator=(const StdStreamCapture&) = delete;
+    StdStreamCapture(StdStreamCapture&&)                 = delete;
+    StdStreamCapture& operator=(StdStreamCapture&&)      = delete;
 };
 
 const speclab::Register numericValuesUnderlyingTypeAndOrdering{
@@ -93,7 +95,7 @@ const speclab::Register toStringProducesExactStrings{"toString() produces the ex
                                                                        checks.expect(toString(LogLevel::Error) == "ERROR", "ERROR -> \"ERROR\"");
                                                                        checks.expect(toString(LogLevel::Fatal) == "FATAL", "FATAL -> \"FATAL\"");
                                                                        checks.expect(toString(LogLevel::Audit) == "AUDIT", "AUDIT -> \"AUDIT\"");
-                                                                       checks.expect(toString(static_cast<LogLevel>(99)) == "UNKNOWN",
+                                                                       checks.expect(toString(static_cast<LogLevel>(99)  /* NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange): deliberately out of range - this scenario pins the fallback */) == "UNKNOWN",
                                                                                      "an out-of-range value -> \"UNKNOWN\"");
                                                                        checks.raise();
                                                                    })
@@ -139,37 +141,37 @@ const speclab::Register roundTripBetweenToStringAndFromString{
             .Execute();
     }};
 
-const speclab::Register colorCodesForEachLevel{
-    "getColorCode() returns a distinct ANSI sequence for every level, and getResetColorCode() resets it",
-    "unit",
-    [] {
-        return speclab::Test("loglevel-color-codes")
-            .Then("each level has its documented color, an out-of-range value resets instead of "
-                  "coloring, and the seven levels map to seven distinct sequences",
-                  [] {
-                      speclab::core::Checks checks;
-                      checks.expect(getColorCode(LogLevel::Trace) == "\033[37m", "TRACE is white");
-                      checks.expect(getColorCode(LogLevel::Debug) == "\033[36m", "DEBUG is cyan");
-                      checks.expect(getColorCode(LogLevel::Info) == "\033[32m", "INFO is green");
-                      checks.expect(getColorCode(LogLevel::Warn) == "\033[33m", "WARN is yellow");
-                      checks.expect(getColorCode(LogLevel::Error) == "\033[31m", "ERROR is red");
-                      checks.expect(getColorCode(LogLevel::Fatal) == "\033[35m", "FATAL is magenta");
-                      checks.expect(getColorCode(LogLevel::Audit) == "\033[1;34m", "AUDIT is bold blue");
-                      checks.expect(getColorCode(static_cast<LogLevel>(99)) == "\033[0m", "an out-of-range value resets rather than coloring");
-                      checks.expect(getResetColorCode() == "\033[0m", "getResetColorCode() matches the reset sequence");
+const speclab::Register colorCodesForEachLevel{"getColorCode() returns a distinct ANSI sequence for every level, and getResetColorCode() resets it",
+                                               "unit",
+                                               [] {
+                                                   return speclab::Test("loglevel-color-codes")
+                                                       .Then("each level has its documented color, an out-of-range value resets instead of "
+                                                             "coloring, and the seven levels map to seven distinct sequences",
+                                                             [] {
+                                                                 speclab::core::Checks checks;
+                                                                 checks.expect(getColorCode(LogLevel::Trace) == "\033[37m", "TRACE is white");
+                                                                 checks.expect(getColorCode(LogLevel::Debug) == "\033[36m", "DEBUG is cyan");
+                                                                 checks.expect(getColorCode(LogLevel::Info) == "\033[32m", "INFO is green");
+                                                                 checks.expect(getColorCode(LogLevel::Warn) == "\033[33m", "WARN is yellow");
+                                                                 checks.expect(getColorCode(LogLevel::Error) == "\033[31m", "ERROR is red");
+                                                                 checks.expect(getColorCode(LogLevel::Fatal) == "\033[35m", "FATAL is magenta");
+                                                                 checks.expect(getColorCode(LogLevel::Audit) == "\033[1;34m", "AUDIT is bold blue");
+                                                                 checks.expect(getColorCode(static_cast<LogLevel>(99)  /* NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange): deliberately out of range - this scenario pins the fallback */) == "\033[0m", "an out-of-range value resets rather than coloring");
+                                                                 checks.expect(getResetColorCode() == "\033[0m",
+                                                                               "getResetColorCode() matches the reset sequence");
 
-                      const std::set<std::string_view> distinctCodes{getColorCode(LogLevel::Trace),
-                                                                     getColorCode(LogLevel::Debug),
-                                                                     getColorCode(LogLevel::Info),
-                                                                     getColorCode(LogLevel::Warn),
-                                                                     getColorCode(LogLevel::Error),
-                                                                     getColorCode(LogLevel::Fatal),
-                                                                     getColorCode(LogLevel::Audit)};
-                      checks.expect(distinctCodes.size() == 7, "all seven levels have distinct color codes");
-                      checks.raise();
-                  })
-            .Execute();
-    }};
+                                                                 const std::set<std::string_view> distinctCodes{getColorCode(LogLevel::Trace),
+                                                                                                                getColorCode(LogLevel::Debug),
+                                                                                                                getColorCode(LogLevel::Info),
+                                                                                                                getColorCode(LogLevel::Warn),
+                                                                                                                getColorCode(LogLevel::Error),
+                                                                                                                getColorCode(LogLevel::Fatal),
+                                                                                                                getColorCode(LogLevel::Audit)};
+                                                                 checks.expect(distinctCodes.size() == 7, "all seven levels have distinct color codes");
+                                                                 checks.raise();
+                                                             })
+                                                       .Execute();
+                                               }};
 
 const speclab::Register complianceThresholdAtWarn{"isComplianceLevel() is true from WARN upward and false below it", "unit", [] {
                                                       return speclab::Test("loglevel-compliance-threshold")
