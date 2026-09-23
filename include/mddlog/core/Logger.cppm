@@ -58,7 +58,7 @@ public:
         if (!sink)
             return;
 
-        std::lock_guard<std::mutex> lock(sinksMutex);
+        std::scoped_lock lock(sinksMutex);
         sinks.push_back(std::move(sink));
     }
 
@@ -67,20 +67,17 @@ public:
      * @param sinkName Name of sink to remove
      */
     void removeSink(std::string_view sinkName) {
-        std::lock_guard<std::mutex> lock(sinksMutex);
-        sinks.erase(std::remove_if(sinks.begin(),
-                                   sinks.end(),
-                                   [sinkName](const SinkPtr& sink) {
-                                       return sink->getName() == sinkName;
-                                   }),
-                    sinks.end());
+        std::scoped_lock lock(sinksMutex);
+        std::erase_if(sinks, [sinkName](const SinkPtr& sink) {
+            return sink->getName() == sinkName;
+        });
     }
 
     /**
      * @brief Clear all sinks
      */
     void clearSinks() {
-        std::lock_guard<std::mutex> lock(sinksMutex);
+        std::scoped_lock lock(sinksMutex);
         sinks.clear();
     }
 
@@ -191,7 +188,7 @@ public:
             auto               flushFuture = flushPromise.get_future();
 
             {
-                std::lock_guard<std::mutex> lock(queueMutex);
+                std::scoped_lock lock(queueMutex);
                 flushPromises.push(std::move(flushPromise));
             }
             queueCondition.notify_one();
@@ -250,7 +247,7 @@ public:
      * @brief Get number of sinks
      */
     std::size_t getSinkCount() const {
-        std::lock_guard<std::mutex> lock(sinksMutex);
+        std::scoped_lock lock(sinksMutex);
         return sinks.size();
     }
 
@@ -269,7 +266,7 @@ private:
         if (asyncLogging) {
             // Add to async queue
             {
-                std::lock_guard<std::mutex> lock(queueMutex);
+                std::scoped_lock lock(queueMutex);
                 logQueue.push(std::move(record));
             }
             queueCondition.notify_one();
@@ -283,7 +280,7 @@ private:
      * @brief Write log record to all sinks
      */
     void writeToSinks(const LogRecord& record) {
-        std::lock_guard<std::mutex> lock(sinksMutex);
+        std::scoped_lock lock(sinksMutex);
         for (auto& sink : sinks) {
             if (sink && sink->shouldLog(record.level) && sink->isEnabled()) {
                 try {
@@ -303,12 +300,12 @@ private:
      * @brief Flush all sinks
      */
     void flushSinks() {
-        std::lock_guard<std::mutex> lock(sinksMutex);
+        std::scoped_lock lock(sinksMutex);
         for (auto& sink : sinks) {
             if (sink) {
                 try {
                     sink->flush();
-                } catch (...) {
+                } catch (...) {  // NOLINT(bugprone-empty-catch): a failing flush must never propagate from shutdown or flush()
                     // Ignore flush errors
                 }
             }
@@ -352,7 +349,7 @@ private:
         }
 
         // Process remaining items before shutdown
-        std::lock_guard<std::mutex> lock(queueMutex);
+        std::scoped_lock lock(queueMutex);
         while (!logQueue.empty()) {
             writeToSinks(logQueue.front());
             logQueue.pop();

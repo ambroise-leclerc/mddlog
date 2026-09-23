@@ -1,0 +1,8 @@
+---
+# Tests and examples state their scenario data as literals (thread counts, expected enumerator
+# values, message counts); naming each one would obscure the scenario. The library sources under
+# include/ keep both checks. Everything else is inherited from the root .clang-tidy.
+InheritParentConfig: true
+Checks: >
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers

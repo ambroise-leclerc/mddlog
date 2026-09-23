@@ -44,7 +44,7 @@ jobs:
         echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] https://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-21 main" \
           | sudo tee /etc/apt/sources.list.d/llvm-toolchain-21.list
         sudo apt-get update
-        sudo apt-get install -y ninja-build build-essential ccache clang-21 libc++-21-dev libc++abi-21-dev
+        sudo apt-get install -y ninja-build build-essential ccache clang-21 clang-tidy-21 libc++-21-dev libc++abi-21-dev
 
     # Verifies the binaries this build actually uses, which are not necessarily the ones on PATH:
     # the toolchain file addresses /usr/lib/llvm-21/bin directly.
@@ -84,6 +84,14 @@ jobs:
 
     - name: Run tests
       run: ctest --preset ninja-clang --output-on-failure --no-tests=error --timeout 120
+
+    # Needs the Clang preset's compile_commands.json AND its built module interfaces (std, mddlog.*),
+    # hence after the Build step and in this job rather than a lightweight one. The script verifies
+    # clang-tidy is major 21, that every file in scope is in the compilation database, and fails on
+    # any diagnostic, tool error or unanalysed file. The report (version, units analysed) goes to the
+    # log and to the job summary.
+    - name: clang-tidy (reference version, module-aware)
+      run: scripts/run-clang-tidy.sh build-clang
 
     # #280-style negative case: only the provider changes, and the second rebuild still has to be
     # a cache hit for the unchanged consumer. Kept as a named step with --no-tests=error so losing

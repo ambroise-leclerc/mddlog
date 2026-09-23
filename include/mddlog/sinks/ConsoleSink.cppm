@@ -33,6 +33,11 @@ public:
         flush();
     }
 
+    ConsoleSink(const ConsoleSink&)            = delete;
+    ConsoleSink& operator=(const ConsoleSink&) = delete;
+    ConsoleSink(ConsoleSink&&)                 = delete;
+    ConsoleSink& operator=(ConsoleSink&&)      = delete;
+
     /**
      * @brief Write a log record to console
      * @param record The log record to write
@@ -45,7 +50,7 @@ public:
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
 
         try {
             // Choose output stream based on log level
@@ -97,7 +102,7 @@ public:
             auto writeTime = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
             // Estimate bytes written (rough approximation)
-            std::size_t bytesWritten = record.message.length() + record.category.length() + 50;
+            std::size_t bytesWritten = record.message.length() + record.category.length() + estimatedFormattingOverheadBytes;
             updateStatistics(bytesWritten, writeTime);
 
         } catch (const std::exception&) {
@@ -110,7 +115,7 @@ public:
      * @brief Flush the console output
      */
     void flush() override {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         std::cout.flush();
         std::cerr.flush();
         recordFlush();
@@ -129,7 +134,7 @@ public:
      * @return True if colored output is enabled
      */
     bool isColorEnabled() const noexcept {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         return useColors;
     }
 
@@ -138,7 +143,7 @@ public:
      * @param value New color state
      */
     void setColorEnabled(bool value) noexcept {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         useColors = value;
     }
 
@@ -147,7 +152,7 @@ public:
      * @return True if stderr is used for Error and Fatal levels
      */
     bool isStderrEnabled() const noexcept {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         return useStderr;
     }
 
@@ -156,11 +161,14 @@ public:
      * @param value New stderr state
      */
     void setStderrEnabled(bool value) noexcept {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         useStderr = value;
     }
 
 private:
+    /// Rough per-record allowance for the timestamp, level and bracket decorations.
+    static constexpr std::size_t estimatedFormattingOverheadBytes = 50;
+
     mutable std::mutex mutex;      ///< Thread synchronization
     bool               useColors;  ///< Enable colored output
     bool               useStderr;  ///< Use stderr for errors

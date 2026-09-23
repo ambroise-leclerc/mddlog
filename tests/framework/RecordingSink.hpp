@@ -4,7 +4,8 @@
  * Include after `import std;` and `import mddlog;`: both RecordingSink and ThrowingSink derive
  * from mddlog::Sink and use mddlog::LogRecord, which must already be visible.
  */
-#pragma once
+#ifndef MDDLOG_TESTS_FRAMEWORK_RECORDINGSINK_HPP
+#define MDDLOG_TESTS_FRAMEWORK_RECORDINGSINK_HPP
 
 namespace mddlog::spec {
 
@@ -16,12 +17,12 @@ public:
         : mddlog::Sink(initialMinLevel), name(std::move(sinkName)) {}
 
     void write(const mddlog::LogRecord& record) override {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         storedRecords.push_back(record);
     }
 
     void flush() override {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         ++numFlushes;
     }
 
@@ -30,17 +31,17 @@ public:
     }
 
     std::vector<mddlog::LogRecord> records() const {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         return storedRecords;
     }
 
     std::size_t size() const {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         return storedRecords.size();
     }
 
     int flushCount() const {
-        std::lock_guard<std::mutex> lock(mutex);
+        std::scoped_lock lock(mutex);
         return numFlushes;
     }
 
@@ -77,3 +78,5 @@ private:
 };
 
 }  // namespace mddlog::spec
+
+#endif  // MDDLOG_TESTS_FRAMEWORK_RECORDINGSINK_HPP
