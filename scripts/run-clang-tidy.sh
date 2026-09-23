@@ -26,6 +26,11 @@ fail() {
     exit 1
 }
 
+# 'wait -n' (used to bound parallelism) needs bash >= 4.3.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 3 ]; }; then
+    fail "bash >= 4.3 is required (found ${BASH_VERSION})."
+fi
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 root="$PWD"
 build_dir="${1:-build-clang}"
@@ -54,13 +59,19 @@ grep -q '\.modmap' "$db" || fail "$db has no module map references; it was not p
 find "$build_dir" -name '*.pcm' -print -quit | grep -q . \
     || fail "no built module interfaces (*.pcm) under $build_dir; build the Clang preset before analysing."
 
-mapfile -t scope < <(
-    {
-        find include/mddlog -name '*.cppm'
-        find tests/spec -name '*.cpp'
-        find examples -name '*.cpp'
-    } | LC_ALL=C sort
-)
+scope=()
+collect_scope() {
+    local root_dir="$1" pattern="$2" found f
+    [ -d "$root_dir" ] || fail "scope directory '$root_dir' does not exist."
+    found="$(find "$root_dir" -type f -name "$pattern")" || fail "scope discovery failed under '$root_dir'."
+    while IFS= read -r f; do
+        [ -n "$f" ] && scope+=("$f")
+    done < <(printf '%s\n' "$found" | LC_ALL=C sort)
+    return 0
+}
+collect_scope include/mddlog '*.cppm'
+collect_scope tests/spec '*.cpp'
+collect_scope examples '*.cpp'
 [ "${#scope[@]}" -gt 0 ] || fail "the analysis scope resolved to no files; refusing to pass vacuously."
 
 missing=()
@@ -75,7 +86,10 @@ fi
 
 out_dir="$(mktemp -d)"
 trap 'rm -rf "$out_dir"' EXIT
-jobs_n="${JOBS:-$(nproc)}"
+jobs_n="${JOBS:-$(nproc 2>/dev/null || echo 1)}"
+case "$jobs_n" in
+    ''|*[!0-9]*|0) fail "JOBS must be a positive integer, got '$jobs_n'." ;;
+esac
 
 analyse() {
     local f="$1" log="$out_dir/$(printf '%s' "$1" | tr '/' '_').log"

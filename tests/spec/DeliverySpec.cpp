@@ -115,8 +115,10 @@ const speclab::Register perProducerOrderingPreserved{
 
                       std::vector<int> lastSeen(kOrderingProducers, -1);
                       bool             orderedWithinProducer = true;
+                      std::size_t      malformed             = 0;
                       for (const auto& record : records) {
                           // Messages are exactly "p<producer>-<index>"; parse strictly rather than with sscanf.
+                          // std::to_address because string_view iterators are not raw pointers on every standard library.
                           const std::string_view text{record.message};
                           int                    producer = -1;
                           int                    index    = -1;
@@ -124,19 +126,25 @@ const speclab::Register perProducerOrderingPreserved{
                           if (const auto dash = text.find('-'); text.starts_with('p') && dash != std::string_view::npos) {
                               const std::string_view producerDigits = text.substr(1, dash - 1);
                               const std::string_view indexDigits    = text.substr(dash + 1);
-                              const auto [producerEnd, producerEc]  = std::from_chars(producerDigits.begin(), producerDigits.end(), producer);
-                              const auto [indexEnd, indexEc]        = std::from_chars(indexDigits.begin(), indexDigits.end(), index);
-                              parsed                                = producerEc == std::errc{} && producerEnd == producerDigits.end() && indexEc == std::errc{}
-                                       && indexEnd == indexDigits.end();
+                              const auto [producerEnd, producerEc]  = std::from_chars(std::to_address(producerDigits.begin()),
+                                                                                     std::to_address(producerDigits.end()),
+                                                                                     producer);
+                              const auto [indexEnd, indexEc] = std::from_chars(std::to_address(indexDigits.begin()), std::to_address(indexDigits.end()), index);
+                              parsed = producerEc == std::errc{} && producerEnd == std::to_address(producerDigits.end()) && indexEc == std::errc{}
+                                       && indexEnd == std::to_address(indexDigits.end());
                           }
-                          if (parsed && producer >= 0 && producer < kOrderingProducers) {
-                              if (index <= lastSeen[static_cast<std::size_t>(producer)]) {
-                                  orderedWithinProducer = false;
-                              }
-                              lastSeen[static_cast<std::size_t>(producer)] = index;
+                          if (!parsed || producer < 0 || producer >= kOrderingProducers) {
+                              ++malformed;
+                              continue;
                           }
+                          const auto slot = static_cast<std::size_t>(producer);
+                          if (index != lastSeen[slot] + 1) {
+                              orderedWithinProducer = false;
+                          }
+                          lastSeen[slot] = index;
                       }
-                      checks.expect(orderedWithinProducer, "every producer's messages arrived in the order it sent them");
+                      checks.expect(malformed == 0, std::format("{} record(s) did not match \"p<producer>-<index>\"", malformed));
+                      checks.expect(orderedWithinProducer, "every producer's messages arrived in the order it sent them, with no gap or repeat");
                       for (int p = 0; p < kOrderingProducers; ++p) {
                           checks.expect(lastSeen[static_cast<std::size_t>(p)] == kOrderingPerProducer - 1,
                                         std::format("producer {} delivered its full sequence", p));
