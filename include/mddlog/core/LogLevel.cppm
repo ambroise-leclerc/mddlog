@@ -15,13 +15,13 @@ export namespace mddlog::core {
  * Includes medical device specific levels for compliance.
  */
 enum class LogLevel : std::uint8_t {
-    TRACE = 0,  ///< Detailed trace information for debugging
-    DEBUG = 1,  ///< Debug information for development
-    INFO  = 2,  ///< General information messages
-    WARN  = 3,  ///< Warning conditions that should be noted
-    ERROR = 4,  ///< Error conditions that affect functionality
-    FATAL = 5,  ///< Fatal errors that may cause system failure
-    AUDIT = 6   ///< Audit trail entries for compliance (highest priority)
+    Trace = 0,  ///< Detailed trace information for debugging
+    Debug = 1,  ///< Debug information for development
+    Info  = 2,  ///< General information messages
+    Warn  = 3,  ///< Warning conditions that should be noted
+    Error = 4,  ///< Error conditions that affect functionality
+    Fatal = 5,  ///< Fatal errors that may cause system failure
+    Audit = 6   ///< Audit trail entries for compliance (highest priority)
 };
 
 /**
@@ -31,19 +31,19 @@ enum class LogLevel : std::uint8_t {
  */
 constexpr std::string_view toString(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::TRACE:
+        case LogLevel::Trace:
             return "TRACE";
-        case LogLevel::DEBUG:
+        case LogLevel::Debug:
             return "DEBUG";
-        case LogLevel::INFO:
+        case LogLevel::Info:
             return "INFO";
-        case LogLevel::WARN:
+        case LogLevel::Warn:
             return "WARN";
-        case LogLevel::ERROR:
+        case LogLevel::Error:
             return "ERROR";
-        case LogLevel::FATAL:
+        case LogLevel::Fatal:
             return "FATAL";
-        case LogLevel::AUDIT:
+        case LogLevel::Audit:
             return "AUDIT";
         default:
             return "UNKNOWN";
@@ -53,24 +53,24 @@ constexpr std::string_view toString(LogLevel level) noexcept {
 /**
  * @brief Convert string to log level
  * @param str String representation of log level
- * @return Corresponding LogLevel, or LogLevel::INFO if not found
+ * @return Corresponding LogLevel, or LogLevel::Info if not found
  */
 constexpr LogLevel fromString(std::string_view str) noexcept {
     if (str == "TRACE")
-        return LogLevel::TRACE;
+        return LogLevel::Trace;
     if (str == "DEBUG")
-        return LogLevel::DEBUG;
+        return LogLevel::Debug;
     if (str == "INFO")
-        return LogLevel::INFO;
+        return LogLevel::Info;
     if (str == "WARN")
-        return LogLevel::WARN;
+        return LogLevel::Warn;
     if (str == "ERROR")
-        return LogLevel::ERROR;
+        return LogLevel::Error;
     if (str == "FATAL")
-        return LogLevel::FATAL;
+        return LogLevel::Fatal;
     if (str == "AUDIT")
-        return LogLevel::AUDIT;
-    return LogLevel::INFO;  // Default fallback
+        return LogLevel::Audit;
+    return LogLevel::Info;  // Default fallback
 }
 
 /**
@@ -79,7 +79,7 @@ constexpr LogLevel fromString(std::string_view str) noexcept {
  * @return True if the level requires compliance logging
  */
 constexpr bool isComplianceLevel(LogLevel level) noexcept {
-    return level >= LogLevel::WARN;  // WARN, ERROR, FATAL, AUDIT require compliance
+    return level >= LogLevel::Warn;  // Warn, Error, Fatal, Audit require compliance
 }
 
 /**
@@ -89,19 +89,19 @@ constexpr bool isComplianceLevel(LogLevel level) noexcept {
  */
 constexpr std::string_view getColorCode(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::TRACE:
+        case LogLevel::Trace:
             return "\033[37m";    // White
-        case LogLevel::DEBUG:
+        case LogLevel::Debug:
             return "\033[36m";    // Cyan
-        case LogLevel::INFO:
+        case LogLevel::Info:
             return "\033[32m";    // Green
-        case LogLevel::WARN:
+        case LogLevel::Warn:
             return "\033[33m";    // Yellow
-        case LogLevel::ERROR:
+        case LogLevel::Error:
             return "\033[31m";    // Red
-        case LogLevel::FATAL:
+        case LogLevel::Fatal:
             return "\033[35m";    // Magenta
-        case LogLevel::AUDIT:
+        case LogLevel::Audit:
             return "\033[1;34m";  // Bold Blue
         default:
             return "\033[0m";     // Reset

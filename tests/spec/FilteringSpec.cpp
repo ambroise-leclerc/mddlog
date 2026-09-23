@@ -28,7 +28,7 @@ const speclab::Register loggerMinLevelFilters{"The logger's minimum level filter
                                                       .Given("a logger with minimum level WARN and a sink that accepts everything",
                                                              [](SingleSinkState& s) {
                                                                  s.logger.addSink(s.sink);
-                                                                 s.logger.setMinLevel(LogLevel::WARN);
+                                                                 s.logger.setMinLevel(LogLevel::Warn);
                                                              })
                                                       .When("an INFO and a WARN message are logged",
                                                             [](SingleSinkState& s) {
@@ -41,7 +41,7 @@ const speclab::Register loggerMinLevelFilters{"The logger's minimum level filter
                                                                 const auto            records = s.sink->records();
                                                                 checks.expect(records.size() == 1, std::format("expected 1 record, got {}", records.size()));
                                                                 if (!records.empty()) {
-                                                                    checks.expect(records.front().level == LogLevel::WARN,
+                                                                    checks.expect(records.front().level == LogLevel::Warn,
                                                                                   "the delivered record is the WARN one");
                                                                     checks.expect(records.front().message == "at threshold",
                                                                                   "the delivered record carries the WARN message");
@@ -55,9 +55,9 @@ const speclab::Register sinkMinLevelFiltersIndependently{"A sink's minimum level
                                                              return speclab::Test<SingleSinkState>("filtering-sink-min-level")
                                                                  .Given("a logger with minimum level TRACE and a sink accepting only ERROR and above",
                                                                         [](SingleSinkState& s) {
-                                                                            s.sink->setMinLevel(LogLevel::ERROR);
+                                                                            s.sink->setMinLevel(LogLevel::Error);
                                                                             s.logger.addSink(s.sink);
-                                                                            s.logger.setMinLevel(LogLevel::TRACE);
+                                                                            s.logger.setMinLevel(LogLevel::Trace);
                                                                         })
                                                                  .When("an INFO and an ERROR message are logged",
                                                                        [](SingleSinkState& s) {
@@ -71,7 +71,7 @@ const speclab::Register sinkMinLevelFiltersIndependently{"A sink's minimum level
                                                                            checks.expect(records.size() == 1,
                                                                                          std::format("expected 1 record, got {}", records.size()));
                                                                            if (!records.empty()) {
-                                                                               checks.expect(records.front().level == LogLevel::ERROR,
+                                                                               checks.expect(records.front().level == LogLevel::Error,
                                                                                              "the delivered record is the ERROR one");
                                                                            }
                                                                            checks.raise();

@@ -20,9 +20,11 @@ record moves to Accepted.
 
 `webfront::log` (`include/tooling/Logger.hpp`, 71 lines) is header-only and pre-modules:
 
-- **Levels are `const uint8_t` constants**, not an enum class: `Disabled = 0, Error = 1, Warn = 2,
-  Info = 3, Debug = 4` (line 18). The numeric order is **inverted** relative to mddlog's `LogLevel`
-  (`TRACE = 0 … AUDIT = 6`, where higher means more severe). Any mapping must be written out rather
+- **Levels are `const uint8_t` constants**, not an enum class: `webfront::log::Disabled = 0, Error = 1,
+  Warn = 2, Info = 3, Debug = 4` (line 18). The numeric order is **inverted** relative to mddlog's
+  `LogLevel` (`LogLevel::Trace = 0 … LogLevel::Audit = 6`, where higher means more severe). Both sides
+  now spell `Error`, `Warn`, `Info` and `Debug` identically, with different numeric values, so the
+  qualifier (`webfront::log::` or `LogLevel::`) is what tells them apart below. Any mapping must be written out rather
   than assumed to be a cast.
 - **Enablement is per level, not a threshold**: `inline bool logTypeEnabled[Debug + 1]` (line 20)
   with `set()`, `is()` and `setLogLevel()` (lines 55-57). `test/LoggerTests.cpp:37-69` pins this
@@ -117,14 +119,14 @@ enable mask and maps it explicitly:
 
 | WebFront | mddlog |
 |---|---|
-| `Error` (1) | `ERROR` (4) |
-| `Warn` (2) | `WARN` (3) |
-| `Info` (3) | `INFO` (2) |
-| `Debug` (4) | `DEBUG` (1) |
-| `Disabled` (0) | all levels masked off |
+| `webfront::log::Error` (1) | `LogLevel::Error` (4) |
+| `webfront::log::Warn` (2) | `LogLevel::Warn` (3) |
+| `webfront::log::Info` (3) | `LogLevel::Info` (2) |
+| `webfront::log::Debug` (4) | `LogLevel::Debug` (1) |
+| `webfront::log::Disabled` (0) | all levels masked off |
 
-`TRACE`, `FATAL` and `AUDIT` have no WebFront equivalent: `TRACE` maps into `Debug` for display,
-`FATAL` into `Error`, and `AUDIT` is **not routed to this facade at all** (Decision 6). Whether
+`LogLevel::Trace`, `LogLevel::Fatal` and `LogLevel::Audit` have no WebFront equivalent: `Trace` maps
+into `webfront::log::Debug` for display, `Fatal` into `webfront::log::Error`, and `Audit` is **not routed to this facade at all** (Decision 6). Whether
 mddlog's own logger should gain a per-level mask, rather than leaving it in the adapter, is an open
 question this record deliberately leaves to the implementing issue — the adapter can carry it either
 way.

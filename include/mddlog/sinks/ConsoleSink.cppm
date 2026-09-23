@@ -22,9 +22,9 @@ public:
     /**
      * @brief Constructor
      * @param enableColors Enable colored output (default: true)
-     * @param enableStderr Use stderr for ERROR and FATAL levels (default: true)
+     * @param enableStderr Use stderr for Error and Fatal levels (default: true)
      */
-    explicit ConsoleSink(bool enableColors = true, bool enableStderr = true) : Sink(core::LogLevel::INFO), useColors(enableColors), useStderr(enableStderr) {}
+    explicit ConsoleSink(bool enableColors = true, bool enableStderr = true) : Sink(core::LogLevel::Info), useColors(enableColors), useStderr(enableStderr) {}
 
     /**
      * @brief Destructor - ensures final flush
@@ -49,7 +49,7 @@ public:
 
         try {
             // Choose output stream based on log level
-            std::ostream& stream = (useStderr && (record.level >= core::LogLevel::ERROR)) ? std::cerr : std::cout;
+            std::ostream& stream = (useStderr && (record.level >= core::LogLevel::Error)) ? std::cerr : std::cout;
 
             // Add color if enabled
             if (useColors) {
@@ -144,7 +144,7 @@ public:
 
     /**
      * @brief Check if stderr is used for errors
-     * @return True if stderr is used for ERROR and FATAL levels
+     * @return True if stderr is used for Error and Fatal levels
      */
     bool isStderrEnabled() const noexcept {
         std::lock_guard<std::mutex> lock(mutex);

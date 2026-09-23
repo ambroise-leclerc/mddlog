@@ -19,7 +19,7 @@ int main() {
     logger->addSink(consoleSink);
 
     // Set minimum log level
-    logger->setMinLevel(LogLevel::DEBUG);
+    logger->setMinLevel(LogLevel::Debug);
 
     std::cout << "1. Basic logging examples:\n";
 
@@ -34,7 +34,7 @@ int main() {
     std::cout << "\n2. Medical compliance logging:\n";
 
     // Medical compliance logging
-    logger->logMedical(LogLevel::INFO,
+    logger->logMedical(LogLevel::Info,
                        "Patient monitoring session started",
                        "patient_monitor",
                        "user123",      // User ID
@@ -42,7 +42,7 @@ int main() {
                        "device_789"    // Device ID
     );
 
-    logger->logMedical(LogLevel::WARN, "Heart rate threshold exceeded", "vital_signs", "user123", "session_456", "device_789");
+    logger->logMedical(LogLevel::Warn, "Heart rate threshold exceeded", "vital_signs", "user123", "session_456", "device_789");
 
     std::cout << "\n3. Audit trail logging:\n";
 

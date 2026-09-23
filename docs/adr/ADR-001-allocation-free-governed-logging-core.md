@@ -71,8 +71,8 @@ boundary between code that is allowed to allocate, throw, or block, and code tha
 
 ### Risk management considerations
 - A silently swallowed sink exception (`catch (...)` with no counter, no re-raise, no side channel)
-  is a hazard in its own right for the audit-relevant levels: a caller believes an `AUDIT` or
-  `ERROR` record was recorded when it may not have reached any sink at all. ADR-002 addresses the
+  is a hazard in its own right for the audit-relevant levels: a caller believes an `Audit` or
+  `Error` record was recorded when it may not have reached any sink at all. ADR-002 addresses the
   audit path specifically; the governed core defined here must not add a *second* unreported failure
   mode of its own. Note the split, because Decision 3 alone cannot carry it: a **refusal** is
   synchronous and is reported by the call's own result, while a loss **after** admission — a sink

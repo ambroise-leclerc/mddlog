@@ -56,7 +56,7 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
 
 #### 1. Core Logging Infrastructure
 - **Structured logging** with `LogRecord` containing timestamp, severity, category, message, and metadata
-- **Multiple severity levels**: TRACE, DEBUG, INFO, WARN, ERROR, FATAL, AUDIT
+- **Multiple severity levels**: Trace, Debug, Info, Warn, Error, Fatal, Audit
 - **Thread-safe operations** using `std::thread`, `std::mutex`, and atomic operations
 
 #### 2. Medical Device Compliance
@@ -109,7 +109,7 @@ int main() {
     logger->addSink(consoleSink);
     
     // Set minimum log level
-    logger->setMinLevel(LogLevel::INFO);
+    logger->setMinLevel(LogLevel::Info);
     
     // Basic logging
     logger->info("Medical device system started");
@@ -125,7 +125,7 @@ int main() {
 ```cpp
 // Medical compliance logging with user/device context
 logger->logMedical(
-    LogLevel::INFO,
+    LogLevel::Info,
     "Patient monitoring session started",
     "patient_monitor",
     "user123",           // User ID

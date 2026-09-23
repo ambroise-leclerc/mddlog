@@ -36,7 +36,7 @@ const speclab::Register basicFieldsPreserved{"A basic log() call preserves level
                                                                checks.expect(records.size() == 1, "one record was delivered");
                                                                if (!records.empty()) {
                                                                    const auto& r = records.front();
-                                                                   checks.expect(r.level == LogLevel::WARN, "level is WARN");
+                                                                   checks.expect(r.level == LogLevel::Warn, "level is WARN");
                                                                    checks.expect(r.message == "elevated temperature", "message matches");
                                                                    checks.expect(r.category == "vitals", "category matches");
                                                                }
@@ -56,7 +56,7 @@ const speclab::Register medicalFieldsPreserved{
                    })
             .When("a medical compliance record is logged",
                   [](SingleSinkState& s) {
-                      s.logger.logMedical(LogLevel::INFO, "monitoring started", "patient_monitor", "user123", "session456", "device789");
+                      s.logger.logMedical(LogLevel::Info, "monitoring started", "patient_monitor", "user123", "session456", "device789");
                   })
             .Then("every medical field round-trips",
                   [](SingleSinkState& s) {
@@ -92,7 +92,7 @@ const speclab::Register auditFieldsPreserved{"logAudit() preserves the event typ
                                                                checks.expect(records.size() == 1, "one record was delivered");
                                                                if (!records.empty()) {
                                                                    const auto& r = records.front();
-                                                                   checks.expect(r.level == LogLevel::AUDIT, "level is AUDIT");
+                                                                   checks.expect(r.level == LogLevel::Audit, "level is AUDIT");
                                                                    checks.expect(r.category == "audit", "category is 'audit'");
                                                                    checks.expect(r.auditEventType == "DATA_ACCESS", "event type matches");
                                                                    checks.expect(r.riskLevel == "LOW", "risk level matches");

@@ -29,7 +29,7 @@ using mddlog::SimpleLogger;
 using mddlog::spec::RecordingSink;
 using mddlog::toString;
 
-constexpr std::array allLevels{LogLevel::TRACE, LogLevel::DEBUG, LogLevel::INFO, LogLevel::WARN, LogLevel::ERROR, LogLevel::FATAL, LogLevel::AUDIT};
+constexpr std::array allLevels{LogLevel::Trace, LogLevel::Debug, LogLevel::Info, LogLevel::Warn, LogLevel::Error, LogLevel::Fatal, LogLevel::Audit};
 
 /// Redirects std::cout/std::cerr to in-memory buffers for the lifetime of the object, so a
 /// ConsoleSink's actual output can be inspected. Restoration is unconditional (destructor), so a
@@ -60,19 +60,19 @@ const speclab::Register numericValuesUnderlyingTypeAndOrdering{
                   [] {
                       speclab::core::Checks checks;
                       checks.expect(std::is_same_v<std::underlying_type_t<LogLevel>, std::uint8_t>, "LogLevel's underlying type is std::uint8_t");
-                      checks.expect(std::to_underlying(LogLevel::TRACE) == 0, "TRACE == 0");
-                      checks.expect(std::to_underlying(LogLevel::DEBUG) == 1, "DEBUG == 1");
-                      checks.expect(std::to_underlying(LogLevel::INFO) == 2, "INFO == 2");
-                      checks.expect(std::to_underlying(LogLevel::WARN) == 3, "WARN == 3");
-                      checks.expect(std::to_underlying(LogLevel::ERROR) == 4, "ERROR == 4");
-                      checks.expect(std::to_underlying(LogLevel::FATAL) == 5, "FATAL == 5");
-                      checks.expect(std::to_underlying(LogLevel::AUDIT) == 6, "AUDIT == 6");
-                      checks.expect(LogLevel::TRACE < LogLevel::DEBUG, "TRACE < DEBUG");
-                      checks.expect(LogLevel::DEBUG < LogLevel::INFO, "DEBUG < INFO");
-                      checks.expect(LogLevel::INFO < LogLevel::WARN, "INFO < WARN");
-                      checks.expect(LogLevel::WARN < LogLevel::ERROR, "WARN < ERROR");
-                      checks.expect(LogLevel::ERROR < LogLevel::FATAL, "ERROR < FATAL");
-                      checks.expect(LogLevel::FATAL < LogLevel::AUDIT, "FATAL < AUDIT");
+                      checks.expect(std::to_underlying(LogLevel::Trace) == 0, "TRACE == 0");
+                      checks.expect(std::to_underlying(LogLevel::Debug) == 1, "DEBUG == 1");
+                      checks.expect(std::to_underlying(LogLevel::Info) == 2, "INFO == 2");
+                      checks.expect(std::to_underlying(LogLevel::Warn) == 3, "WARN == 3");
+                      checks.expect(std::to_underlying(LogLevel::Error) == 4, "ERROR == 4");
+                      checks.expect(std::to_underlying(LogLevel::Fatal) == 5, "FATAL == 5");
+                      checks.expect(std::to_underlying(LogLevel::Audit) == 6, "AUDIT == 6");
+                      checks.expect(LogLevel::Trace < LogLevel::Debug, "TRACE < DEBUG");
+                      checks.expect(LogLevel::Debug < LogLevel::Info, "DEBUG < INFO");
+                      checks.expect(LogLevel::Info < LogLevel::Warn, "INFO < WARN");
+                      checks.expect(LogLevel::Warn < LogLevel::Error, "WARN < ERROR");
+                      checks.expect(LogLevel::Error < LogLevel::Fatal, "ERROR < FATAL");
+                      checks.expect(LogLevel::Fatal < LogLevel::Audit, "FATAL < AUDIT");
                       checks.raise();
                   })
             .Execute();
@@ -86,13 +86,13 @@ const speclab::Register toStringProducesExactStrings{"toString() produces the ex
                                                                    "an out-of-range value",
                                                                    [] {
                                                                        speclab::core::Checks checks;
-                                                                       checks.expect(toString(LogLevel::TRACE) == "TRACE", "TRACE -> \"TRACE\"");
-                                                                       checks.expect(toString(LogLevel::DEBUG) == "DEBUG", "DEBUG -> \"DEBUG\"");
-                                                                       checks.expect(toString(LogLevel::INFO) == "INFO", "INFO -> \"INFO\"");
-                                                                       checks.expect(toString(LogLevel::WARN) == "WARN", "WARN -> \"WARN\"");
-                                                                       checks.expect(toString(LogLevel::ERROR) == "ERROR", "ERROR -> \"ERROR\"");
-                                                                       checks.expect(toString(LogLevel::FATAL) == "FATAL", "FATAL -> \"FATAL\"");
-                                                                       checks.expect(toString(LogLevel::AUDIT) == "AUDIT", "AUDIT -> \"AUDIT\"");
+                                                                       checks.expect(toString(LogLevel::Trace) == "TRACE", "TRACE -> \"TRACE\"");
+                                                                       checks.expect(toString(LogLevel::Debug) == "DEBUG", "DEBUG -> \"DEBUG\"");
+                                                                       checks.expect(toString(LogLevel::Info) == "INFO", "INFO -> \"INFO\"");
+                                                                       checks.expect(toString(LogLevel::Warn) == "WARN", "WARN -> \"WARN\"");
+                                                                       checks.expect(toString(LogLevel::Error) == "ERROR", "ERROR -> \"ERROR\"");
+                                                                       checks.expect(toString(LogLevel::Fatal) == "FATAL", "FATAL -> \"FATAL\"");
+                                                                       checks.expect(toString(LogLevel::Audit) == "AUDIT", "AUDIT -> \"AUDIT\"");
                                                                        checks.expect(toString(static_cast<LogLevel>(99)) == "UNKNOWN",
                                                                                      "an out-of-range value -> \"UNKNOWN\"");
                                                                        checks.raise();
@@ -109,15 +109,15 @@ const speclab::Register fromStringParsesEachLevelAndFallsBackToInfo{
                   "yields INFO",
                   [] {
                       speclab::core::Checks checks;
-                      checks.expect(fromString("TRACE") == LogLevel::TRACE, "\"TRACE\" -> TRACE");
-                      checks.expect(fromString("DEBUG") == LogLevel::DEBUG, "\"DEBUG\" -> DEBUG");
-                      checks.expect(fromString("INFO") == LogLevel::INFO, "\"INFO\" -> INFO");
-                      checks.expect(fromString("WARN") == LogLevel::WARN, "\"WARN\" -> WARN");
-                      checks.expect(fromString("ERROR") == LogLevel::ERROR, "\"ERROR\" -> ERROR");
-                      checks.expect(fromString("FATAL") == LogLevel::FATAL, "\"FATAL\" -> FATAL");
-                      checks.expect(fromString("AUDIT") == LogLevel::AUDIT, "\"AUDIT\" -> AUDIT");
-                      checks.expect(fromString("not-a-level") == LogLevel::INFO, "an unrecognized string falls back to INFO");
-                      checks.expect(fromString("") == LogLevel::INFO, "an empty string falls back to INFO");
+                      checks.expect(fromString("TRACE") == LogLevel::Trace, "\"TRACE\" -> TRACE");
+                      checks.expect(fromString("DEBUG") == LogLevel::Debug, "\"DEBUG\" -> DEBUG");
+                      checks.expect(fromString("INFO") == LogLevel::Info, "\"INFO\" -> INFO");
+                      checks.expect(fromString("WARN") == LogLevel::Warn, "\"WARN\" -> WARN");
+                      checks.expect(fromString("ERROR") == LogLevel::Error, "\"ERROR\" -> ERROR");
+                      checks.expect(fromString("FATAL") == LogLevel::Fatal, "\"FATAL\" -> FATAL");
+                      checks.expect(fromString("AUDIT") == LogLevel::Audit, "\"AUDIT\" -> AUDIT");
+                      checks.expect(fromString("not-a-level") == LogLevel::Info, "an unrecognized string falls back to INFO");
+                      checks.expect(fromString("") == LogLevel::Info, "an empty string falls back to INFO");
                       checks.raise();
                   })
             .Execute();
@@ -148,23 +148,23 @@ const speclab::Register colorCodesForEachLevel{
                   "coloring, and the seven levels map to seven distinct sequences",
                   [] {
                       speclab::core::Checks checks;
-                      checks.expect(getColorCode(LogLevel::TRACE) == "\033[37m", "TRACE is white");
-                      checks.expect(getColorCode(LogLevel::DEBUG) == "\033[36m", "DEBUG is cyan");
-                      checks.expect(getColorCode(LogLevel::INFO) == "\033[32m", "INFO is green");
-                      checks.expect(getColorCode(LogLevel::WARN) == "\033[33m", "WARN is yellow");
-                      checks.expect(getColorCode(LogLevel::ERROR) == "\033[31m", "ERROR is red");
-                      checks.expect(getColorCode(LogLevel::FATAL) == "\033[35m", "FATAL is magenta");
-                      checks.expect(getColorCode(LogLevel::AUDIT) == "\033[1;34m", "AUDIT is bold blue");
+                      checks.expect(getColorCode(LogLevel::Trace) == "\033[37m", "TRACE is white");
+                      checks.expect(getColorCode(LogLevel::Debug) == "\033[36m", "DEBUG is cyan");
+                      checks.expect(getColorCode(LogLevel::Info) == "\033[32m", "INFO is green");
+                      checks.expect(getColorCode(LogLevel::Warn) == "\033[33m", "WARN is yellow");
+                      checks.expect(getColorCode(LogLevel::Error) == "\033[31m", "ERROR is red");
+                      checks.expect(getColorCode(LogLevel::Fatal) == "\033[35m", "FATAL is magenta");
+                      checks.expect(getColorCode(LogLevel::Audit) == "\033[1;34m", "AUDIT is bold blue");
                       checks.expect(getColorCode(static_cast<LogLevel>(99)) == "\033[0m", "an out-of-range value resets rather than coloring");
                       checks.expect(getResetColorCode() == "\033[0m", "getResetColorCode() matches the reset sequence");
 
-                      const std::set<std::string_view> distinctCodes{getColorCode(LogLevel::TRACE),
-                                                                     getColorCode(LogLevel::DEBUG),
-                                                                     getColorCode(LogLevel::INFO),
-                                                                     getColorCode(LogLevel::WARN),
-                                                                     getColorCode(LogLevel::ERROR),
-                                                                     getColorCode(LogLevel::FATAL),
-                                                                     getColorCode(LogLevel::AUDIT)};
+                      const std::set<std::string_view> distinctCodes{getColorCode(LogLevel::Trace),
+                                                                     getColorCode(LogLevel::Debug),
+                                                                     getColorCode(LogLevel::Info),
+                                                                     getColorCode(LogLevel::Warn),
+                                                                     getColorCode(LogLevel::Error),
+                                                                     getColorCode(LogLevel::Fatal),
+                                                                     getColorCode(LogLevel::Audit)};
                       checks.expect(distinctCodes.size() == 7, "all seven levels have distinct color codes");
                       checks.raise();
                   })
@@ -176,13 +176,13 @@ const speclab::Register complianceThresholdAtWarn{"isComplianceLevel() is true f
                                                           .Then("TRACE, DEBUG and INFO are not compliance levels; WARN, ERROR, FATAL and AUDIT are",
                                                                 [] {
                                                                     speclab::core::Checks checks;
-                                                                    checks.expect(!isComplianceLevel(LogLevel::TRACE), "TRACE is not a compliance level");
-                                                                    checks.expect(!isComplianceLevel(LogLevel::DEBUG), "DEBUG is not a compliance level");
-                                                                    checks.expect(!isComplianceLevel(LogLevel::INFO), "INFO is not a compliance level");
-                                                                    checks.expect(isComplianceLevel(LogLevel::WARN), "WARN is a compliance level");
-                                                                    checks.expect(isComplianceLevel(LogLevel::ERROR), "ERROR is a compliance level");
-                                                                    checks.expect(isComplianceLevel(LogLevel::FATAL), "FATAL is a compliance level");
-                                                                    checks.expect(isComplianceLevel(LogLevel::AUDIT), "AUDIT is a compliance level");
+                                                                    checks.expect(!isComplianceLevel(LogLevel::Trace), "TRACE is not a compliance level");
+                                                                    checks.expect(!isComplianceLevel(LogLevel::Debug), "DEBUG is not a compliance level");
+                                                                    checks.expect(!isComplianceLevel(LogLevel::Info), "INFO is not a compliance level");
+                                                                    checks.expect(isComplianceLevel(LogLevel::Warn), "WARN is a compliance level");
+                                                                    checks.expect(isComplianceLevel(LogLevel::Error), "ERROR is a compliance level");
+                                                                    checks.expect(isComplianceLevel(LogLevel::Fatal), "FATAL is a compliance level");
+                                                                    checks.expect(isComplianceLevel(LogLevel::Audit), "AUDIT is a compliance level");
                                                                     checks.raise();
                                                                 })
                                                           .Execute();
@@ -201,9 +201,9 @@ const speclab::Register sinkDeliversExactlyLevelsAtOrAboveThreshold{
         return speclab::Test<ThresholdState>("loglevel-sink-threshold-admits-at-or-above")
             .Given("a sink with minimum level ERROR attached to a logger with minimum level TRACE",
                    [](ThresholdState& s) {
-                       s.sink->setMinLevel(LogLevel::ERROR);
+                       s.sink->setMinLevel(LogLevel::Error);
                        s.logger.addSink(s.sink);
-                       s.logger.setMinLevel(LogLevel::TRACE);
+                       s.logger.setMinLevel(LogLevel::Trace);
                    })
             .When("every level from TRACE to AUDIT is logged once, in order, through the generic log() "
                   "(not logAudit(), whose bypass policy is covered separately in AuditPolicySpec.cpp)",
@@ -218,9 +218,9 @@ const speclab::Register sinkDeliversExactlyLevelsAtOrAboveThreshold{
                       const auto            records = s.sink->records();
                       checks.expect(records.size() == 3, std::format("expected 3 records, got {}", records.size()));
                       if (records.size() == 3) {
-                          checks.expect(records[0].level == LogLevel::ERROR, "1st delivered record is ERROR");
-                          checks.expect(records[1].level == LogLevel::FATAL, "2nd delivered record is FATAL");
-                          checks.expect(records[2].level == LogLevel::AUDIT, "3rd delivered record is AUDIT");
+                          checks.expect(records[0].level == LogLevel::Error, "1st delivered record is ERROR");
+                          checks.expect(records[1].level == LogLevel::Fatal, "2nd delivered record is FATAL");
+                          checks.expect(records[2].level == LogLevel::Audit, "3rd delivered record is AUDIT");
                       }
                       checks.raise();
                   })
@@ -234,7 +234,7 @@ const speclab::Register consoleSinkRoutesAtOrAboveErrorToStderr{
         return speclab::Test("consolesink-stderr-routing")
             .Given("a ConsoleSink with colors disabled, stderr routing enabled (the default), and its "
                    "minimum level lowered to TRACE - ConsoleSink's own default minimum level is INFO "
-                   "(Sink(core::LogLevel::INFO) in its constructor), which would otherwise drop TRACE "
+                   "(Sink(core::LogLevel::Info) in its constructor), which would otherwise drop TRACE "
                    "and DEBUG before either stream saw them; that filtering is characterized separately "
                    "and is deliberately excluded here to isolate stdout/stderr routing",
                    [] {})
@@ -245,12 +245,12 @@ const speclab::Register consoleSinkRoutesAtOrAboveErrorToStderr{
                   [] {
                       speclab::core::Checks checks;
                       ConsoleSink           sink{false, true};
-                      sink.setMinLevel(LogLevel::TRACE);
+                      sink.setMinLevel(LogLevel::Trace);
                       for (auto level : allLevels) {
                           StdStreamCapture capture;
                           LogRecord        record(level, "message body", "category");
                           sink.write(record);
-                          const bool expectStderr = level >= LogLevel::ERROR;
+                          const bool expectStderr = level >= LogLevel::Error;
                           const bool wentToStderr = !capture.err.str().empty();
                           const bool wentToStdout = !capture.out.str().empty();
                           checks.expect(wentToStderr == expectStderr,
@@ -270,7 +270,7 @@ const speclab::Register consoleSinkRendersLevelUppercase{"ConsoleSink's formatte
                                                                  .Then("the captured output contains the literal \"[INFO]\"",
                                                                        [] {
                                                                            ConsoleSink sink{false, false};
-                                                                           LogRecord   record(LogLevel::INFO, "message body", "category");
+                                                                           LogRecord   record(LogLevel::Info, "message body", "category");
                                                                            std::string captured;
                                                                            {
                                                                                StdStreamCapture capture;

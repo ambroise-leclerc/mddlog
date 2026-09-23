@@ -22,7 +22,7 @@ export namespace mddlog {
  *
  * @code
  * using namespace mddlog;
- * Log::setMinLevel(LogLevel::INFO);
+ * Log::setMinLevel(LogLevel::Info);
  * Log::info("System started");
  * Log::warn("Temperature elevated");
  * @endcode
@@ -45,8 +45,8 @@ public:
             auto consoleSink = sinks::createConsoleSink(enableColors, true);
             globalLogger->addSink(consoleSink);
 
-            // Set default level to INFO for medical devices
-            globalLogger->setMinLevel(core::LogLevel::INFO);
+            // Set default level to Info for medical devices
+            globalLogger->setMinLevel(core::LogLevel::Info);
         }
     }
 
@@ -219,8 +219,8 @@ private:
             auto consoleSink = sinks::createConsoleSink(true, true);
             globalLogger->addSink(consoleSink);
 
-            // Set default level to INFO for medical devices
-            globalLogger->setMinLevel(core::LogLevel::INFO);
+            // Set default level to Info for medical devices
+            globalLogger->setMinLevel(core::LogLevel::Info);
         }
         return globalLogger;
     }
