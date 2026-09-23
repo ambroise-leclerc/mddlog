@@ -30,8 +30,8 @@ We follow the **C++ Core Guidelines** to ensure conformance with modern C++23 ge
   - A constructor or setter parameter must not be given the exact same name as a member it
     initializes or assigns: `-Werror=shadow` rejects that at compile time regardless of whether
     the body still behaves correctly. Rename the parameter instead (e.g.
-    `void setEnabled(bool value) { enabled = value; }`, `explicit Sink(LogLevel initialMinLevel)
-    : minLevel(initialMinLevel) {}`).
+    `void setEnabled(bool value) { enabled.store(value); }`, `explicit Sink(LogLevel
+    initialMinLevel) : minLevel(initialMinLevel) {}`).
 - **Namespaces:**
   - Use 'lowercase' (e.g., 'mui', 'backend').
 - **Macros:**
