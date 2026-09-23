@@ -16,7 +16,7 @@ int main() {
     Log::initialize("MedicalApp", true, true);
 
     // Set minimum log level
-    Log::setMinLevel(LogLevel::DEBUG);
+    Log::setMinLevel(LogLevel::Debug);
 
     std::cout << "1. Basic logging with static Log helper:\n";
 
@@ -31,7 +31,7 @@ int main() {
     std::cout << "\n2. Medical compliance logging:\n";
 
     // Medical compliance logging
-    Log::logMedical(LogLevel::INFO,
+    Log::logMedical(LogLevel::Info,
                     "Patient monitoring session started",
                     "patient_monitor",
                     "user123",      // User ID

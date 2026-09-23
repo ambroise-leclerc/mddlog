@@ -107,7 +107,7 @@ protected:
      * @brief Protected constructor for derived classes
      * @param initialMinLevel Initial minimum log level
      */
-    explicit Sink(core::LogLevel initialMinLevel = core::LogLevel::INFO) : minLevel(initialMinLevel), enabled(true) {}
+    explicit Sink(core::LogLevel initialMinLevel = core::LogLevel::Info) : minLevel(initialMinLevel), enabled(true) {}
 
     /**
      * @brief Update statistics for a write operation

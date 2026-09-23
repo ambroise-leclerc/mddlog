@@ -40,7 +40,7 @@ const speclab::Register auditBypassesDisabledLogger{"logAudit() is delivered eve
                                                                       checks.expect(records.size() == 1,
                                                                                     std::format("expected exactly 1 record, got {}", records.size()));
                                                                       if (!records.empty()) {
-                                                                          checks.expect(records.front().level == LogLevel::AUDIT,
+                                                                          checks.expect(records.front().level == LogLevel::Audit,
                                                                                         "the surviving record is the AUDIT one");
                                                                           checks.expect(records.front().auditEventType == "DATA_ACCESS",
                                                                                         "its event type is intact");
@@ -55,7 +55,7 @@ const speclab::Register auditBypassesMinimumLevel{"logAudit() is delivered regar
                                                           .Given("a logger whose minimum level is set above ordinary severities",
                                                                  [](SingleSinkState& s) {
                                                                      s.logger.addSink(s.sink);
-                                                                     s.logger.setMinLevel(LogLevel::FATAL);
+                                                                     s.logger.setMinLevel(LogLevel::Fatal);
                                                                  })
                                                           .When("an audit event is logged",
                                                                 [](SingleSinkState& s) {

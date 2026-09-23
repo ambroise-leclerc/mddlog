@@ -12,7 +12,7 @@ namespace mddlog::spec {
 /// read it from a different thread than the one(s) that wrote to it.
 class RecordingSink : public mddlog::Sink {
 public:
-    explicit RecordingSink(std::string sinkName = "recording", mddlog::LogLevel initialMinLevel = mddlog::LogLevel::TRACE)
+    explicit RecordingSink(std::string sinkName = "recording", mddlog::LogLevel initialMinLevel = mddlog::LogLevel::Trace)
         : mddlog::Sink(initialMinLevel), name(std::move(sinkName)) {}
 
     void write(const mddlog::LogRecord& record) override {

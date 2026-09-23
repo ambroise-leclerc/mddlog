@@ -28,7 +28,7 @@ public:
      * @param enableAsyncLogging Enable asynchronous logging (default: true)
      */
     explicit SimpleLogger(std::string_view loggerName, bool enableAsyncLogging = true)
-        : name(loggerName), asyncLogging(enableAsyncLogging), enabled(true), minLevel(LogLevel::INFO), shuttingDown(false) {
+        : name(loggerName), asyncLogging(enableAsyncLogging), enabled(true), minLevel(LogLevel::Info), shuttingDown(false) {
         if (asyncLogging) {
             // Start async logging thread
             asyncThread = std::thread([this]() {
@@ -142,7 +142,7 @@ public:
      * disabling the logger or raising its minimum level, which would otherwise let a
      * misconfigured or maliciously reconfigured logger erase compliance evidence. The record
      * still goes through each sink's own shouldLog()/isEnabled() in writeToSinks() like any
-     * other record - since AUDIT is the highest LogLevel, a sink's minimum-level filter can
+     * other record - since Audit is the highest LogLevel, a sink's minimum-level filter can
      * never exclude it, but an explicitly disabled sink (Sink::setEnabled(false)) still will.
      */
     void logAudit(std::string_view            message,
@@ -151,34 +151,34 @@ public:
                   std::string_view            deviceId,
                   std::string_view            riskLevel = "",
                   const std::source_location& loc       = std::source_location::current()) {
-        LogRecord record(LogLevel::AUDIT, message, "audit", userId, "", deviceId, loc);
+        LogRecord record(LogLevel::Audit, message, "audit", userId, "", deviceId, loc);
         record.setAuditInfo(eventType, riskLevel);
         processLogRecord(std::move(record));
     }
 
     // Convenience methods for different log levels
     void trace(std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        log(LogLevel::TRACE, message, category, loc);
+        log(LogLevel::Trace, message, category, loc);
     }
 
     void debug(std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        log(LogLevel::DEBUG, message, category, loc);
+        log(LogLevel::Debug, message, category, loc);
     }
 
     void info(std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        log(LogLevel::INFO, message, category, loc);
+        log(LogLevel::Info, message, category, loc);
     }
 
     void warn(std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        log(LogLevel::WARN, message, category, loc);
+        log(LogLevel::Warn, message, category, loc);
     }
 
     void error(std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        log(LogLevel::ERROR, message, category, loc);
+        log(LogLevel::Error, message, category, loc);
     }
 
     void fatal(std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        log(LogLevel::FATAL, message, category, loc);
+        log(LogLevel::Fatal, message, category, loc);
     }
 
     /**

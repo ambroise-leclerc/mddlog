@@ -14,20 +14,20 @@ cryptographic signatures", "Risk Management: Hazard tracking and mitigation logg
 "Regulatory Reporting: Automated compliance report generation", and an `AuditSink` marked
 `(planned)`. None of it exists in the current module set. What exists instead:
 
-- `AUDIT` is one more value of the `LogLevel` enum (`include/mddlog/core/LogLevel.cppm:24`), ordered
-  as the **highest** severity, above `FATAL`. Severity and audit-relevance are conflated: nothing
+- `Audit` is one more value of the `LogLevel` enum (`include/mddlog/core/LogLevel.cppm:24`), ordered
+  as the **highest** severity, above `Fatal`. Severity and audit-relevance are conflated: nothing
   distinguishes "unusually severe" from "must be retained for regulatory purposes regardless of
   severity."
 - `SimpleLogger::logAudit()` (`include/mddlog/core/Logger.cppm:133-141`) builds an ordinary
-  `LogRecord` with `level = LogLevel::AUDIT`, sets three free-text fields (`auditEventType`,
+  `LogRecord` with `level = LogLevel::Audit`, sets three free-text fields (`auditEventType`,
   `riskLevel`, `complianceStandard` — `LogRecord.cppm:39-42`, the last defaulted to the literal
   `"IEC_62304"` in `setAuditInfo()`), and calls `processLogRecord()` **directly**.
 - **What that means for filtering, precisely** — an earlier draft of this ADR got this backwards and
   it matters, because the decision below rests on it. `logAudit()` does *not* call `shouldLog()`, and
   `processLogRecord()` (line 252) does not consult it either; only the other `log()` overloads do
   (line 98). So today `logAudit()` **already bypasses** `setEnabled(false)` and the logger's
-  `minLevel_` threshold. Two filters still apply downstream: `writeToSinks()` (lines 269-280) checks
-  `sink->shouldLog(record.level)` and `sink->isEnabled()` per sink. And because `AUDIT` is the
+  `minLevel` threshold. Two filters still apply downstream: `writeToSinks()` (lines 269-280) checks
+  `sink->shouldLog(record.level)` and `sink->isEnabled()` per sink. And because `Audit` is the
   maximum `LogLevel` value, no valid severity threshold could exclude it on severity alone anyway.
   The gap is therefore not "audit events are wrongly filtered" but "the existing bypass is
   incidental, unstated and untested, and sink-level filtering still silently applies."
@@ -59,9 +59,9 @@ audit event *is* and what its delivery contract promises.
   purpose.
 - **Fail-closed delivery, not fail-open severity.** "Important enough to always show" is a severity
   question; "must never be silently lost" is a delivery-guarantee question. An audit event needs the
-  second, and does not need to be the numerically highest severity to need it: an `INFO`-severity
-  "operator acknowledged alarm" event is as audit-relevant as a `FATAL` one. Today's ordering, with
-  `AUDIT` above `FATAL`, cannot express that at all.
+  second, and does not need to be the numerically highest severity to need it: an `Info`-severity
+  "operator acknowledged alarm" event is as audit-relevant as a `Fatal` one. Today's ordering, with
+  `Audit` above `Fatal`, cannot express that at all.
 
 ### Risk management considerations
 - A fabricated, duplicated or mis-attributed audit event is its own hazard. A device that records
@@ -142,7 +142,7 @@ with a reason, and nothing is silently shortened except `detail`.
 ### 2. Audit capture bypasses ordinary logger filtering — stated, not incidental
 
 Formalize the bypass that already exists (see Context): recording an audit event does not consult
-the logger's `minLevel_` or `setEnabled(false)`. Severity and audit-relevance are different axes;
+the logger's `minLevel` or `setEnabled(false)`. Severity and audit-relevance are different axes;
 an audit event is not "more severe", it is *non-optional*.
 
 Sink-level filtering is a **separate** question and is decided separately: an audit-carrying sink
@@ -307,9 +307,9 @@ specifically to walk back its own README's "Completed" claims; mddlog's README u
 
 ## Alternatives Considered
 
-### 1. Keep `AUDIT` as the top `LogLevel` and document current behavior (Rejected)
+### 1. Keep `Audit` as the top `LogLevel` and document current behavior (Rejected)
 **Pros:** No new type; answers issue #5's question with "no change".
-**Cons:** Cannot express "this INFO-severity event must not be lost", cannot carry
+**Cons:** Cannot express "this Info-severity event must not be lost", cannot carry
 requirement/hazard linkage or request-vs-result correlation, and leaves the existing bypass
 incidental. It also leaves sink-level filtering silently applicable to audit events.
 
