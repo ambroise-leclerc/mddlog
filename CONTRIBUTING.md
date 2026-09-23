@@ -43,6 +43,14 @@ We follow the **C++ Core Guidelines** to ensure conformance with modern C++23 ge
 - Place pointer/reference symbols next to the type (e.g., `int* ptr`, `const std::string& name`).
 - Use `nullptr` instead of `NULL`.
 
+### Atomics
+
+- Access a `std::atomic<T>` member through its explicit API (`.load()`, `.store(value)`,
+  `.exchange(value)`, `.fetch_add(n)`, ...) rather than relying on the implicit conversion to
+  `T` or on `operator=`. Both compile and behave identically to the explicit form, but the
+  explicit form makes the atomic access visible at every call site instead of reading like a
+  plain variable.
+
 ### File Organization
 
 - Module files: `.cppm`
