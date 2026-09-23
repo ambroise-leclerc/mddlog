@@ -41,7 +41,7 @@ public:
      * @return True if the level should be logged
      */
     virtual bool shouldLog(core::LogLevel level) const noexcept {
-        return level >= minLevel;
+        return level >= minLevel.load();
     }
 
     /**
@@ -49,7 +49,7 @@ public:
      * @param level Minimum level to log
      */
     void setMinLevel(core::LogLevel level) noexcept {
-        minLevel = level;
+        minLevel.store(level);
     }
 
     /**
@@ -57,7 +57,7 @@ public:
      * @return Current minimum level
      */
     core::LogLevel getMinLevel() const noexcept {
-        return minLevel;
+        return minLevel.load();
     }
 
     /**
@@ -71,7 +71,7 @@ public:
      * @return True if sink is active
      */
     bool isEnabled() const noexcept {
-        return enabled;
+        return enabled.load();
     }
 
     /**
@@ -79,7 +79,7 @@ public:
      * @param value New enabled state
      */
     void setEnabled(bool value) noexcept {
-        enabled = value;
+        enabled.store(value);
     }
 
     /**

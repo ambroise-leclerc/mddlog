@@ -30,8 +30,8 @@ We follow the **C++ Core Guidelines** to ensure conformance with modern C++23 ge
   - A constructor or setter parameter must not be given the exact same name as a member it
     initializes or assigns: `-Werror=shadow` rejects that at compile time regardless of whether
     the body still behaves correctly. Rename the parameter instead (e.g.
-    `void setEnabled(bool value) { enabled = value; }`, `explicit Sink(LogLevel initialMinLevel)
-    : minLevel(initialMinLevel) {}`).
+    `void setEnabled(bool value) { enabled.store(value); }`, `explicit Sink(LogLevel
+    initialMinLevel) : minLevel(initialMinLevel) {}`).
 - **Namespaces:**
   - Use 'lowercase' (e.g., 'mui', 'backend').
 - **Macros:**
@@ -42,6 +42,14 @@ We follow the **C++ Core Guidelines** to ensure conformance with modern C++23 ge
 - Indent with 4 spaces, no tabs.
 - Place pointer/reference symbols next to the type (e.g., `int* ptr`, `const std::string& name`).
 - Use `nullptr` instead of `NULL`.
+
+### Atomics
+
+- Access a `std::atomic<T>` member through its explicit API (`.load()`, `.store(value)`,
+  `.exchange(value)`, `.fetch_add(n)`, ...) rather than relying on the implicit conversion to
+  `T` or on `operator=`. Both compile and behave identically to the explicit form, but the
+  explicit form makes the atomic access visible at every call site instead of reading like a
+  plain variable.
 
 ### File Organization
 
