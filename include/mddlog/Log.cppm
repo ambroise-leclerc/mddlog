@@ -36,17 +36,17 @@ public:
      * @param asyncLogging Enable asynchronous logging (default: true)
      */
     static void initialize(std::string_view loggerName = "GlobalLogger", bool enableColors = true, bool asyncLogging = true) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex);
 
-        if (!globalLogger_) {
-            globalLogger_ = std::make_shared<core::SimpleLogger>(loggerName, asyncLogging);
+        if (!globalLogger) {
+            globalLogger = std::make_shared<core::SimpleLogger>(loggerName, asyncLogging);
 
             // Add default console sink
             auto consoleSink = sinks::createConsoleSink(enableColors, true);
-            globalLogger_->addSink(consoleSink);
+            globalLogger->addSink(consoleSink);
 
             // Set default level to INFO for medical devices
-            globalLogger_->setMinLevel(core::LogLevel::INFO);
+            globalLogger->setMinLevel(core::LogLevel::INFO);
         }
     }
 
@@ -168,8 +168,8 @@ public:
      * @return True if initialized
      */
     static bool isInitialized() noexcept {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return globalLogger_ != nullptr;
+        std::lock_guard<std::mutex> lock(mutex);
+        return globalLogger != nullptr;
     }
 
     /**
@@ -185,9 +185,9 @@ public:
     static void shutdown() {
         std::shared_ptr<core::SimpleLogger> toShutdown;
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            toShutdown = std::move(globalLogger_);
-            globalLogger_.reset();
+            std::lock_guard<std::mutex> lock(mutex);
+            toShutdown = std::move(globalLogger);
+            globalLogger.reset();
         }
         if (toShutdown) {
             toShutdown->flush();
@@ -205,28 +205,28 @@ private:
     /**
      * @brief Ensure the global logger is initialized and return a shared handle to it
      *
-     * Every public method routes through this rather than dereferencing globalLogger_
-     * directly: taking the shared_ptr copy while holding mutex_ is what prevents a concurrent
+     * Every public method routes through this rather than dereferencing globalLogger
+     * directly: taking the shared_ptr copy while holding mutex is what prevents a concurrent
      * shutdown() from destroying the logger out from under a call already in progress.
      */
     static std::shared_ptr<core::SimpleLogger> snapshot() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!globalLogger_) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!globalLogger) {
             // Auto-initialize with default settings
-            globalLogger_ = std::make_shared<core::SimpleLogger>("GlobalLogger", true);
+            globalLogger = std::make_shared<core::SimpleLogger>("GlobalLogger", true);
 
             // Add default console sink
             auto consoleSink = sinks::createConsoleSink(true, true);
-            globalLogger_->addSink(consoleSink);
+            globalLogger->addSink(consoleSink);
 
             // Set default level to INFO for medical devices
-            globalLogger_->setMinLevel(core::LogLevel::INFO);
+            globalLogger->setMinLevel(core::LogLevel::INFO);
         }
-        return globalLogger_;
+        return globalLogger;
     }
 
-    static inline std::shared_ptr<core::SimpleLogger> globalLogger_;
-    static inline std::mutex                          mutex_;
+    static inline std::shared_ptr<core::SimpleLogger> globalLogger;
+    static inline std::mutex                          mutex;
 };
 
 }  // namespace mddlog

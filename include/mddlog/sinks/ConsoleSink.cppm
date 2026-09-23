@@ -21,10 +21,10 @@ class ConsoleSink : public Sink {
 public:
     /**
      * @brief Constructor
-     * @param useColors Enable colored output (default: true)
-     * @param useStderr Use stderr for ERROR and FATAL levels (default: true)
+     * @param enableColors Enable colored output (default: true)
+     * @param enableStderr Use stderr for ERROR and FATAL levels (default: true)
      */
-    explicit ConsoleSink(bool useColors = true, bool useStderr = true) : Sink(core::LogLevel::INFO), useColors_(useColors), useStderr_(useStderr) {}
+    explicit ConsoleSink(bool enableColors = true, bool enableStderr = true) : Sink(core::LogLevel::INFO), useColors(enableColors), useStderr(enableStderr) {}
 
     /**
      * @brief Destructor - ensures final flush
@@ -45,14 +45,14 @@ public:
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex);
 
         try {
             // Choose output stream based on log level
-            std::ostream& stream = (useStderr_ && (record.level >= core::LogLevel::ERROR)) ? std::cerr : std::cout;
+            std::ostream& stream = (useStderr && (record.level >= core::LogLevel::ERROR)) ? std::cerr : std::cout;
 
             // Add color if enabled
-            if (useColors_) {
+            if (useColors) {
                 stream << core::getColorCode(record.level);
             }
 
@@ -86,7 +86,7 @@ public:
 #endif
 
             // Reset color if enabled
-            if (useColors_) {
+            if (useColors) {
                 stream << core::getResetColorCode();
             }
 
@@ -110,7 +110,7 @@ public:
      * @brief Flush the console output
      */
     void flush() override {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex);
         std::cout.flush();
         std::cerr.flush();
         recordFlush();
@@ -129,17 +129,17 @@ public:
      * @return True if colored output is enabled
      */
     bool isColorEnabled() const noexcept {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return useColors_;
+        std::lock_guard<std::mutex> lock(mutex);
+        return useColors;
     }
 
     /**
      * @brief Enable or disable colored output
-     * @param enabled New color state
+     * @param value New color state
      */
-    void setColorEnabled(bool enabled) noexcept {
-        std::lock_guard<std::mutex> lock(mutex_);
-        useColors_ = enabled;
+    void setColorEnabled(bool value) noexcept {
+        std::lock_guard<std::mutex> lock(mutex);
+        useColors = value;
     }
 
     /**
@@ -147,23 +147,23 @@ public:
      * @return True if stderr is used for ERROR and FATAL levels
      */
     bool isStderrEnabled() const noexcept {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return useStderr_;
+        std::lock_guard<std::mutex> lock(mutex);
+        return useStderr;
     }
 
     /**
      * @brief Enable or disable stderr for error levels
-     * @param enabled New stderr state
+     * @param value New stderr state
      */
-    void setStderrEnabled(bool enabled) noexcept {
-        std::lock_guard<std::mutex> lock(mutex_);
-        useStderr_ = enabled;
+    void setStderrEnabled(bool value) noexcept {
+        std::lock_guard<std::mutex> lock(mutex);
+        useStderr = value;
     }
 
 private:
-    mutable std::mutex mutex_;      ///< Thread synchronization
-    bool               useColors_;  ///< Enable colored output
-    bool               useStderr_;  ///< Use stderr for errors
+    mutable std::mutex mutex;      ///< Thread synchronization
+    bool               useColors;  ///< Enable colored output
+    bool               useStderr;  ///< Use stderr for errors
 };
 
 /**
