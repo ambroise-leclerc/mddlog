@@ -1,0 +1,44 @@
+name: Format Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format-check:
+    name: clang-format 21
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    # Only clang-format is needed, so this stays a light job instead of piggybacking on a full
+    # build. The apt source and key check mirror clang-build.yml; scripts/check-format.sh then
+    # verifies the version at run time and fails on a missing tool or an empty file list.
+    - name: Install clang-format 21
+      run: |
+        set -euo pipefail
+        LLVM_KEY_FPR="6084F3CF814B57C1CF12EFD515CF4D18AF4F7421"
+        sudo install -d -m 0755 /etc/apt/keyrings
+        curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /tmp/llvm-snapshot.asc
+        gpg --show-keys --with-colons --fingerprint /tmp/llvm-snapshot.asc \
+          | awk -F: '/^fpr:/ {print $10}' | grep -qx "$LLVM_KEY_FPR"
+        gpg --dearmor < /tmp/llvm-snapshot.asc > /tmp/llvm.gpg
+        sudo install -m 0644 /tmp/llvm.gpg /etc/apt/keyrings/llvm.gpg
+        codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+        echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] https://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-21 main" \
+          | sudo tee /etc/apt/sources.list.d/llvm-toolchain-21.list
+        sudo apt-get update
+        sudo apt-get install -y clang-format-21
+
+    - name: Check formatting
+      run: scripts/check-format.sh
