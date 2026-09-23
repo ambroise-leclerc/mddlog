@@ -75,6 +75,7 @@ add_executable(mddlog_specs
     spec/ConcurrencySpec.cpp
     spec/SinkFailureSpec.cpp
     spec/AuditPolicySpec.cpp
+    spec/LogLevelSpec.cpp
 )
 
 target_link_libraries(mddlog_specs PRIVATE mddlog::mddlog speclab::speclab)
