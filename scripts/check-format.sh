@@ -5,8 +5,7 @@
 # fails if any file would change. It also fails - rather than passing vacuously - when the tool is
 # missing, is not the reference major version, or the scope resolves to no files.
 #
-# Scope (kept in sync with CONTRIBUTING.md): include/**/*.cppm, tests/**/*.cpp, tests/**/*.hpp,
-# examples/**/*.cpp.
+# Scope (regular files only): include/**/*.cppm, tests/**/*.cpp, tests/**/*.hpp, examples/**/*.cpp.
 #
 # Usage: scripts/check-format.sh
 # Env:   CLANG_FORMAT  path to the clang-format binary (default: clang-format-21, then
@@ -41,9 +40,9 @@ major="$(printf '%s\n' "$version_line" | sed -n 's/.*clang-format version \([0-9
 
 mapfile -t files < <(
     {
-        find include -name '*.cppm'
-        find tests \( -name '*.cpp' -o -name '*.hpp' \)
-        find examples -name '*.cpp'
+        find include -type f -name '*.cppm'
+        find tests -type f \( -name '*.cpp' -o -name '*.hpp' \)
+        find examples -type f -name '*.cpp'
     } 2>/dev/null | LC_ALL=C sort
 )
 [ "${#files[@]}" -gt 0 ] || fail "the formatted scope resolved to no files; refusing to pass vacuously."
