@@ -25,5 +25,6 @@ What did **not** change:
   `Info` for an unrecognised string. Console output and messages are identical.
 
 A mechanical migration of call sites is a word-bounded search and replace of the seven qualified
-names in the first two columns, for example `sed -E 's/\bLogLevel::INFO\b/LogLevel::Info/g'`.
+names in the first two columns, for example `perl -pi -e 's/\bLogLevel::INFO\b/LogLevel::Info/g' <files>`
+(Perl rather than `sed`, whose `\b` word boundary is not portable to BSD/macOS `sed`).
 Do not touch string literals such as `"INFO"`.

@@ -130,9 +130,9 @@ Run clang-format 21 over the formatted scope (`include/**/*.cppm`, `tests/**/*.c
 
 ```bash
 clang-format-21 --style=file -i \
-  $(find include -name '*.cppm') \
-  $(find tests -name '*.cpp' -o -name '*.hpp') \
-  $(find examples -name '*.cpp')
+  $(find include -type f -name '*.cppm') \
+  $(find tests -type f \( -name '*.cpp' -o -name '*.hpp' \)) \
+  $(find examples -type f -name '*.cpp')
 ```
 
 To check without modifying anything, use the same entry point CI runs (added by the formatting-check
