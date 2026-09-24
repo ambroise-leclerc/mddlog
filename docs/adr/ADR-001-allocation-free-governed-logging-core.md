@@ -98,7 +98,8 @@ Replace every `std::string` field with a caller-sized inline buffer plus length,
 `InlineString<N>` (a `std::array<char, N>` and a `std::uint16_t` length, `constexpr`, `noexcept`).
 Capacities are declared in **bytes**, not code points; a value is accepted only if it fits whole, so
 no field ever stores a partial UTF-8 sequence. `N` is constrained at compile time to the range the
-`std::uint16_t` length can represent, i.e. `N ∈ [0, 65535]` (`static_assert`ed in `InlineString`).
+`std::uint16_t` length can represent, i.e. `N ∈ [0, 65535]`, to be enforced with a `static_assert`
+once `InlineString` exists.
 None of the capacities chosen below come close to that ceiling; it bounds the type, it does not
 drive these values.
 
@@ -403,11 +404,13 @@ this ADR must not be read as claiming them. Three limits apply even once they do
 
 ### 8. Memory budget: a worked example, and what it does and does not guarantee
 
-**What is guaranteed.** `sizeof(LogRecord)` is a compile-time constant, obtainable via `sizeof` and
-checkable with `static_assert` before first use. The footprint of `RingLog<Capacity>` is exactly
+**What this budget commits the implementation to.** Once `LogRecord` and `RingLog` exist,
+`sizeof(LogRecord)` must be a compile-time constant, checkable via `sizeof` and `static_assert`
+before first use, and the footprint of `RingLog<Capacity>` must be exactly
 `Capacity * sizeof(LogRecord)` plus a fixed, small overhead for its cursors and refusal counter —
 never anything more, and never subject to growth once constructed, in contrast to today's unbounded
-`std::queue<LogRecord>` (Context), which has no such bound at all.
+`std::queue<LogRecord>` (Context), which has no such bound at all. Neither type exists yet; this is a
+requirement on the implementation, not a description of current code.
 
 **Record layout, "Standard" preset (Decision 1).** `sizeof(InlineString<N>)` is `N` (the byte
 buffer) plus 2 (the `std::uint16_t` length), rounded up to the type's alignment — a fixed cost of
@@ -532,7 +535,7 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - [MduX `Trace.cppm`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/medui/Trace.cppm) — `SampleRing`, cited in Decision 4 for what it is *not* a precedent for.
 - [MduX `cmake/MduXNoHeapScan.cmake`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/cmake/MduXNoHeapScan.cmake) — the two scan profiles and their different scopes.
 - mddlog issue #5 — the unbounded queue, the root-level `mddlog.cppm` ambiguity, and the absent CI this ADR's Decision 6 depends on.
-- mddlog issue #31 — closed the open points this record left implicit (Decisions 1's capacities and parametrization, 2's UTF-8 truncation boundary, 3's exact result shape and refusal priority, 4's counter width, 6's placement of `mddlog.core.loglevel`/`mddlog.core.logrecord`, and the new Decisions 7–8 on time and memory budget); it did not change this ADR's status.
+- mddlog issue #31 — closed the open points this record left implicit (Decisions 1's capacities and parametrization, 2's UTF-8 truncation boundary, 3's exact result shape and refusal priority, 4's counter width, 6's placement of `mddlog.core.loglevel`/`mddlog.core.logrecord`, and the new Decisions 7–8 on time and memory budget), and the maintainer accepted this ADR while closing it — see Approval.
 - ADR-002 (this repository) — the audit delivery contract built on Decision 3 and Decision 4, and the audit-health signal that reports losses occurring after admission.
 - ADR-004 (this repository) — persistence and tamper evidence, including the sink that would have to preserve every audit field.
 
