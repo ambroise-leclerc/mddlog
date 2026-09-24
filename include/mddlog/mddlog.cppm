@@ -21,8 +21,8 @@ import std;
 
 // Import submodules
 import mddlog.core.loglevel;
-import mddlog.core.logrecord;
-import mddlog.core.logger;
+import mddlog.adapter.logrecord;
+import mddlog.adapter.logger;
 import mddlog.sinks.sink;
 import mddlog.sinks.console;
 
@@ -32,8 +32,6 @@ export namespace mddlog {
 // in this interface unit uses them, only importers do.
 // Re-export core types
 using core::fromString;
-using core::getColorCode;
-using core::getResetColorCode;
 using core::isComplianceLevel;
 using core::LogLevel;
 using core::LogRecord;
@@ -44,6 +42,8 @@ using core::toString;
 // Re-export sinks
 using sinks::ConsoleSink;
 using sinks::createConsoleSink;
+using sinks::getColorCode;
+using sinks::getResetColorCode;
 using sinks::Sink;
 using sinks::SinkPtr;
 using sinks::WeakSinkPtr;

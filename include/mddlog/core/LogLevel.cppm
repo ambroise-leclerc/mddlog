@@ -82,37 +82,8 @@ constexpr bool isComplianceLevel(LogLevel level) noexcept {
     return level >= LogLevel::Warn;  // Warn, Error, Fatal, Audit require compliance
 }
 
-/**
- * @brief Get the color code for console output (ANSI escape sequences)
- * @param level The log level
- * @return ANSI color code string
- */
-constexpr std::string_view getColorCode(LogLevel level) noexcept {
-    switch (level) {
-        case LogLevel::Trace:
-            return "\033[37m";    // White
-        case LogLevel::Debug:
-            return "\033[36m";    // Cyan
-        case LogLevel::Info:
-            return "\033[32m";    // Green
-        case LogLevel::Warn:
-            return "\033[33m";    // Yellow
-        case LogLevel::Error:
-            return "\033[31m";    // Red
-        case LogLevel::Fatal:
-            return "\033[35m";    // Magenta
-        case LogLevel::Audit:
-            return "\033[1;34m";  // Bold Blue
-        default:
-            return "\033[0m";     // Reset
-    }
-}
-
-/**
- * @brief Reset color code for console output
- */
-constexpr std::string_view getResetColorCode() noexcept {
-    return "\033[0m";
-}
-
 }  // namespace mddlog::core
+
+// getColorCode()/getResetColorCode() (ANSI console styling) moved to mddlog.sinks.console (#32):
+// ANSI escape sequences are a sink-zone presentation concern, not governed logic, and
+// ConsoleSink::write() was their only caller - see ADR-001 Decision 6.

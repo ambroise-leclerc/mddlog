@@ -175,21 +175,46 @@ include(StaticAnalyzers)
 include(Doxygen)
 include(DependencySummaryTable)
 
-# Create module library target
+# Create module library targets: mddlog-core (governed, no sink/adapter module) and mddlog
+# (adapter, links mddlog-core PUBLIC) - the boundary ADR-001 Decision 6 requires so a consumer
+# (MduX being the motivating one) can import and link the governed core without pulling in
+# SimpleLogger, the sinks, or their dependencies. mddlog-core -> mddlog is a one-way dependency:
+# nothing under mddlog.core.* may import a mddlog.sinks.* or mddlog.adapter.* module (enforced
+# below and by the build.core.boundary test in tests/CMakeLists.txt).
+add_library(mddlog-core)
+add_library(mddlog::core ALIAS mddlog-core)
+# EXPORT_NAME, not the target name, controls the name after the mddlog:: namespace on install
+# (see install(EXPORT ...) below) - this keeps the installed imported target the same
+# mddlog::core spelling as the in-tree ALIAS above, despite the real target being named
+# "mddlog-core" (a bare "core" target name would be too generic/collision-prone in-tree).
+set_target_properties(mddlog-core PROPERTIES EXPORT_NAME core)
+
 add_library(mddlog)
 add_library(mddlog::mddlog ALIAS mddlog)
+
 add_library(mddlog_options INTERFACE)
 add_library(mddlog_warnings INTERFACE)
 
-# Add module source files in dependency order
+# mddlog-core: governed modules only, in dependency order. mddlog.core.record/mddlog.core.ring
+# (ADR-001 Decision 1) join this list once implemented; nothing here may import a sink or
+# adapter module.
+set(MDDLOG_CORE_MODULE_FILES
+    include/mddlog/core/LogLevel.cppm
+)
+target_sources(mddlog-core
+    PUBLIC
+    FILE_SET cxx_modules TYPE CXX_MODULES FILES
+        ${MDDLOG_CORE_MODULE_FILES}
+)
+
+# mddlog: adapter/sink modules, in dependency order.
 target_sources(mddlog
     PUBLIC
     FILE_SET cxx_modules TYPE CXX_MODULES FILES
-        include/mddlog/core/LogLevel.cppm
-        include/mddlog/core/LogRecord.cppm
+        include/mddlog/adapter/LogRecord.cppm
         include/mddlog/sinks/Sink.cppm
         include/mddlog/sinks/ConsoleSink.cppm
-        include/mddlog/core/Logger.cppm
+        include/mddlog/adapter/Logger.cppm
         include/mddlog/mddlog.cppm
         include/mddlog/Log.cppm
 )
@@ -202,18 +227,24 @@ set_project_warnings(mddlog_warnings)
 enable_sanitizers(mddlog_options)
 
 # Set target properties
+target_include_directories(mddlog-core PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_include_directories(mddlog PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
+target_compile_features(mddlog-core PUBLIC cxx_std_23)
 target_compile_features(mddlog PUBLIC cxx_std_23)
 
 if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)
-    set_target_properties(mddlog PROPERTIES CXX_MODULE_STD ON)
+    set_target_properties(mddlog-core mddlog PROPERTIES CXX_MODULE_STD ON)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(mddlog-core PRIVATE /experimental:module /std:c++latest)
     target_compile_options(mddlog PRIVATE /experimental:module /std:c++latest)
 endif()
 
@@ -224,8 +255,36 @@ target_link_libraries(mddlog_options INTERFACE Threads::Threads)
 # consumer's own final link needs too; mddlog_warnings (this project's -Wall/-Werror/etc.) is
 # PRIVATE so those flags apply while building mddlog itself and never leak into a consumer's
 # compile of its own code - a downstream project should choose its own warning policy.
-target_link_libraries(mddlog PUBLIC mddlog_options)
+target_link_libraries(mddlog-core PUBLIC mddlog_options)
+target_link_libraries(mddlog-core PRIVATE mddlog_warnings)
+
+target_link_libraries(mddlog PUBLIC mddlog_options mddlog::core)
 target_link_libraries(mddlog PRIVATE mddlog_warnings)
+
+# Link/import dependency-graph check (ADR-001 Decision 6, the strongest of its three verification
+# strengths): mddlog-core must never link mddlog. Configure-time, not a ctest, so a regression
+# fails the build immediately rather than waiting for `ctest` to run. Checks both LINK_LIBRARIES
+# (a PUBLIC/PRIVATE target_link_libraries entry) and INTERFACE_LINK_LIBRARIES (an INTERFACE one,
+# which LINK_LIBRARIES alone would miss even though it still makes mddlog-core depend on mddlog
+# for consumers), and both spellings a stray target_link_libraries call could use.
+set(_mddlog_forbidden_link_names mddlog mddlog::mddlog)
+foreach(_mddlog_core_link_property LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+    get_target_property(_mddlog_core_link_libraries mddlog-core ${_mddlog_core_link_property})
+    if(_mddlog_core_link_libraries)
+        foreach(_mddlog_forbidden_name IN LISTS _mddlog_forbidden_link_names)
+            if(_mddlog_forbidden_name IN_LIST _mddlog_core_link_libraries)
+                message(FATAL_ERROR
+                    "mddlog-core must not link mddlog (found '${_mddlog_forbidden_name}' in "
+                    "${_mddlog_core_link_property}): this would make the governed/adapter split "
+                    "(ADR-001 Decision 6) a one-way dependency in name only.")
+            endif()
+        endforeach()
+    endif()
+endforeach()
+unset(_mddlog_core_link_libraries)
+unset(_mddlog_core_link_property)
+unset(_mddlog_forbidden_link_names)
+unset(_mddlog_forbidden_name)
 
 # Build options
 option(MDDLOG_BUILD_EXAMPLES "Build MddLog examples" ON)
@@ -269,7 +328,7 @@ endif()
 # Installation
 include(GNUInstallDirs)
 
-install(TARGETS mddlog mddlog_options mddlog_warnings
+install(TARGETS mddlog mddlog-core mddlog_options mddlog_warnings
     EXPORT mddlogTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

@@ -1,8 +1,12 @@
 /**
  * @brief Log record structure for medical device logging - C++23 Module
+ *
+ * Allocating (nine std::string fields plus a std::unordered_map), so this lives in the adapter
+ * zone rather than under mddlog.core.* - see ADR-001 Decision 6. The namespace stays
+ * mddlog::core for now: only the module name and file location moved (#32), not the type itself.
  */
 
-export module mddlog.core.logrecord;
+export module mddlog.adapter.logrecord;
 
 import std;
 import mddlog.core.loglevel;

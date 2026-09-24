@@ -50,7 +50,7 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
 - **Thread safety**: Using `std::thread`, `std::mutex`, and atomic operations
 - **Source location**: Automatic debug information with `std::source_location`, captured at the
   application's actual call site (forwarded explicitly through every Logger method - see
-  `include/mddlog/core/Logger.cppm`)
+  `include/mddlog/adapter/Logger.cppm`)
 
 ### Key Features
 
@@ -148,19 +148,28 @@ logger->logAudit(
 
 ## Module Architecture
 
+Two CMake targets, with a one-way dependency: `mddlog-core` (alias `mddlog::core`) contains only
+governed modules (`mddlog.core.*`) and no sink or adapter module; `mddlog` (alias `mddlog::mddlog`)
+links `mddlog-core` and adds the adapter and sink modules. A consumer that only needs the governed
+core (no `SimpleLogger`, no sinks) can link `mddlog::core` alone - see ADR-001 Decision 6. This is
+a structural boundary only today: the fixed-capacity, allocation-free `mddlog.core.record`/
+`mddlog.core.ring` types ADR-001 describes are not implemented yet, so `mddlog-core` currently
+contains just `LogLevel.cppm`.
+
 ### Core Components
 
 ```
 mddlog/
 ├── core/
-│   ├── LogLevel.cppm         # Severity levels and utilities
-│   ├── LogRecord.cppm        # Structured log record
-│   └── Logger.cppm           # Main logger implementation
+│   └── LogLevel.cppm         # Severity levels and utilities (mddlog-core)
+├── adapter/
+│   ├── LogRecord.cppm        # Structured log record (allocating; mddlog)
+│   └── Logger.cppm           # Main logger implementation (mddlog)
 ├── sinks/
-│   ├── Sink.cppm             # Base sink interface
-│   └── ConsoleSink.cppm      # Console output sink
-├── Log.cppm                  # Static Log:: convenience wrapper around a global logger
-└── mddlog.cppm               # Main module with exports
+│   ├── Sink.cppm             # Base sink interface (mddlog)
+│   └── ConsoleSink.cppm      # Console output sink (mddlog)
+├── Log.cppm                  # Static Log:: convenience wrapper around a global logger (mddlog)
+└── mddlog.cppm               # Main module with exports (mddlog)
 ```
 
 ### Log Record Structure

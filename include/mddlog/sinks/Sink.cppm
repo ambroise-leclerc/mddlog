@@ -6,7 +6,7 @@ export module mddlog.sinks.sink;
 
 import std;
 import mddlog.core.loglevel;
-import mddlog.core.logrecord;
+import mddlog.adapter.logrecord;
 
 export namespace mddlog::sinks {
 

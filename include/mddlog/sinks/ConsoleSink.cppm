@@ -6,10 +6,46 @@ export module mddlog.sinks.console;
 
 import std;
 import mddlog.core.loglevel;
-import mddlog.core.logrecord;
+import mddlog.adapter.logrecord;
 import mddlog.sinks.sink;
 
 export namespace mddlog::sinks {
+
+/**
+ * @brief Get the color code for console output (ANSI escape sequences)
+ * @param level The log level
+ * @return ANSI color code string
+ *
+ * Moved from mddlog.core.loglevel (#32): ANSI styling is presentation, not governed logic, and
+ * this sink is its only caller - see ADR-001 Decision 6.
+ */
+constexpr std::string_view getColorCode(core::LogLevel level) noexcept {
+    switch (level) {
+        case core::LogLevel::Trace:
+            return "\033[37m";    // White
+        case core::LogLevel::Debug:
+            return "\033[36m";    // Cyan
+        case core::LogLevel::Info:
+            return "\033[32m";    // Green
+        case core::LogLevel::Warn:
+            return "\033[33m";    // Yellow
+        case core::LogLevel::Error:
+            return "\033[31m";    // Red
+        case core::LogLevel::Fatal:
+            return "\033[35m";    // Magenta
+        case core::LogLevel::Audit:
+            return "\033[1;34m";  // Bold Blue
+        default:
+            return "\033[0m";     // Reset
+    }
+}
+
+/**
+ * @brief Reset color code for console output
+ */
+constexpr std::string_view getResetColorCode() noexcept {
+    return "\033[0m";
+}
 
 /**
  * @brief Console sink that outputs log records to stdout/stderr
@@ -58,7 +94,7 @@ public:
 
             // Add color if enabled
             if (useColors) {
-                stream << core::getColorCode(record.level);
+                stream << getColorCode(record.level);
             }
 
             // Format: [TIMESTAMP] [LEVEL] [CATEGORY] MESSAGE
@@ -92,7 +128,7 @@ public:
 
             // Reset color if enabled
             if (useColors) {
-                stream << core::getResetColorCode();
+                stream << getResetColorCode();
             }
 
             stream << "\n";
