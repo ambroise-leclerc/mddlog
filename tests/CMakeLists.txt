@@ -32,6 +32,19 @@ else()
         "build.cache.classifier still verifies fail-closed module-map handling")
 endif()
 
+# ADR-001 Decision 6: mddlog-core must import no sink/adapter module (#32). MDDLOG_CORE_MODULE_FILES
+# is the same list top-level CMakeLists.txt uses for mddlog-core's FILE_SET, so this test and the
+# built target can never drift apart from listing different files.
+set(mddlog_core_absolute_module_files)
+foreach(module_file IN LISTS MDDLOG_CORE_MODULE_FILES)
+    list(APPEND mddlog_core_absolute_module_files "${CMAKE_SOURCE_DIR}/${module_file}")
+endforeach()
+add_test(NAME build.core.boundary
+    COMMAND ${CMAKE_COMMAND}
+        -D "MODULE_FILES=${mddlog_core_absolute_module_files}"
+        -P ${CMAKE_SOURCE_DIR}/cmake/CoreBoundaryCheck.cmake)
+set_tests_properties(build.core.boundary PROPERTIES LABELS "build")
+
 # ---------------------------------------------------------------------------
 # SpecLab BDD specs
 # ---------------------------------------------------------------------------

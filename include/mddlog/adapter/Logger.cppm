@@ -1,12 +1,16 @@
 /**
  * @brief Logger implementation for medical device logging - C++23 Module
+ *
+ * Adapter-zone module (ADR-001 Decision 6): SimpleLogger stores sinks and an unbounded queue,
+ * both allocating. The namespace stays mddlog::core for now: only the module name and file
+ * location moved (#32), not the class itself.
  */
 
-export module mddlog.core.logger;
+export module mddlog.adapter.logger;
 
 import std;
 import mddlog.core.loglevel;
-import mddlog.core.logrecord;
+import mddlog.adapter.logrecord;
 import mddlog.sinks.sink;
 
 export namespace mddlog::core {

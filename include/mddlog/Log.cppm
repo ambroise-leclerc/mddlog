@@ -6,8 +6,8 @@ export module mddlog.log;
 
 import std;
 import mddlog.core.loglevel;
-import mddlog.core.logrecord;
-import mddlog.core.logger;
+import mddlog.adapter.logrecord;
+import mddlog.adapter.logger;
 import mddlog.sinks.sink;
 import mddlog.sinks.console;
 

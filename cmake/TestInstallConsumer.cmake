@@ -56,6 +56,26 @@ int main() {\n\
 }\n\
 ")
 
+# ADR-001 Decision 6 / #32: mddlog-core (installed as mddlog::core) must be usable on its own,
+# without pulling in mddlog::mddlog (SimpleLogger, the sinks, or their dependencies). This
+# consumer only imports the governed mddlog.core.loglevel module and links mddlog::core, so it
+# fails to configure/link if the installed package does not actually expose that target
+# independently.
+file(WRITE "${consumer_src}/main_core.cpp" "\
+import std;\n\
+import mddlog.core.loglevel;\n\
+\n\
+int main() {\n\
+    if (mddlog::core::toString(mddlog::core::LogLevel::Warn) != \"WARN\") {\n\
+        return 1;\n\
+    }\n\
+    if (!mddlog::core::isComplianceLevel(mddlog::core::LogLevel::Warn)) {\n\
+        return 2;\n\
+    }\n\
+    return 0;\n\
+}\n\
+")
+
 file(WRITE "${consumer_src}/CMakeLists.txt" "\
 cmake_minimum_required(VERSION 4.0.0)\n\
 if(CMAKE_VERSION VERSION_GREATER_EQUAL \"4.4\")\n\
@@ -78,10 +98,15 @@ find_package(mddlog CONFIG REQUIRED)\n\
 if(NOT TARGET mddlog::mddlog)\n\
     message(FATAL_ERROR \"Installed package does not provide mddlog::mddlog\")\n\
 endif()\n\
+if(NOT TARGET mddlog::core)\n\
+    message(FATAL_ERROR \"Installed package does not provide mddlog::core\")\n\
+endif()\n\
 add_executable(consumer main.cpp)\n\
 target_link_libraries(consumer PRIVATE mddlog::mddlog)\n\
+add_executable(consumer_core main_core.cpp)\n\
+target_link_libraries(consumer_core PRIVATE mddlog::core)\n\
 if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
-    set_target_properties(consumer PROPERTIES CXX_MODULE_STD ON)\n\
+    set_target_properties(consumer consumer_core PROPERTIES CXX_MODULE_STD ON)\n\
 endif()\n\
 ")
 
@@ -143,6 +168,15 @@ execute_process(
 )
 if(NOT run_result EQUAL 0)
     message(FATAL_ERROR "Consumer executable exited with ${run_result} (expected 0 - see main.cpp's assertions)")
+endif()
+
+message(STATUS "InstallTreeConsumer: running consumer_core executable")
+execute_process(
+    COMMAND "${consumer_build}/consumer_core"
+    RESULT_VARIABLE run_core_result
+)
+if(NOT run_core_result EQUAL 0)
+    message(FATAL_ERROR "consumer_core executable exited with ${run_core_result} (expected 0 - see main_core.cpp's assertions)")
 endif()
 
 message(STATUS "InstallTreeConsumer: OK")
