@@ -162,19 +162,29 @@ Descriptive: `message` — the only field currently subject to truncation. `leve
 value are fixed-size (Decision 7) and are not classified at all: classification only applies to the
 variable-length, caller-supplied text fields.
 
-**Truncation never cuts a UTF-8 sequence, and does not validate well-formedness.** When `message`
-must be shortened to fit its capacity, the cut point is walked backward from the byte-`N` boundary
-until it lands on a byte that is not a UTF-8 continuation byte (top two bits `10`) — at most 3 bytes
-of backtracking, since the longest UTF-8 sequence is 4 bytes. This is a *boundary search*, not a
+**Truncation never cuts a UTF-8 sequence — for well-formed input — and does not validate
+well-formedness.** When `message` must be shortened to fit its capacity, the cut point is walked
+backward from the byte-`N` boundary, capped at 3 bytes of backtracking (the longest UTF-8 sequence is
+4 bytes), stopping as soon as it lands on a byte that is not a UTF-8 continuation byte (top two bits
+`10`). For **well-formed** UTF-8 input, that cap is never actually hit before a lead byte is found,
+so the guarantee "never cuts a sequence" holds unconditionally. This is a *boundary search*, not a
 validity check: it finds where a sequence starts, it does not confirm the sequence is well-formed.
-Consequently, if the caller's input was **already** malformed UTF-8 before truncation (a stray
-continuation byte, an overlong encoding, an unpaired lead byte), the governed core neither detects
-nor repairs that — the bytes are stored (truncated per the rule above, or stored whole if they fit)
-exactly as given, with no additional flag. General UTF-8 well-formedness validation is an explicit
-non-goal of the governed write path: it would add a second, content-dependent rejection or
-flagging mechanism this ADR does not otherwise define, and validating/repairing text is a sink- or
-caller-zone concern if it is wanted at all. Identifier fields have no equivalent complication: they
-are stored whole or not at all, so no boundary search ever applies to them.
+
+For input that is **already malformed** before truncation — review correctly flagged that the earlier
+wording left this case's outcome undefined, specifically four or more consecutive continuation bytes
+straddling the cut point, which the 3-byte cap cannot walk past — the rule is stated explicitly rather
+than left implicit: the search always stops at the cap, after at most 3 bytes of backtracking,
+**whether or not** it has landed on a non-continuation byte, and the cut is made there. The governed
+core neither detects nor repairs pre-existing malformed UTF-8 — the bytes are stored (truncated at
+the capped boundary, or stored whole if they fit) exactly as given, with no additional flag, and the
+result for already-malformed input may itself still not be well-formed UTF-8. The "never cuts a
+sequence" guarantee is therefore scoped to well-formed input by construction; it was never meant to
+extend to input that was malformed before this rule ever ran, and general UTF-8 well-formedness
+validation remains an explicit non-goal of the governed write path — it would add a second,
+content-dependent rejection or flagging mechanism this ADR does not otherwise define, and
+validating/repairing text is a sink- or caller-zone concern if it is wanted at all. Identifier fields
+have no equivalent complication: they are stored whole or not at all, so no boundary search ever
+applies to them.
 
 ### 3. The result type expresses admission and truncation independently
 
@@ -250,7 +260,9 @@ one:
 
 - **Concurrency model**: one producer, one consumer (SPSC) per `RingLog` instance. Multiple
   producers use one ring each, and the adapter aggregates across rings; this keeps the governed side
-  lock-free without making cross-ring ordering a promise (ADR-002 Decision 5 covers ordering).
+  lock-free **on the configurations this contract targets** (see the counter-width paragraph below for
+  what that requires) without making cross-ring ordering a promise (ADR-002 Decision 5 covers
+  ordering).
 - **Cursors**: a write cursor and a **read cursor**, both monotonically increasing sequence counters
   rather than wrapped indices, so "empty", "full" and current occupancy are derivable by subtraction
   and wrap-around is not ambiguous. Refusals are **not** derivable this way: under refuse-new a
@@ -285,7 +297,14 @@ one:
 **Counter type, width and overflow.** The write cursor, the read cursor, and the refusal counter are
 all `std::atomic<std::uint64_t>`, using ordinary unsigned wraparound (modulo 2⁶⁴) rather than
 saturating arithmetic — unsigned overflow is well-defined by the standard as modulo-2ᴺ, not UB, so
-"defined" does not require extra branches on the increment's hot path. Wraparound is treated as
+"defined" does not require extra branches on the increment's hot path. **The standard does not
+guarantee `std::atomic<std::uint64_t>` is lock-free on every implementation** — review correctly
+flagged that the lock-free claim above needs a stated condition, not an assumption. This ADR requires
+`std::atomic<std::uint64_t>::is_always_lock_free` to hold on every configuration this governed core
+targets, checkable with a `static_assert` once the type exists (the same enforcement pattern as
+Decision 1's capacity bound); a target where it does not hold is not a target this ADR's "no
+blocking" property covers, and Decision 6's CMake configuration should reject or flag it rather than
+silently link a lock-based fallback into code labeled governed. Wraparound is treated as
 **unreachable in practice, not merely defined**: at an optimistic sustained rate of 10⁸ records per
 second — far beyond any plausible logging throughput — a 64-bit counter takes on the order of 5,800
 years to wrap. No wrap-handling logic is implemented; the width is chosen specifically so that none
@@ -397,21 +416,39 @@ has no usable clock, not lost because of it.
   governed core to call anything: a `time_point` is still just a wrapped integer the caller
   constructs and passes in, not an invitation to query a clock.
 - **`RawTime` is a small tagged type, not the bare time-point alone**, because "no usable clock" must
-  be storable rather than refused (see below):
+  be storable rather than refused (see below). Review correctly flagged that a public aggregate with a
+  defaulted tag lets a caller construct a third, invalid state — e.g.
+  `RawTime{{}, static_cast<TimeAvailability>(255)}` — which would make the "only two well-formed
+  states" claim below false. `RawTime` is therefore **not** an aggregate: its members are private, and
+  the only ways to obtain one are the two factories, so no caller-reachable path produces a value
+  outside `Available`/`Unavailable`:
 
   ```text
   enum class TimeAvailability : std::uint8_t { Available, Unavailable };
 
-  struct RawTime {
-      std::chrono::sys_time<std::chrono::nanoseconds> value;  // meaningful only when Available
-      TimeAvailability availability = TimeAvailability::Available;
+  class RawTime {
+  public:
+      static constexpr RawTime available(std::chrono::sys_time<std::chrono::nanoseconds> v) noexcept {
+          return RawTime{v, TimeAvailability::Available};
+      }
+      static constexpr RawTime unavailable() noexcept {
+          return RawTime{{}, TimeAvailability::Unavailable};
+      }
 
-      static constexpr RawTime unavailable() noexcept { return {{}, TimeAvailability::Unavailable}; }
+      constexpr TimeAvailability availability() const noexcept { return tag; }
+      constexpr std::chrono::sys_time<std::chrono::nanoseconds> value() const noexcept { return v; }  // meaningful only when availability() == Available
+
+  private:
+      constexpr RawTime(std::chrono::sys_time<std::chrono::nanoseconds> v, TimeAvailability tag) noexcept : v(v), tag(tag) {}
+      std::chrono::sys_time<std::chrono::nanoseconds> v;
+      TimeAvailability                                 tag;
   };
   ```
 
   Trivially copyable, `constexpr`-constructible, no allocation — the same governed-type discipline as
-  `InlineString`.
+  `InlineString`. The private constructor is the enforcement mechanism: there is no public constructor,
+  brace-initializer, or setter that can assign `tag` a value outside the two the factories produce, so
+  the invariant below holds by construction rather than by convention.
 - **The core reads no clock.** The value is a mandatory parameter the caller supplies at the write
   call site; nothing in `mddlog.core.record` or `mddlog.core.ring` calls
   `std::chrono::system_clock::now()`, `std::gmtime`, or any other clock/time-zone API — that path was
@@ -430,11 +467,13 @@ has no usable clock, not lost because of it.
   supersedes the earlier draft's `Refused(MalformedTime)` treatment of "no usable time," which was
   irreconcilable with ADR-002 Decision 5 as review noted.
 - **`MalformedTime` stays in the `Refusal` enum (Decision 3) but is unreachable under this concrete
-  type, and that is stated rather than left implicit.** `RawTime` here has exactly two well-formed
-  states — `Available(value)` and `Unavailable` — both constructed only through the type's own
-  interface, so there is no third, ill-formed bit pattern for a conforming caller to produce; the core
-  does not range-check `value` for plausibility either (Decision 3 as originally drafted already
-  disclaims that). The reason is kept in the enum for API stability and as the attachment point for a
+  type, and that is enforced, not merely stated.** `RawTime` here has exactly two well-formed states —
+  `available(value)` and `unavailable()` — and, because the constructor is private, those two factories
+  are the **only** way to produce a `RawTime` at all; there is no third, ill-formed tag value a
+  conforming caller can construct (unlike the public-aggregate version review flagged, where
+  `static_cast`ing an arbitrary integer into the tag field was possible). The core does not range-check
+  `value()` for plausibility either (Decision 3 as originally drafted already disclaims that). The
+  reason is kept in the enum for API stability and as the attachment point for a
   future, more constrained time representation (e.g. a validated wire format) that could actually
   produce it — the same "defined but practically unreachable" treatment Decision 4 gives counter
   overflow, applied here to a refusal reason instead of a wraparound.
