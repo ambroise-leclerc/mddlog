@@ -263,14 +263,28 @@ target_link_libraries(mddlog PRIVATE mddlog_warnings)
 
 # Link/import dependency-graph check (ADR-001 Decision 6, the strongest of its three verification
 # strengths): mddlog-core must never link mddlog. Configure-time, not a ctest, so a regression
-# fails the build immediately rather than waiting for `ctest` to run.
-get_target_property(_mddlog_core_link_libraries mddlog-core LINK_LIBRARIES)
-if(_mddlog_core_link_libraries AND "mddlog" IN_LIST _mddlog_core_link_libraries)
-    message(FATAL_ERROR
-        "mddlog-core must not link mddlog: this would make the governed/adapter split (ADR-001 "
-        "Decision 6) a one-way dependency in name only.")
-endif()
+# fails the build immediately rather than waiting for `ctest` to run. Checks both LINK_LIBRARIES
+# (a PUBLIC/PRIVATE target_link_libraries entry) and INTERFACE_LINK_LIBRARIES (an INTERFACE one,
+# which LINK_LIBRARIES alone would miss even though it still makes mddlog-core depend on mddlog
+# for consumers), and both spellings a stray target_link_libraries call could use.
+set(_mddlog_forbidden_link_names mddlog mddlog::mddlog)
+foreach(_mddlog_core_link_property LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+    get_target_property(_mddlog_core_link_libraries mddlog-core ${_mddlog_core_link_property})
+    if(_mddlog_core_link_libraries)
+        foreach(_mddlog_forbidden_name IN LISTS _mddlog_forbidden_link_names)
+            if(_mddlog_forbidden_name IN_LIST _mddlog_core_link_libraries)
+                message(FATAL_ERROR
+                    "mddlog-core must not link mddlog (found '${_mddlog_forbidden_name}' in "
+                    "${_mddlog_core_link_property}): this would make the governed/adapter split "
+                    "(ADR-001 Decision 6) a one-way dependency in name only.")
+            endif()
+        endforeach()
+    endif()
+endforeach()
 unset(_mddlog_core_link_libraries)
+unset(_mddlog_core_link_property)
+unset(_mddlog_forbidden_link_names)
+unset(_mddlog_forbidden_name)
 
 # Build options
 option(MDDLOG_BUILD_EXAMPLES "Build MddLog examples" ON)

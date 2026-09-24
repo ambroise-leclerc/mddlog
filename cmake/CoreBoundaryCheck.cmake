@@ -27,13 +27,17 @@ foreach(module_file IN LISTS MODULE_FILES)
         message(FATAL_ERROR "CoreBoundaryCheck.cmake: '${module_file}' does not exist")
     endif()
     file(STRINGS "${module_file}" matches REGEX "${forbidden_pattern}")
-    if(matches)
-        list(APPEND violations "${module_file}: ${matches}")
-    endif()
+    # One violation entry per matched line, not one entry for the whole file: file(STRINGS ...)
+    # already returns a proper list, so appending the whole thing as a single element (rather than
+    # iterating it) would fold multiple matches into one violations entry and lose the per-line
+    # module_file prefix on all but the first.
+    foreach(match IN LISTS matches)
+        list(APPEND violations "${module_file}: ${match}")
+    endforeach()
 endforeach()
 
 if(violations)
-    string(REPLACE ";" "\n  " violations_text "${violations}")
+    list(JOIN violations "\n  " violations_text)
     message(FATAL_ERROR
         "mddlog-core module(s) import a sink or adapter module - the governed core must not "
         "depend on either zone (ADR-001 Decision 6):\n  ${violations_text}")
