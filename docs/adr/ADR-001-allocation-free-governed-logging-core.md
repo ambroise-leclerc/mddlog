@@ -213,8 +213,12 @@ struct WriteResult {
 **Priority when several refusal conditions apply at once.** Checks run in one fixed order and the
 **first** failing check is the reason reported — reasons are never accumulated into a set:
 
-1. `MalformedTime` (Decision 7) — cheapest check, and a malformed time makes the record un-storable
-   independently of anything else about it.
+1. `MalformedTime` (Decision 7) — checked first in principle, as the cheapest local check. Under the
+   `RawTime` type Decision 7 settles on, this check is **unreachable**: "no usable clock" is the
+   `Unavailable` state, which is admitted and written (Decision 7), not refused, so no value of
+   `RawTime` actually produces this reason today. It stays first in the ordering and in the `Refusal`
+   enum (Decision 3) for the future, more constrained representation Decision 7 names as its
+   attachment point.
 2. `IdentifierTooLong`, evaluated in field declaration order — `component`, then `operationId`, then
    `correlationId` — so the first offending field is the one reported; a caller that fixes it and
    resubmits will see the next offending field, if any, rather than a stale reason.
@@ -375,32 +379,65 @@ this ADR must not be read as claiming them. Three limits apply even once they do
   recorded in the module BMI — mddlog uses `import std` too, so the same constraint applies here
   until demonstrated otherwise on a specific toolchain.
 
-### 7. Host-supplied time: raw representation and the `MalformedTime` sentinel
+### 7. Host-supplied time: epoch, representation, and the unavailable-time state
 
-- **Type.** `using RawTime = std::chrono::nanoseconds;` — a `duration`, not a `time_point`. A
-  duration carries no clock or epoch association, so the governed core never has to reason about
-  which clock produced it; it is exactly the "raw time value supplied by the host" Decision 1 already
-  promises to store, and it is what ADR-002 Decision 5 renders to ISO-8601 in the adapter.
+Two problems in an earlier revision of this section are fixed here, both caught in review before
+merge: a plain `duration` has no epoch, so nothing told the adapter what "UTC ISO-8601" was measured
+from; and treating "no clock available" as a refusal reason contradicted ADR-002 Decision 5, which
+requires that state to be *representable*, i.e. an audit event must still be admitted when the host
+has no usable clock, not lost because of it.
+
+- **Type — a UTC time-point, not a bare duration.** `RawTime` wraps
+  `std::chrono::sys_time<std::chrono::nanoseconds>` (`std::chrono::time_point<std::chrono::system_clock,
+  std::chrono::nanoseconds>`), which the standard defines as Unix Time: a count of nanoseconds since
+  **1970-01-01T00:00:00Z UTC**, not counting leap seconds. That is the epoch ADR-002 Decision 5's
+  "single spelling, fixed fractional-second width, UTC" rendering is measured from — a plain
+  `std::chrono::nanoseconds` duration, used in an earlier draft of this section, cannot say that,
+  which is exactly what review flagged. Using `sys_time` fixes the epoch without requiring the
+  governed core to call anything: a `time_point` is still just a wrapped integer the caller
+  constructs and passes in, not an invitation to query a clock.
+- **`RawTime` is a small tagged type, not the bare time-point alone**, because "no usable clock" must
+  be storable rather than refused (see below):
+
+  ```text
+  enum class TimeAvailability : std::uint8_t { Available, Unavailable };
+
+  struct RawTime {
+      std::chrono::sys_time<std::chrono::nanoseconds> value;  // meaningful only when Available
+      TimeAvailability availability = TimeAvailability::Available;
+
+      static constexpr RawTime unavailable() noexcept { return {{}, TimeAvailability::Unavailable}; }
+  };
+  ```
+
+  Trivially copyable, `constexpr`-constructible, no allocation — the same governed-type discipline as
+  `InlineString`.
 - **The core reads no clock.** The value is a mandatory parameter the caller supplies at the write
   call site; nothing in `mddlog.core.record` or `mddlog.core.ring` calls
   `std::chrono::system_clock::now()`, `std::gmtime`, or any other clock/time-zone API — that path was
   already identified as a defect in `LogRecord::getFormattedTimestamp()` (Context) and Decision 1
-  already excludes it from the governed type. This is now a stated, checkable constraint: the
-  governed module's translation units should contain zero references to clock-query APIs, verifiable
-  by the same source-level scan Decision 6 names for allocation and throw.
-- **`MalformedTime` is one reserved sentinel, not a range check.** `RawTime::min()`
-  (`std::chrono::nanoseconds::min()`) means "the host has no usable time for this record." Any other
-  value — however implausible as a real timestamp — is accepted as-is: the governed core cannot know
-  what epoch or clock produced a given value, so it does not attempt to range-check plausibility or
-  detect clock jumps; that stays the host's responsibility, per ADR-002 Decision 5's "the host
-  supplies time."
-- **The sentinel is deliberately not zero and not an epoch value**, because ADR-002 Decision 5
-  already requires that a "civil time unavailable/unreliable" state be representable without
-  colliding with a legitimate zero/epoch timestamp. `RawTime::min()` cannot arise from a real UTC
-  nanosecond count in any range `std::chrono` represents meaningfully, so it is unambiguous.
-- A record whose time is the sentinel is refused as `Refused({MalformedTime, …})` (Decision 3) and is
-  never stored with a placeholder time — the same "nothing partial or synthetic is ever stored"
-  discipline Decision 2 applies to identifiers, extended here to time.
+  already excludes it from the governed type. `sys_time` names an epoch, it does not read one: the
+  host converts whatever clock it has (a hardware RTC, an NTP-disciplined counter, or nothing at all)
+  to Unix-time nanoseconds itself, or passes `RawTime::unavailable()`. This is now a stated, checkable
+  constraint: the governed module's translation units should contain zero references to clock-query
+  APIs, verifiable by the same source-level scan Decision 6 names for allocation and throw.
+- **Unavailable time is *admitted*, never refused.** A record built with `RawTime::unavailable()` is
+  written normally (`Admission::Written`); the adapter renders its time as an explicit
+  "unavailable/unreliable" marker at serialization, per ADR-002 Decision 5, rather than as a zero or
+  epoch timestamp that would misrepresent it as real. An audit event is not held hostage to its
+  producer's clock: losing a hazard-relevant event because the clock was unavailable would be exactly
+  the silent-loss failure mode ADR-002's Medical Device Considerations section rejects. This
+  supersedes the earlier draft's `Refused(MalformedTime)` treatment of "no usable time," which was
+  irreconcilable with ADR-002 Decision 5 as review noted.
+- **`MalformedTime` stays in the `Refusal` enum (Decision 3) but is unreachable under this concrete
+  type, and that is stated rather than left implicit.** `RawTime` here has exactly two well-formed
+  states — `Available(value)` and `Unavailable` — both constructed only through the type's own
+  interface, so there is no third, ill-formed bit pattern for a conforming caller to produce; the core
+  does not range-check `value` for plausibility either (Decision 3 as originally drafted already
+  disclaims that). The reason is kept in the enum for API stability and as the attachment point for a
+  future, more constrained time representation (e.g. a validated wire format) that could actually
+  produce it — the same "defined but practically unreachable" treatment Decision 4 gives counter
+  overflow, applied here to a refusal reason instead of a wraparound.
 
 ### 8. Memory budget: a worked example, and what it does and does not guarantee
 
@@ -419,18 +456,18 @@ buffer) plus 2 (the `std::uint16_t` length), rounded up to the type's alignment 
 | Member | Approx. size |
 |---|---|
 | `level` (`LogLevel`) | 1 byte |
-| `time` (`RawTime`, Decision 7) | 8 bytes |
+| `time` (`RawTime`, Decision 7 — an 8-byte `sys_time<nanoseconds>` plus a 1-byte `TimeAvailability` tag, padded to its 8-byte alignment) | 16 bytes |
 | `location` (`std::source_location`) | ~24 bytes (implementation-defined; commonly two pointers plus two 32-bit ints on a 64-bit target) |
 | `message` (`InlineString<160>`) | 162 bytes |
 | `component` (`InlineString<32>`) | 34 bytes |
 | `operationId` (`InlineString<32>`) | 34 bytes |
 | `correlationId` (`InlineString<40>`) | 42 bytes |
-| **Sum before alignment** | **≈305 bytes** |
-| **`sizeof(LogRecord)`, rounded to 8-byte alignment** | **≈312 bytes** |
+| **Sum before alignment** | **≈313 bytes** |
+| **`sizeof(LogRecord)`, rounded to 8-byte alignment** | **≈320 bytes** |
 
 **`RingLog` budget, worked example.** Overhead beyond the slots is three `std::atomic<std::uint64_t>`
 values (write cursor, read cursor, refusal counter — Decision 4): 24 bytes. A `RingLog<1024>` is
-therefore approximately `1024 × 312 + 24 ≈ 319,512 bytes`, i.e. **≈312 KiB** — a single, static,
+therefore approximately `1024 × 320 + 24 ≈ 327,704 bytes`, i.e. **≈320 KiB** — a single, static,
 computable number in place of "however large the queue happens to grow."
 
 **What is *not* guaranteed:**
@@ -522,11 +559,12 @@ a mode of this one.
 - **Refuse-new starves a slow consumer's producer under sustained load.** *Mitigation*: refusals are
   counted and observable (Decision 3), so sustained refusal is a visible condition the host can act
   on, rather than a silent one — but the host, not the logger, decides what to do about it.
-- **A host that does not know its own clock's reliability leaves `time` malformed by omission,
-  rather than deliberately signaling unavailability.** *Mitigation*: Decision 7 defines exactly one
-  sentinel value (`RawTime::min()`) for "no usable time," distinguishable from every legitimate
-  timestamp; a host that never has a usable clock should pass the sentinel explicitly rather than an
-  arbitrary or zero value, and this ADR does not infer unavailability from any other input.
+- **A host that does not know its own clock's reliability leaves `time` ambiguous with a real
+  timestamp, or its record is lost for lack of one.** *Mitigation*: Decision 7's `RawTime` carries an
+  explicit `TimeAvailability::Unavailable` state, distinguishable from every legitimate timestamp and
+  from zero/epoch; a host with no usable clock passes `RawTime::unavailable()` and the record is
+  still admitted and written — never refused for lacking a clock reading, which is what ADR-002
+  Decision 5 requires and an earlier draft of Decision 7 got wrong.
 
 ## References
 All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
