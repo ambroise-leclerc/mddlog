@@ -97,7 +97,34 @@ Replace every `std::string` field with a caller-sized inline buffer plus length,
 `InlineString<N>` (a `std::array<char, N>` and a `std::uint16_t` length, `constexpr`, `noexcept`).
 Capacities are declared in **bytes**, not code points; a value is accepted only if it fits whole, so
 no field ever stores a partial UTF-8 sequence. `N` is constrained at compile time to the range the
-`std::uint16_t` length can represent.
+`std::uint16_t` length can represent, i.e. `N ∈ [0, 65535]` (`static_assert`ed in `InlineString`).
+None of the capacities chosen below come close to that ceiling; it bounds the type, it does not
+drive these values.
+
+**Field set, capacities and parametrization (the "Standard" preset).** The governed record keeps
+exactly the fields Decision 1 already names — `level`, the raw time value (Decision 7), the emission
+`std::source_location`, `message`, and the three-part context envelope `component`/`operationId`/
+`correlationId` — and no others; no field of the current allocating `LogRecord` beyond those survives
+into the governed type (Decision 6 covers what happens to the rest). Capacities:
+
+| Field | Kind (Decision 2) | Capacity | Rationale |
+|---|---|---|---|
+| `message` | descriptive | 160 bytes | A first documented default for a diagnostic line; under-sizing only costs truncation (never a refusal), so the risk of guessing without call-site data is lower than for an identifier field. |
+| `component` | identifier | 32 bytes | Fits a module/service/component name (e.g. `mddlog.core.ring`, `webfront.session`) with margin; identifiers refuse rather than truncate, so this must not be tight against real names. |
+| `operationId` | identifier | 32 bytes | Same margin reasoning as `component`; sized for a short operation/call tag, not a free-form description. |
+| `correlationId` | identifier | 40 bytes | Sized to hold a 36-character canonical UUID (the most common correlation-id shape) plus 4 bytes of headroom for a non-UUID scheme, rather than the tight 36. |
+
+**Parametrization mode.** These four capacities are `constexpr std::size_t` constants declared
+alongside `mddlog.core.record`, forming one fixed preset — not template parameters exposed on the
+public `LogRecord` type itself. `InlineString<N>` stays a reusable template, but the record type
+built from it is a single, concrete (non-template) struct. This is a deliberate choice between the
+two options the issue that requested this section raised: exposing `N` as template parameters on
+`LogRecord` would let every consumer pick its own capacities, but it would also mean `RingLog`, the
+sinks, and the adapter would each have to agree on (or template over) the same instantiation, and a
+mismatched pair would fail to link rather than fail a documented contract. One named preset avoids
+that combinatorial surface. If a second footprint is ever needed (e.g. a more constrained target), it
+is a **second, distinctly named** type — e.g. `CompactLogRecord` with its own constants — not a
+second instantiation of the same template family.
 
 Drop `getFormattedTimestamp()`/`getSourceLocationString()`'s `std::stringstream`/`std::gmtime` path
 from the governed type: a governed record stores a raw time value supplied by the host (ADR-002
@@ -127,6 +154,26 @@ indistinguishable, which silently corrupts exactly the linkage ADR-002 depends o
 - **Descriptive-text fields** (message, free-form description): may be truncated, and truncation is
   flagged on the record and reported in the call's result.
 
+**Exhaustive classification for the "Standard" preset (Decision 1).** Identifier-kind:
+`component`, `operationId`, `correlationId` — three fields, all refuse-on-overflow, never truncated.
+Descriptive: `message` — the only field currently subject to truncation. `level` and the raw time
+value are fixed-size (Decision 7) and are not classified at all: classification only applies to the
+variable-length, caller-supplied text fields.
+
+**Truncation never cuts a UTF-8 sequence, and does not validate well-formedness.** When `message`
+must be shortened to fit its capacity, the cut point is walked backward from the byte-`N` boundary
+until it lands on a byte that is not a UTF-8 continuation byte (top two bits `10`) — at most 3 bytes
+of backtracking, since the longest UTF-8 sequence is 4 bytes. This is a *boundary search*, not a
+validity check: it finds where a sequence starts, it does not confirm the sequence is well-formed.
+Consequently, if the caller's input was **already** malformed UTF-8 before truncation (a stray
+continuation byte, an overlong encoding, an unpaired lead byte), the governed core neither detects
+nor repairs that — the bytes are stored (truncated per the rule above, or stored whole if they fit)
+exactly as given, with no additional flag. General UTF-8 well-formedness validation is an explicit
+non-goal of the governed write path: it would add a second, content-dependent rejection or
+flagging mechanism this ADR does not otherwise define, and validating/repairing text is a sink- or
+caller-zone concern if it is wanted at all. Identifier fields have no equivalent complication: they
+are stored whole or not at all, so no boundary search ever applies to them.
+
 ### 3. The result type expresses admission and truncation independently
 
 A `bool` cannot carry this contract. The governed write returns a small value with two independent
@@ -135,6 +182,49 @@ components:
 - **admission**: `Written` | `Refused(reason)` — where `reason` distinguishes at minimum
   `RingFull`, `IdentifierTooLong(field)` and `MalformedTime`;
 - **truncation**: whether any descriptive field was shortened, and which.
+
+**Exact shape.** The two components are independent, but only one of them is meaningful at a time in
+the sense that a refused write carries no truncation (it was never stored):
+
+```text
+enum class RefusalReason : std::uint8_t { RingFull, IdentifierTooLong, MalformedTime };
+enum class IdentifierField : std::uint8_t { Component, OperationId, CorrelationId };
+
+struct Refusal {
+    RefusalReason   reason;
+    IdentifierField field;  // meaningful only when reason == IdentifierTooLong
+};
+
+enum class Admission : std::uint8_t { Written, Refused };
+
+struct TruncatedFields {
+    bool message = false;  // the only descriptive field today; grows if more are added
+};
+
+struct WriteResult {
+    Admission       admission;
+    Refusal         refusal;     // valid only when admission == Refused
+    TruncatedFields truncated;   // valid only when admission == Written
+};
+```
+
+**Priority when several refusal conditions apply at once.** Checks run in one fixed order and the
+**first** failing check is the reason reported — reasons are never accumulated into a set:
+
+1. `MalformedTime` (Decision 7) — cheapest check, and a malformed time makes the record un-storable
+   independently of anything else about it.
+2. `IdentifierTooLong`, evaluated in field declaration order — `component`, then `operationId`, then
+   `correlationId` — so the first offending field is the one reported; a caller that fixes it and
+   resubmits will see the next offending field, if any, rather than a stale reason.
+3. `RingFull`, checked **last**. This is a deliberate ordering, not an arbitrary one: content
+   validation (steps 1–2) happens before the write ever attempts to reserve a ring slot, so a
+   content-invalid record never touches the ring, never advances the write cursor, and never
+   competes with a valid write for capacity. Checking the atomic ring state is also the most
+   contended of the three checks, and there is no reason to pay for it before a cheaper, purely local
+   check has already decided the outcome.
+
+Truncation is orthogonal to this ordering: it is computed for descriptive fields only after a write
+is determined to be admissible, so it never participates in the refusal-priority decision above.
 
 The governed path returns this by value; it never throws, and contains no `try`/`catch`. This is a
 narrower version of
@@ -185,6 +275,17 @@ one:
   earlier draft left drop-oldest open as an option, and this revision closes it, because an audit
   event that was accepted and then silently overwritten is strictly worse than one that was never
   accepted.
+
+**Counter type, width and overflow.** The write cursor, the read cursor, and the refusal counter are
+all `std::atomic<std::uint64_t>`, using ordinary unsigned wraparound (modulo 2⁶⁴) rather than
+saturating arithmetic — unsigned overflow is well-defined by the standard as modulo-2ᴺ, not UB, so
+"defined" does not require extra branches on the increment's hot path. Wraparound is treated as
+**unreachable in practice, not merely defined**: at an optimistic sustained rate of 10⁸ records per
+second — far beyond any plausible logging throughput — a 64-bit counter takes on the order of 5,800
+years to wrap. No wrap-handling logic is implemented; the width is chosen specifically so that none
+is needed within any device's operational lifetime. This same width and rule (64-bit, monotonic,
+natural modulo wraparound, unreachable in practice) is what ADR-002 Decision 5 asks the implementing
+issue to state for `AuditEvent.sequence`, and this is that statement.
 - **Drain view lifetime**: the consumer obtains the unread region as **one or two**
   `std::span<const LogRecord>` (two when the unread region wraps). Those spans are valid only until
   the consumer advances the read cursor; the consumer must finish copying out of them before
@@ -231,6 +332,32 @@ split to mean anything:
   to import and link the governed core without pulling in `SimpleLogger`, the sinks, or their
   dependencies.
 
+**Resolved: placement of the two existing modules this decision otherwise leaves ambiguous.**
+
+- `mddlog.core.loglevel` **splits**. The `LogLevel` enum and its `constexpr noexcept` semantic
+  helpers (`toString`, `fromString`, `isComplianceLevel`) allocate nothing, throw nothing, and are
+  usable identically by governed and adapter code — they stay under `mddlog.core.loglevel` and count
+  as governed. `getColorCode`/`getResetColorCode`, however, are ANSI console-styling helpers with
+  exactly one caller today (`ConsoleSink::write()`, `sinks/ConsoleSink.cppm:61,95`) — ANSI escape
+  sequences are a presentation concern, not a governed one, so they move out of `mddlog.core.*` into
+  the sink zone (inlined into `mddlog.sinks.consolesink`, since no other consumer justifies a
+  separate colors module). Being allocation-free is necessary for a symbol to stay under
+  `mddlog.core.*`, but this split shows it is not sufficient on its own — semantic ownership (is this
+  governed-record logic, or sink presentation?) is the other half of the test.
+- The current allocating `LogRecord` (`include/mddlog/core/LogRecord.cppm`, nine `std::string`
+  fields plus `Metadata`) **cannot** remain under `mddlog.core.*` once the governed record exists,
+  per this decision's own rule. It moves wholesale — together with `LogStatistics`, which lives in
+  the same file today — to an adapter module, `mddlog.adapter.logrecord`. `LogStatistics` is
+  mechanically allocation-free (only atomics), but it is not a governed *record* type: it counts
+  outcomes of sink I/O (`bytesWritten`, `flushCount`, `totalWriteTimeNs`), which is adapter-zone
+  activity by the same semantic-ownership test just applied to the color helpers, so it moves with
+  the type it instruments rather than staying behind for being technically allocation-free. This
+  frees the name `mddlog.core.record` (Decision 1's table) to mean only the new governed type,
+  avoiding any naming collision or "core used to mean something else" ambiguity between the old and
+  new records. This move is the module rename this decision already commits to for `SimpleLogger`;
+  it is not a second, separately-decided rename — it is scoped here so the target-separation
+  implementation issue has an unambiguous source module list to start from.
+
 Verification criteria for that boundary, in decreasing strength: a link/import dependency-graph
 check; an object scan over the compiled governed target; and source-level checks for forbidden
 constructs. mddlog has **no CI workflow at all yet** (issue #5), so none of these exist today and
@@ -245,6 +372,75 @@ this ADR must not be read as claiming them. Three limits apply even once they do
   that `import std` and `-fno-exceptions` are mutually exclusive on GCC because the dialect is
   recorded in the module BMI — mddlog uses `import std` too, so the same constraint applies here
   until demonstrated otherwise on a specific toolchain.
+
+### 7. Host-supplied time: raw representation and the `MalformedTime` sentinel
+
+- **Type.** `using RawTime = std::chrono::nanoseconds;` — a `duration`, not a `time_point`. A
+  duration carries no clock or epoch association, so the governed core never has to reason about
+  which clock produced it; it is exactly the "raw time value supplied by the host" Decision 1 already
+  promises to store, and it is what ADR-002 Decision 5 renders to ISO-8601 in the adapter.
+- **The core reads no clock.** The value is a mandatory parameter the caller supplies at the write
+  call site; nothing in `mddlog.core.record` or `mddlog.core.ring` calls
+  `std::chrono::system_clock::now()`, `std::gmtime`, or any other clock/time-zone API — that path was
+  already identified as a defect in `LogRecord::getFormattedTimestamp()` (Context) and Decision 1
+  already excludes it from the governed type. This is now a stated, checkable constraint: the
+  governed module's translation units should contain zero references to clock-query APIs, verifiable
+  by the same source-level scan Decision 6 names for allocation and throw.
+- **`MalformedTime` is one reserved sentinel, not a range check.** `RawTime::min()`
+  (`std::chrono::nanoseconds::min()`) means "the host has no usable time for this record." Any other
+  value — however implausible as a real timestamp — is accepted as-is: the governed core cannot know
+  what epoch or clock produced a given value, so it does not attempt to range-check plausibility or
+  detect clock jumps; that stays the host's responsibility, per ADR-002 Decision 5's "the host
+  supplies time."
+- **The sentinel is deliberately not zero and not an epoch value**, because ADR-002 Decision 5
+  already requires that a "civil time unavailable/unreliable" state be representable without
+  colliding with a legitimate zero/epoch timestamp. `RawTime::min()` cannot arise from a real UTC
+  nanosecond count in any range `std::chrono` represents meaningfully, so it is unambiguous.
+- A record whose time is the sentinel is refused as `Refused({MalformedTime, …})` (Decision 3) and is
+  never stored with a placeholder time — the same "nothing partial or synthetic is ever stored"
+  discipline Decision 2 applies to identifiers, extended here to time.
+
+### 8. Memory budget: a worked example, and what it does and does not guarantee
+
+**What is guaranteed.** `sizeof(LogRecord)` is a compile-time constant, obtainable via `sizeof` and
+checkable with `static_assert` before first use. The footprint of `RingLog<Capacity>` is exactly
+`Capacity * sizeof(LogRecord)` plus a fixed, small overhead for its cursors and refusal counter —
+never anything more, and never subject to growth once constructed, in contrast to today's unbounded
+`std::queue<LogRecord>` (Context), which has no such bound at all.
+
+**Record layout, "Standard" preset (Decision 1).** `sizeof(InlineString<N>)` is `N` (the byte
+buffer) plus 2 (the `std::uint16_t` length), rounded up to the type's alignment — a fixed cost of
+`N + 2` plus at most a few bytes of padding under any reasonable compiler layout:
+
+| Member | Approx. size |
+|---|---|
+| `level` (`LogLevel`) | 1 byte |
+| `time` (`RawTime`, Decision 7) | 8 bytes |
+| `location` (`std::source_location`) | ~24 bytes (implementation-defined; commonly two pointers plus two 32-bit ints on a 64-bit target) |
+| `message` (`InlineString<160>`) | 162 bytes |
+| `component` (`InlineString<32>`) | 34 bytes |
+| `operationId` (`InlineString<32>`) | 34 bytes |
+| `correlationId` (`InlineString<40>`) | 42 bytes |
+| **Sum before alignment** | **≈305 bytes** |
+| **`sizeof(LogRecord)`, rounded to 8-byte alignment** | **≈312 bytes** |
+
+**`RingLog` budget, worked example.** Overhead beyond the slots is three `std::atomic<std::uint64_t>`
+values (write cursor, read cursor, refusal counter — Decision 4): 24 bytes. A `RingLog<1024>` is
+therefore approximately `1024 × 312 + 24 ≈ 319,512 bytes`, i.e. **≈312 KiB** — a single, static,
+computable number in place of "however large the queue happens to grow."
+
+**What is *not* guaranteed:**
+- The exact byte counts above are **not** portable across compilers/ABIs — `std::source_location`'s
+  layout, struct padding, and enum packing are all implementation-defined. The guarantee is that the
+  number is a fixed compile-time constant *for a given toolchain*, not that the constant is the same
+  number everywhere.
+- **No cache-line placement or false-sharing avoidance is promised** between the write cursor, read
+  cursor and refusal counter; three atomics may share a cache line under a naive layout. Avoiding
+  that (e.g. with `alignas`) is a performance optimization a later revision may add — it is not a
+  correctness property this ADR requires, so it is out of scope here.
+- **This budget is per `RingLog` instance.** A multi-producer deployment (Decision 4: one ring per
+  producer, aggregated by the adapter) multiplies it by the number of producer rings; sizing that
+  aggregate is an adapter-zone decision, not something this record fixes.
 
 ## Alternatives Considered
 
@@ -293,8 +489,16 @@ a mode of this one.
   behavioral change for existing callers, not only an internal one.
 - The module rename and target split (Decision 6) are a breaking change for any consumer importing
   `mddlog.core.logger` directly — the type survives the move, the import path does not, and this
-  record chooses migration over a permanent compatibility module.
+  record chooses migration over a permanent compatibility module. Decision 6 now also moves
+  `mddlog.core.logrecord` (the current allocating type, plus `LogStatistics`) and part of
+  `mddlog.core.loglevel` (`getColorCode`/`getResetColorCode`) into the adapter/sink zone: the
+  breaking surface for direct-module importers is therefore slightly larger than the first draft
+  implied, not limited to `SimpleLogger`.
 - No mechanical enforcement exists yet; this ADR makes the boundary reviewable, not enforced.
+- Chosen capacities (Decision 1) are a first documented default, not derived from real call-site
+  measurements — the same caveat ADR-002 Decision 1 states for its own identifier grammars. An
+  under-sized identifier capacity produces refusals in the field; widening a capacity later is a
+  binary-compatibility-breaking change to `LogRecord`'s layout, not a silent fix.
 
 ### Risks and Mitigations
 - **The precedent is overstated.** MduX describes itself as experimental; its ADRs, dependency
@@ -313,6 +517,11 @@ a mode of this one.
 - **Refuse-new starves a slow consumer's producer under sustained load.** *Mitigation*: refusals are
   counted and observable (Decision 3), so sustained refusal is a visible condition the host can act
   on, rather than a silent one — but the host, not the logger, decides what to do about it.
+- **A host that does not know its own clock's reliability leaves `time` malformed by omission,
+  rather than deliberately signaling unavailability.** *Mitigation*: Decision 7 defines exactly one
+  sentinel value (`RawTime::min()`) for "no usable time," distinguishable from every legitimate
+  timestamp; a host that never has a usable clock should pass the sentinel explicitly rather than an
+  arbitrary or zero value, and this ADR does not infer unavailability from any other input.
 
 ## References
 All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
@@ -321,10 +530,12 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - [MduX `Trace.cppm`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/medui/Trace.cppm) — `SampleRing`, cited in Decision 4 for what it is *not* a precedent for.
 - [MduX `cmake/MduXNoHeapScan.cmake`](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/cmake/MduXNoHeapScan.cmake) — the two scan profiles and their different scopes.
 - mddlog issue #5 — the unbounded queue, the root-level `mddlog.cppm` ambiguity, and the absent CI this ADR's Decision 6 depends on.
+- mddlog issue #31 — closed the open points this record left implicit (Decisions 1's capacities and parametrization, 2's UTF-8 truncation boundary, 3's exact result shape and refusal priority, 4's counter width, 6's placement of `mddlog.core.loglevel`/`mddlog.core.logrecord`, and the new Decisions 7–8 on time and memory budget); it did not change this ADR's status.
 - ADR-002 (this repository) — the audit delivery contract built on Decision 3 and Decision 4, and the audit-health signal that reports losses occurring after admission.
 - ADR-004 (this repository) — persistence and tamper evidence, including the sink that would have to preserve every audit field.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review.
+- **Decision Date**: not yet approved — drafted for review. Closing issue #31 records that the open
+  points below were answered; it is not, by itself, maintainer acceptance of this ADR.
 - **Approved By**: pending (project maintainer).
 - **Review Date**: when a follow-up issue implementing `RingLog`/`InlineString` is opened, or when issue #5's build/test work lands, whichever is first.
