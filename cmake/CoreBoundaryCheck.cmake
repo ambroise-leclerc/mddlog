@@ -19,7 +19,7 @@ if(NOT DEFINED MODULE_FILES)
     message(FATAL_ERROR "CoreBoundaryCheck.cmake: MODULE_FILES must be set with -D")
 endif()
 
-set(forbidden_pattern "^import[ \t]+mddlog\\.(sinks|adapter)\\.")
+set(forbidden_pattern "^[ \t]*(export[ \t]+)?import[ \t]+mddlog\\.(sinks|adapter)\\.")
 set(violations)
 
 foreach(module_file IN LISTS MODULE_FILES)

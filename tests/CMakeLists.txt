@@ -37,12 +37,15 @@ endif()
 # built target can never drift apart from listing different files.
 set(mddlog_core_absolute_module_files)
 foreach(module_file IN LISTS MDDLOG_CORE_MODULE_FILES)
-    list(APPEND mddlog_core_absolute_module_files "${CMAKE_SOURCE_DIR}/${module_file}")
+    # PROJECT_SOURCE_DIR, not CMAKE_SOURCE_DIR: if mddlog is ever consumed via add_subdirectory()
+    # from a parent project, CMAKE_SOURCE_DIR points at that parent's source tree, not mddlog's
+    # own - PROJECT_SOURCE_DIR still resolves to mddlog's root (the most recent project() call).
+    list(APPEND mddlog_core_absolute_module_files "${PROJECT_SOURCE_DIR}/${module_file}")
 endforeach()
 add_test(NAME build.core.boundary
     COMMAND ${CMAKE_COMMAND}
         -D "MODULE_FILES=${mddlog_core_absolute_module_files}"
-        -P ${CMAKE_SOURCE_DIR}/cmake/CoreBoundaryCheck.cmake)
+        -P ${PROJECT_SOURCE_DIR}/cmake/CoreBoundaryCheck.cmake)
 set_tests_properties(build.core.boundary PROPERTIES LABELS "build")
 
 # ---------------------------------------------------------------------------
