@@ -1,7 +1,8 @@
 # ADR-001: Allocation-free governed logging core for IEC 62304 Class C
 
 ## Status
-Proposed — drafted for maintainer review, not yet acted on.
+Accepted — the governed/adapter boundary and the contracts in Decisions 1–8 are the design the
+codebase is expected to conform to; none of it is implemented yet (see Consequences and Approval).
 
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
@@ -511,9 +512,10 @@ a mode of this one.
   of mddlog itself. *Mitigation*: keep this sentence in the ADR, and keep README's `(planned)`
   markers honest.
 - **The boundary is stated but not enforced, and drifts under later edits.** *Mitigation*: the
-  dependency-graph and object-scan checks in Decision 6 must be tracked as a named follow-up before
-  this ADR moves to Accepted — MduX's own ADR-004 had to be amended in 2026-08 because it asserted a
-  lint that did not yet exist.
+  dependency-graph and object-scan checks in Decision 6 are tracked as a named follow-up against the
+  implementation issue(s); acceptance here records the contract, not that enforcement exists —
+  MduX's own ADR-004 had to be amended in 2026-08 because it asserted a lint that did not yet exist,
+  which is the mistake this mitigation is written to avoid repeating.
 - **Refuse-new starves a slow consumer's producer under sustained load.** *Mitigation*: refusals are
   counted and observable (Decision 3), so sustained refusal is a visible condition the host can act
   on, rather than a silent one — but the host, not the logger, decides what to do about it.
@@ -535,7 +537,6 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - ADR-004 (this repository) — persistence and tamper evidence, including the sink that would have to preserve every audit field.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review. Closing issue #31 records that the open
-  points below were answered; it is not, by itself, maintainer acceptance of this ADR.
-- **Approved By**: pending (project maintainer).
+- **Decision Date**: 2026-09-24.
+- **Approved By**: ambroise-leclerc (project maintainer).
 - **Review Date**: when a follow-up issue implementing `RingLog`/`InlineString` is opened, or when issue #5's build/test work lands, whichever is first.
