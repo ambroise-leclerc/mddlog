@@ -15,7 +15,7 @@ capability as delivered from an ADR's existence alone.
 
 | ADR | Title | Status |
 |---|---|---|
-| [001](ADR-001-allocation-free-governed-logging-core.md) | Allocation-free governed logging core for IEC 62304 Class C | Proposed |
+| [001](ADR-001-allocation-free-governed-logging-core.md) | Allocation-free governed logging core for IEC 62304 Class C | Accepted |
 | [002](ADR-002-regulatory-audit-event-model.md) | Regulatory audit-event model, separate from application logging | Proposed |
 | [003](ADR-003-application-integration-and-sink-ownership.md) | Application integration and sink ownership | Proposed |
 | [004](ADR-004-audit-persistence-and-tamper-evidence.md) | Audit persistence and tamper evidence | Proposed |
