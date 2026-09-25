@@ -26,8 +26,8 @@ enum class IdentifierField : std::uint8_t { Component, OperationId, CorrelationI
  * Unavailable time is admitted (ADR-001 Decision 7).
  */
 struct Refusal {
-    RefusalReason   reason;
-    IdentifierField field;
+    RefusalReason   reason = RefusalReason::RingFull;
+    IdentifierField field  = IdentifierField::Component;
 };
 
 /** @brief Descriptive fields shortened in a successfully written record. */
@@ -38,34 +38,44 @@ struct TruncatedFields {
 /**
  * @brief Admission and truncation of one governed write, returned by value.
  *
- * `refusal` is meaningful only when admission is Refused; `truncated` is meaningful only when
- * admission is Written. A refused write has no stored record and therefore no truncated fields.
- * Use the factories to construct those states. No exception, allocation, or text conversion is
- * involved. ADR-001 Decision 3 deliberately keeps this small result instead of std::expected;
- * a broader governed API would require a separate decision about adopting std::expected.
+ * A refusal is present only when admission is Refused; a refused write has no stored record and
+ * therefore no truncated fields. Factories and read-only accessors preserve this invariant. No
+ * exception, allocation, or text conversion is involved. ADR-001 Decision 3 deliberately keeps
+ * this small result instead of std::expected; a broader governed API would require a separate
+ * decision about adopting std::expected.
  */
-struct [[nodiscard]] WriteResult {
-    Admission       admission;
-    Refusal         refusal;
-    TruncatedFields truncated;
-
+class [[nodiscard]] WriteResult {
+public:
     /** @brief Report an admitted write and its descriptive-field truncation. */
     [[nodiscard]] static constexpr WriteResult written(TruncatedFields shortened = {}) noexcept {
-        return {
-            Admission::Written,
-            {.reason = RefusalReason::RingFull, .field = IdentifierField::Component},
-            shortened
-        };
+        return {std::nullopt, shortened};
     }
 
     /** @brief Report a refused write; no truncation is reported. */
     [[nodiscard]] static constexpr WriteResult refused(Refusal failure) noexcept {
-        return {Admission::Refused, failure, {}};
+        return {failure, {}};
+    }
+
+    /** @brief Return whether the write was admitted or refused. */
+    [[nodiscard]] constexpr Admission admission() const noexcept {
+        return refusalValue.has_value() ? Admission::Refused : Admission::Written;
+    }
+
+    /** @brief Return the refusal only for a refused write; an admitted write returns std::nullopt. */
+    [[nodiscard]] constexpr std::optional<Refusal> refusal() const noexcept {
+        return refusalValue;
+    }
+
+    /** @brief Return the shortened fields; all flags are false for a refused write. */
+    [[nodiscard]] constexpr TruncatedFields truncated() const noexcept {
+        return truncatedValue;
     }
 
 private:
-    constexpr WriteResult(Admission outcome, Refusal failure, TruncatedFields shortened) noexcept
-        : admission(outcome), refusal(failure), truncated(shortened) {}
+    constexpr WriteResult(std::optional<Refusal> failure, TruncatedFields shortened) noexcept : refusalValue(failure), truncatedValue(shortened) {}
+
+    std::optional<Refusal> refusalValue;
+    TruncatedFields        truncatedValue;
 };
 
 static_assert(std::is_trivially_copyable_v<WriteResult>);

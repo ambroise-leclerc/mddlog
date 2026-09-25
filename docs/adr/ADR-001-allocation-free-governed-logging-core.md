@@ -195,7 +195,7 @@ components:
   `RingFull`, `IdentifierTooLong(field)` and `MalformedTime`;
 - **truncation**: whether any descriptive field was shortened, and which.
 
-**Exact shape.** The two components are independent, but only one of them is meaningful at a time in
+**Logical shape.** The two components are independent, but only one of them is meaningful at a time in
 the sense that a refused write carries no truncation (it was never stored):
 
 ```text
@@ -203,8 +203,8 @@ enum class RefusalReason : std::uint8_t { RingFull, IdentifierTooLong, Malformed
 enum class IdentifierField : std::uint8_t { Component, OperationId, CorrelationId };
 
 struct Refusal {
-    RefusalReason   reason;
-    IdentifierField field;  // meaningful only when reason == IdentifierTooLong
+    RefusalReason   reason = RefusalReason::RingFull;
+    IdentifierField field = IdentifierField::Component;  // meaningful only when reason == IdentifierTooLong
 };
 
 enum class Admission : std::uint8_t { Written, Refused };
@@ -219,6 +219,14 @@ struct WriteResult {
     TruncatedFields truncated;   // valid only when admission == Written
 };
 ```
+
+This sketch names the logical fields, not a mutable public layout. The concrete `WriteResult` keeps
+its state private: `admission()` derives the state from the optional refusal, `refusal()` returns
+that refusal (absent for a written record), and `truncated()` returns the flags by value (all false
+for a refusal).
+Its factories establish the invariant, and callers cannot alter one component independently after
+construction. A default-constructed `Refusal` initializes both members, including `field` even
+when the reason is not `IdentifierTooLong`.
 
 **Priority when several refusal conditions apply at once.** Checks run in one fixed order and the
 **first** failing check is the reason reported — reasons are never accumulated into a set:
