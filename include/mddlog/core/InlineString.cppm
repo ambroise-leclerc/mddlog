@@ -8,93 +8,6 @@ import std;
 
 namespace mddlog::core {
 
-namespace detail {
-
-// UTF-8 lead-byte patterns: (byte & mask) == tag identifies the byte's role. A continuation byte
-// is 10xxxxxx; a lead byte's high bits count how many continuation bytes follow it.
-inline constexpr unsigned char continuationByteMask = 0xC0;
-inline constexpr unsigned char continuationByteTag  = 0x80;
-inline constexpr unsigned char asciiByteMask        = 0x80;
-inline constexpr unsigned char asciiByteTag         = 0x00;
-inline constexpr unsigned char twoByteLeadMask      = 0xE0;
-inline constexpr unsigned char twoByteLeadTag       = 0xC0;
-inline constexpr unsigned char threeByteLeadMask    = 0xF0;
-inline constexpr unsigned char threeByteLeadTag     = 0xE0;
-inline constexpr unsigned char fourByteLeadMask     = 0xF8;
-inline constexpr unsigned char fourByteLeadTag      = 0xF0;
-
-// The longest UTF-8 sequence is 4 bytes (1 lead + 3 continuation), so a continuation byte is at
-// most 3 positions past its sequence's lead byte - the bound the truncation-boundary search below
-// backtracks by.
-inline constexpr std::size_t maxUtf8ContinuationBytes = 3;
-
-static constexpr bool isUtf8ContinuationByte(char c) noexcept {
-    return (static_cast<unsigned char>(c) & continuationByteMask) == continuationByteTag;
-}
-
-/// Expected total length of the UTF-8 sequence starting with lead byte `c`. Returns 1 for ASCII,
-/// for a continuation byte (never a valid lead), and for an invalid lead byte (0xF8-0xFF): the
-/// governed core does not validate well-formedness, so those cases are treated as an opaque
-/// single byte rather than rejected.
-static constexpr std::size_t utf8SequenceLength(char c) noexcept {
-    const auto b = static_cast<unsigned char>(c);
-    if ((b & asciiByteMask) == asciiByteTag)
-        return 1;
-    if ((b & twoByteLeadMask) == twoByteLeadTag)
-        return 2;
-    if ((b & threeByteLeadMask) == threeByteLeadTag)
-        return 3;
-    if ((b & fourByteLeadMask) == fourByteLeadTag)
-        return 4;
-    return 1;
-}
-
-/**
- * @brief Longest prefix of `value` that fits in `capacity` bytes without ending in the middle of
- *        a well-formed UTF-8 sequence (ADR-001 Decision 2).
- *
- * Walks backward from the byte-`capacity` boundary, capped at maxUtf8ContinuationBytes bytes of
- * backtracking, to find the lead byte of the sequence straddling the cut point. If that sequence
- * fits whole within `capacity` after all - it was simply sitting right at the boundary - the
- * original boundary stands unchanged; if it does not fit, the whole sequence is dropped rather
- * than left partial. For input that is already malformed before this ever runs -
- * maxUtf8ContinuationBytes or more consecutive continuation bytes ending at the cut point, which
- * cannot occur in well-formed UTF-8 within this bound - the search stops unconditionally at the
- * cap and the cut is made there, whatever it lands on; this function never validates or repairs
- * malformed input, it only avoids introducing a fresh split in input that was well-formed to
- * begin with.
- */
-static constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t capacity) noexcept {
-    if (value.size() <= capacity)
-        return value.size();
-
-    // Scans backward from `capacity`, looking for the first non-continuation byte at or before
-    // it - the lead byte of the sequence (if any) straddling the cut point.
-    std::size_t pos   = capacity;
-    std::size_t steps = 0;
-    while (steps < maxUtf8ContinuationBytes && pos > 0 && isUtf8ContinuationByte(value[pos - 1])) {
-        --pos;
-        ++steps;
-    }
-
-    if (pos == 0 || isUtf8ContinuationByte(value[pos - 1])) {
-        // The backtrack cap was hit without reaching a non-continuation byte - only reachable
-        // with already-malformed input - and `pos` stands as the cut, whatever it lands on.
-        return pos;
-    }
-
-    const std::size_t leadPos  = pos - 1;
-    const std::size_t expected = utf8SequenceLength(value[leadPos]);
-    if (leadPos + expected <= capacity) {
-        // The sequence starting at leadPos fits whole within capacity after all - it was simply
-        // sitting right at the boundary - so the original boundary needs no adjustment.
-        return capacity;
-    }
-    return leadPos;  // the sequence does not fit whole within capacity; drop it entirely
-}
-
-}  // namespace detail
-
 /**
  * @brief Fixed-capacity, owned, allocation-free string storage (ADR-001 Decisions 1-2).
  *
@@ -129,7 +42,7 @@ public:
      *         the (possibly shortened) result; never fails.
      */
     constexpr bool assignTruncating(std::string_view value) noexcept {
-        const std::size_t copyLen = detail::utf8TruncationBoundary(value, N);
+        const std::size_t copyLen = utf8TruncationBoundary(value, N);
         std::copy_n(value.begin(), copyLen, bytes.begin());
         length = static_cast<std::uint16_t>(copyLen);
         return copyLen < value.size();
@@ -156,6 +69,91 @@ public:
     }
 
 private:
+    // Keep these helpers as private members of the exported template: namespace-scope helpers with
+    // internal linkage are not reachable when importers instantiate the template on GCC and MSVC.
+    // UTF-8 lead-byte patterns: (byte & mask) == tag identifies the byte's role. A continuation
+    // byte is 10xxxxxx; a lead byte's high bits count how many continuation bytes follow it.
+    static constexpr unsigned char continuationByteMask = 0xC0;
+    static constexpr unsigned char continuationByteTag  = 0x80;
+    static constexpr unsigned char asciiByteMask        = 0x80;
+    static constexpr unsigned char asciiByteTag         = 0x00;
+    static constexpr unsigned char twoByteLeadMask      = 0xE0;
+    static constexpr unsigned char twoByteLeadTag       = 0xC0;
+    static constexpr unsigned char threeByteLeadMask    = 0xF0;
+    static constexpr unsigned char threeByteLeadTag     = 0xE0;
+    static constexpr unsigned char fourByteLeadMask     = 0xF8;
+    static constexpr unsigned char fourByteLeadTag      = 0xF0;
+
+    // The longest UTF-8 sequence is 4 bytes (1 lead + 3 continuation), so a continuation byte is
+    // at most 3 positions past its sequence's lead byte - the bound the truncation-boundary search
+    // below backtracks by.
+    static constexpr std::size_t maxUtf8ContinuationBytes = 3;
+
+    static constexpr bool isUtf8ContinuationByte(char c) noexcept {
+        return (static_cast<unsigned char>(c) & continuationByteMask) == continuationByteTag;
+    }
+
+    /// Expected total length of the UTF-8 sequence starting with lead byte `c`. Returns 1 for
+    /// ASCII, for a continuation byte (never a valid lead), and for an invalid lead byte
+    /// (0xF8-0xFF): the governed core does not validate well-formedness, so those cases are treated
+    /// as an opaque single byte rather than rejected.
+    static constexpr std::size_t utf8SequenceLength(char c) noexcept {
+        const auto b = static_cast<unsigned char>(c);
+        if ((b & asciiByteMask) == asciiByteTag)
+            return 1;
+        if ((b & twoByteLeadMask) == twoByteLeadTag)
+            return 2;
+        if ((b & threeByteLeadMask) == threeByteLeadTag)
+            return 3;
+        if ((b & fourByteLeadMask) == fourByteLeadTag)
+            return 4;
+        return 1;
+    }
+
+    /**
+     * @brief Longest prefix of `value` that fits in `capacity` bytes without ending in the middle
+     *        of a well-formed UTF-8 sequence (ADR-001 Decision 2).
+     *
+     * Walks backward from the byte-`capacity` boundary, capped at maxUtf8ContinuationBytes bytes
+     * of backtracking, to find the lead byte of the sequence straddling the cut point. If that
+     * sequence fits whole within `capacity` after all - it was simply sitting right at the
+     * boundary - the original boundary stands unchanged; if it does not fit, the whole sequence
+     * is dropped rather than left partial. For input that is already malformed before this ever
+     * runs - maxUtf8ContinuationBytes or more consecutive continuation bytes ending at the cut
+     * point, which cannot occur in well-formed UTF-8 within this bound - the search stops
+     * unconditionally at the cap and the cut is made there, whatever it lands on; this function
+     * never validates or repairs malformed input, it only avoids introducing a fresh split in
+     * input that was well-formed to begin with.
+     */
+    static constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t capacity) noexcept {
+        if (value.size() <= capacity)
+            return value.size();
+
+        // Scans backward from `capacity`, looking for the first non-continuation byte at or before
+        // it - the lead byte of the sequence (if any) straddling the cut point.
+        std::size_t pos   = capacity;
+        std::size_t steps = 0;
+        while (steps < maxUtf8ContinuationBytes && pos > 0 && isUtf8ContinuationByte(value[pos - 1])) {
+            --pos;
+            ++steps;
+        }
+
+        if (pos == 0 || isUtf8ContinuationByte(value[pos - 1])) {
+            // The backtrack cap was hit without reaching a non-continuation byte - only reachable
+            // with already-malformed input - and `pos` stands as the cut, whatever it lands on.
+            return pos;
+        }
+
+        const std::size_t leadPos  = pos - 1;
+        const std::size_t expected = utf8SequenceLength(value[leadPos]);
+        if (leadPos + expected <= capacity) {
+            // The sequence starting at leadPos fits whole within capacity after all - it was
+            // simply sitting right at the boundary - so the original boundary needs no adjustment.
+            return capacity;
+        }
+        return leadPos;  // the sequence does not fit whole within capacity; drop it entirely
+    }
+
     std::array<char, N> bytes{};
     std::uint16_t       length = 0;
 };
