@@ -58,13 +58,14 @@ int main() {\n\
 
 # ADR-001 Decision 6 / #32: mddlog-core (installed as mddlog::core) must be usable on its own,
 # without pulling in mddlog::mddlog (SimpleLogger, the sinks, or their dependencies). This
-# consumer imports the governed mddlog.core.loglevel and mddlog.core.record modules (the latter
-# re-exports inlinestring and writeresult) and links only mddlog::core, so it fails to configure or
-# link if the installed package does not expose that target and its module dependencies independently.
+# consumer imports the governed mddlog.core.loglevel, mddlog.core.record, and mddlog.core.ring
+# modules (record re-exports inlinestring and writeresult) and links only mddlog::core. The test
+# fails if the installed package does not expose that target and its dependencies independently.
 file(WRITE "${consumer_src}/main_core.cpp" "\
 import std;\n\
 import mddlog.core.loglevel;\n\
 import mddlog.core.record;\n\
+import mddlog.core.ring;\n\
 \n\
 int main() {\n\
     if (mddlog::core::toString(mddlog::core::LogLevel::Warn) != \"WARN\") {\n\
@@ -86,6 +87,15 @@ int main() {\n\
     if (result.admission() != mddlog::core::Admission::Written ||\n\
         record.message() != \"installed core record\") {\n\
         return 3;\n\
+    }\n\
+    mddlog::core::RingLog<1> ring;\n\
+    if (ring.tryWrite({.time = mddlog::core::RawTime::unavailable(), .message = \"installed ring\"}).admission() !=\n\
+        mddlog::core::Admission::Written) {\n\
+        return 4;\n\
+    }\n\
+    const auto view = ring.drain();\n\
+    if (view.size() != 1 || view.first()[0].message() != \"installed ring\" || !ring.acknowledge(view, 1)) {\n\
+        return 5;\n\
     }\n\
     return 0;\n\
 }\n\

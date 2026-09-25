@@ -152,9 +152,9 @@ Two CMake targets, with a one-way dependency: `mddlog-core` (alias `mddlog::core
 governed modules (`mddlog.core.*`) and no sink or adapter module; `mddlog` (alias `mddlog::mddlog`)
 links `mddlog-core` and adds the adapter and sink modules. A consumer that only needs the governed
 core (no `SimpleLogger`, no sinks) can link `mddlog::core` alone - see ADR-001 Decision 6. The core
-now includes the fixed-capacity `mddlog.core.record` value type and its supporting string and result
-types. The SPSC `mddlog.core.ring` and adapter integration remain planned; the existing logger still
-uses its allocating record and unbounded queue.
+now includes the fixed-capacity `mddlog.core.record` value type, its supporting string and result
+types, and the bounded SPSC `mddlog.core.ring`. Adapter integration remains planned; the existing
+logger still uses its allocating record and unbounded queue.
 
 ### Core Components
 
@@ -164,7 +164,8 @@ mddlog/
 │   ├── InlineString.cppm     # Fixed-capacity string storage (mddlog-core)
 │   ├── LogLevel.cppm         # Severity levels and utilities (mddlog-core)
 │   ├── WriteResult.cppm      # Admission and truncation result (mddlog-core)
-│   └── Record.cppm           # Governed record and host-supplied time (mddlog-core)
+│   ├── Record.cppm           # Governed record and host-supplied time (mddlog-core)
+│   └── Ring.cppm             # Fixed-capacity SPSC queue (mddlog-core)
 ├── adapter/
 │   ├── LogRecord.cppm        # Structured log record (allocating; mddlog)
 │   └── Logger.cppm           # Main logger implementation (mddlog)
@@ -188,8 +189,11 @@ The existing adapter `LogRecord` contains:
 
 The separate governed `GovernedRecord` owns a bounded message and component, operation and
 correlation identifiers. It captures a host-supplied raw time and source location without reading a
-clock; its `assign()` result reports admission and message truncation. It is not yet connected to
-the adapter logger or a ring.
+clock; its `assign()` result reports admission and message truncation. `RingLog<Capacity>` stores
+these records inline, refuses writes when full, and exposes one or two read-only spans until the
+consumer explicitly acknowledges them. Each ring has one producer and one consumer; separate rings
+have no global ordering. The ring is not yet connected to the adapter logger. Its current ring
+tests exercise single-threaded behavior, not concurrent correctness.
 
 ## Medical Device Compliance
 
