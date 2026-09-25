@@ -93,6 +93,7 @@ add_executable(mddlog_specs
     spec/AuditPolicySpec.cpp
     spec/LogLevelSpec.cpp
     spec/InlineStringSpec.cpp
+    spec/WriteResultSpec.cpp
 )
 
 target_link_libraries(mddlog_specs PRIVATE mddlog::mddlog speclab::speclab)

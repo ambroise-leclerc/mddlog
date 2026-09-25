@@ -201,6 +201,7 @@ add_library(mddlog_warnings INTERFACE)
 set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/InlineString.cppm
     include/mddlog/core/LogLevel.cppm
+    include/mddlog/core/WriteResult.cppm
 )
 target_sources(mddlog-core
     PUBLIC
