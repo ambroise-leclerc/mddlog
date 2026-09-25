@@ -1,9 +1,7 @@
 name: Sanitizers
 
-# AddressSanitizer and UndefinedBehaviorSanitizer over the test suite. A green ordinary build
-# proves less than it looks like it does here: this is the leg that actually exercises the
-# concurrency- and lifetime-sensitive paths (the async worker thread, flush/destruction draining,
-# sink failure isolation) under instrumentation rather than only under CTest's pass/fail.
+# ASan/UBSan and a separate TSan job. They cannot share a binary: TSan checks executed memory
+# accesses for races, whereas ASan/UBSan check other runtime defects.
 
 on:
   push:
@@ -34,7 +32,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y cmake ninja-build wget
+        apt-get install -y ninja-build wget
 
     - name: Install pinned CMake
       run: |
@@ -74,3 +72,47 @@ jobs:
         ASAN_OPTIONS: detect_leaks=1
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       run: ctest --test-dir build-asan -E 'InstallTreeConsumer' --output-on-failure --no-tests=error --timeout 120
+
+  thread-sanitize:
+    name: TSan RingLog (GCC 16.1, Debug)
+    runs-on: ubuntu-latest
+    container: gcc:16.1.0
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y ninja-build wget
+
+    - name: Install pinned CMake
+      run: |
+        CMAKE_VERSION="4.1.1"
+        CMAKE_ARCHIVE="${RUNNER_TEMP}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
+        wget -O "$CMAKE_ARCHIVE" https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz
+        tar -xzf "$CMAKE_ARCHIVE" -C /opt/
+        ln -sf /opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake /usr/bin/cmake
+        ln -sf /opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/ctest /usr/bin/ctest
+        cmake --version
+
+    # Separate build tree and binary from ASan/UBSan. Configuring, linking, and running the
+    # import-std tests are distinct checks; no suppression file is used.
+    - name: Configure import std with TSan
+      run: |
+        cmake -S . -B build-tsan -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DMDDLOG_BUILD_TESTS=ON \
+          -DMDDLOG_BUILD_EXAMPLES=OFF \
+          -DENABLE_SANITIZER_THREAD=ON
+
+    - name: Build and link TSan tests
+      run: cmake --build build-tsan
+
+    - name: Run RingLog tests under TSan
+      env:
+        TSAN_OPTIONS: halt_on_error=1
+      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*RingLog' --output-on-failure --no-tests=error --timeout 60

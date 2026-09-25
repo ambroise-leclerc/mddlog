@@ -308,6 +308,12 @@ that sink's statistics); and the audit-bypass policy described above. `InstallTr
 additionally proves the installed package (`find_package(mddlog CONFIG REQUIRED)`,
 `mddlog::mddlog`) builds and runs outside this source tree.
 
+`RingLog` also has producer/consumer tests on separate threads: controlled saturation and reuse,
+plus several producer-owned rings drained by one consumer, checking order within each ring only.
+The separate GCC 16.1 ThreadSanitizer CI job builds the `import std` module stack and runs the
+RingLog scenarios without suppressions. A clean TSan run reports no race in those executions; it
+does not prove timing bounds or absence of allocation.
+
 ## Examples
 
 See the `examples/` directory for usage examples:
