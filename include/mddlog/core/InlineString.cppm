@@ -6,7 +6,7 @@ export module mddlog.core.inlinestring;
 
 import std;
 
-export namespace mddlog::core {
+namespace mddlog::core {
 
 namespace detail {
 
@@ -102,7 +102,7 @@ constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t
  * allocation and no exception anywhere in this type. `N` is bounded to what the std::uint16_t
  * length field can represent.
  */
-template <std::size_t N>
+export template <std::size_t N>
     requires(N <= std::numeric_limits<std::uint16_t>::max())
 class InlineString {
 public:
