@@ -170,6 +170,46 @@ const speclab::Register assignTruncatingNeverSplitsAWellFormedUtf8SequenceAtTheB
             .Execute();
     }};
 
+const speclab::Register assignTruncatingKeepsACompleteSequenceThatEndsExactlyAtTheBoundary{
+    "assignTruncating() keeps a complete multi-byte sequence that ends exactly at the capacity boundary, even when more "
+    "input follows it - the case a backward-only search that never restores the original boundary would get wrong",
+    "unit",
+    [] {
+        return speclab::Test("inlinestring-assign-truncating-utf8-boundary-exact-then-more")
+            .Then("\"a\" + <char> + \"x\", with capacity sized to hold exactly \"a\" + <char>, keeps the full character "
+                  "and drops only the trailing \"x\", for each of 2, 3 and 4-byte sequences",
+                  [] {
+                      speclab::core::Checks checks;
+
+                      // 2-byte: "a" + é + "x", capacity 3 (= 1 + 2) fits "a" + é whole and drops "x".
+                      {
+                          InlineString<3> s;
+                          const bool      truncated = s.assignTruncating(std::string("a") + std::string(twoByteChar) + "x");
+                          checks.expect(truncated, "2-byte char followed by more input: truncation is reported");
+                          checks.expect(s.view() == std::string("a") + std::string(twoByteChar), "2-byte char: kept whole, trailing \"x\" dropped");
+                      }
+
+                      // 3-byte: "a" + € + "x", capacity 4 (= 1 + 3) fits "a" + € whole and drops "x".
+                      {
+                          InlineString<4> s;
+                          const bool      truncated = s.assignTruncating(std::string("a") + std::string(threeByteChar) + "x");
+                          checks.expect(truncated, "3-byte char followed by more input: truncation is reported");
+                          checks.expect(s.view() == std::string("a") + std::string(threeByteChar), "3-byte char: kept whole, trailing \"x\" dropped");
+                      }
+
+                      // 4-byte: "a" + 😀 + "x", capacity 5 (= 1 + 4) fits "a" + 😀 whole and drops "x".
+                      {
+                          InlineString<5> s;
+                          const bool      truncated = s.assignTruncating(std::string("a") + std::string(fourByteChar) + "x");
+                          checks.expect(truncated, "4-byte char followed by more input: truncation is reported");
+                          checks.expect(s.view() == std::string("a") + std::string(fourByteChar), "4-byte char: kept whole, trailing \"x\" dropped");
+                      }
+
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 const speclab::Register assignTruncatingHandlesAlreadyMalformedInputDeterministically{
     "assignTruncating() on already-malformed UTF-8 input stops at the documented 3-byte backtrack cap, without crashing",
     "unit",

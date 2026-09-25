@@ -54,40 +54,43 @@ constexpr std::size_t utf8SequenceLength(char c) noexcept {
  *        a well-formed UTF-8 sequence (ADR-001 Decision 2).
  *
  * Walks backward from the byte-`capacity` boundary, capped at maxUtf8ContinuationBytes bytes of
- * backtracking, to find the start of the sequence straddling the cut point; if that sequence does
- * not fit whole within `capacity`, it is dropped entirely rather than left partial. For input that
- * is already malformed before this ever runs - maxUtf8ContinuationBytes or more consecutive
- * continuation bytes ending at the cut point, which cannot occur in well-formed UTF-8 within this
- * bound - the search stops unconditionally at the cap and the cut is made there, whatever it lands
- * on; this function never validates or repairs malformed input, it only avoids introducing a fresh
- * split in input that was well-formed to begin with.
+ * backtracking, to find the lead byte of the sequence straddling the cut point. If that sequence
+ * fits whole within `capacity` after all - it was simply sitting right at the boundary - the
+ * original boundary stands unchanged; if it does not fit, the whole sequence is dropped rather
+ * than left partial. For input that is already malformed before this ever runs -
+ * maxUtf8ContinuationBytes or more consecutive continuation bytes ending at the cut point, which
+ * cannot occur in well-formed UTF-8 within this bound - the search stops unconditionally at the
+ * cap and the cut is made there, whatever it lands on; this function never validates or repairs
+ * malformed input, it only avoids introducing a fresh split in input that was well-formed to
+ * begin with.
  */
 constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t capacity) noexcept {
     if (value.size() <= capacity)
         return value.size();
 
-    std::size_t cut                  = capacity;
-    std::size_t backtrack            = 0;
-    bool        foundNonContinuation = false;
-    while (backtrack < maxUtf8ContinuationBytes && cut > 0) {
-        if (!isUtf8ContinuationByte(value[cut - 1])) {
-            foundNonContinuation = true;
-            break;
-        }
-        --cut;
-        ++backtrack;
+    // Scans backward from `capacity`, looking for the first non-continuation byte at or before
+    // it - the lead byte of the sequence (if any) straddling the cut point.
+    std::size_t pos   = capacity;
+    std::size_t steps = 0;
+    while (steps < maxUtf8ContinuationBytes && pos > 0 && isUtf8ContinuationByte(value[pos - 1])) {
+        --pos;
+        ++steps;
     }
 
-    if (foundNonContinuation) {
-        const std::size_t expected = utf8SequenceLength(value[cut - 1]);
-        if (expected > 1 && (cut - 1 + expected) > capacity) {
-            --cut;  // the sequence starting here does not fit whole within capacity; drop it too
-        }
+    if (pos == 0 || isUtf8ContinuationByte(value[pos - 1])) {
+        // The backtrack cap was hit without reaching a non-continuation byte - only reachable
+        // with already-malformed input - and `pos` stands as the cut, whatever it lands on.
+        return pos;
     }
-    // !foundNonContinuation: the backtrack cap was hit without reaching a non-continuation byte -
-    // only reachable with already-malformed input - and cut stands as is.
 
-    return cut;
+    const std::size_t leadPos  = pos - 1;
+    const std::size_t expected = utf8SequenceLength(value[leadPos]);
+    if (leadPos + expected <= capacity) {
+        // The sequence starting at leadPos fits whole within capacity after all - it was simply
+        // sitting right at the boundary - so the original boundary needs no adjustment.
+        return capacity;
+    }
+    return leadPos;  // the sequence does not fit whole within capacity; drop it entirely
 }
 
 }  // namespace detail
@@ -188,6 +191,16 @@ consteval bool truncatingAssignNeverSplitsAWellFormedTwoByteSequence() {
     return truncated && s.empty();
 }
 static_assert(truncatingAssignNeverSplitsAWellFormedTwoByteSequence());
+
+consteval bool truncatingAssignKeepsACompleteSequenceThatEndsExactlyAtCapacityEvenWithMoreInputFollowing() {
+    // "a" + é ("\303\251") + "x" is 4 bytes; capacity 3 ends exactly after "a" + é. A regression
+    // that never restores the boundary once it confirms the straddling sequence fits whole would
+    // cut back into the middle of é instead (this pins the bug a review caught before merge).
+    InlineString<3> s;
+    const bool      truncated = s.assignTruncating("a\303\251x");
+    return truncated && s.view() == "a\303\251";
+}
+static_assert(truncatingAssignKeepsACompleteSequenceThatEndsExactlyAtCapacityEvenWithMoreInputFollowing());
 
 }  // namespace detail::selftest
 
