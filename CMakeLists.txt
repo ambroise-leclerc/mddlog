@@ -199,6 +199,7 @@ add_library(mddlog_warnings INTERFACE)
 # (ADR-001 Decision 1) join this list once implemented; nothing here may import a sink or
 # adapter module.
 set(MDDLOG_CORE_MODULE_FILES
+    include/mddlog/core/InlineString.cppm
     include/mddlog/core/LogLevel.cppm
 )
 target_sources(mddlog-core
