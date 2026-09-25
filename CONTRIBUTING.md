@@ -176,7 +176,8 @@ scripts/run-clang-tidy.sh build-clang
 
 ## Pull Requests
 
-- **One commit per pull request.**
+- **One commit on `main` per pull request after merging.** A pull request may contain multiple
+  commits during development and review; squash them into a single commit when merging if needed.
 - Keep purely mechanical changes (reformatting, renames) in their own pull request, separate from
   semantic changes, and merge them first so the semantic diff stays readable.
 - The pull request (PR) title must reference the related issue or feature (e.g., `Add CameraManager class [#42]`).
@@ -190,4 +191,3 @@ scripts/run-clang-tidy.sh build-clang
 - Write clear, descriptive commit messages.
 - Add or update documentation as needed.
 - Run all tests locally before submitting your PR.
-
