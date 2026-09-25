@@ -125,13 +125,13 @@ private:
      * never validates or repairs malformed input, it only avoids introducing a fresh split in
      * input that was well-formed to begin with.
      */
-    static constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t capacity) noexcept {
-        if (value.size() <= capacity)
+    static constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t byteCapacity) noexcept {
+        if (value.size() <= byteCapacity)
             return value.size();
 
-        // Scans backward from `capacity`, looking for the first non-continuation byte at or before
+        // Scans backward from `byteCapacity`, looking for the first non-continuation byte at or before
         // it - the lead byte of the sequence (if any) straddling the cut point.
-        std::size_t pos   = capacity;
+        std::size_t pos   = byteCapacity;
         std::size_t steps = 0;
         while (steps < maxUtf8ContinuationBytes && pos > 0 && isUtf8ContinuationByte(value[pos - 1])) {
             --pos;
@@ -146,10 +146,10 @@ private:
 
         const std::size_t leadPos  = pos - 1;
         const std::size_t expected = utf8SequenceLength(value[leadPos]);
-        if (leadPos + expected <= capacity) {
+        if (leadPos + expected <= byteCapacity) {
             // The sequence starting at leadPos fits whole within capacity after all - it was
             // simply sitting right at the boundary - so the original boundary needs no adjustment.
-            return capacity;
+            return byteCapacity;
         }
         return leadPos;  // the sequence does not fit whole within capacity; drop it entirely
     }
