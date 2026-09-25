@@ -195,13 +195,13 @@ add_library(mddlog::mddlog ALIAS mddlog)
 add_library(mddlog_options INTERFACE)
 add_library(mddlog_warnings INTERFACE)
 
-# mddlog-core: governed modules only, in dependency order. mddlog.core.record/mddlog.core.ring
-# (ADR-001 Decision 1) join this list once implemented; nothing here may import a sink or
-# adapter module.
+# mddlog-core: governed modules only, in dependency order. mddlog.core.ring joins this list
+# once implemented; nothing here may import a sink or adapter module.
 set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/InlineString.cppm
     include/mddlog/core/LogLevel.cppm
     include/mddlog/core/WriteResult.cppm
+    include/mddlog/core/Record.cppm
 )
 target_sources(mddlog-core
     PUBLIC

@@ -94,6 +94,7 @@ add_executable(mddlog_specs
     spec/LogLevelSpec.cpp
     spec/InlineStringSpec.cpp
     spec/WriteResultSpec.cpp
+    spec/GovernedRecordSpec.cpp
 )
 
 target_link_libraries(mddlog_specs PRIVATE mddlog::mddlog speclab::speclab)
