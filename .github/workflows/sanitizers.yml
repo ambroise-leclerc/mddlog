@@ -32,7 +32,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y cmake ninja-build wget
+        apt-get install -y ninja-build wget
 
     - name: Install pinned CMake
       run: |
@@ -87,7 +87,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y cmake ninja-build wget
+        apt-get install -y ninja-build wget
 
     - name: Install pinned CMake
       run: |

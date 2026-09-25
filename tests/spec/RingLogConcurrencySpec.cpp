@@ -21,20 +21,19 @@ const speclab::Register saturatedRingResumesAcrossThreads{
     "unit",
     [] {
         return speclab::Test("ring-spsc-saturation-reuse")
-            .Then("latches make saturation, drain, and resumed publication observable in order",
+            .Then("the ring publishes and releases slots across threads without an external ordering edge",
                   [] {
                       speclab::core::Checks    checks;
                       RingLog<2>               ring;
                       std::latch               start{2};
-                      std::latch               filled{1};
-                      std::latch               released{1};
-                      std::latch               resumed{1};
-                      bool                     firstWritten  = false;
-                      bool                     secondWritten = false;
-                      bool                     fullRefused   = false;
-                      bool                     resumedWrite  = false;
-                      bool                     firstAck      = false;
-                      bool                     secondAck     = false;
+                      const auto               deadline        = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+                      bool                     firstWritten    = false;
+                      bool                     secondWritten   = false;
+                      bool                     fullRefused     = false;
+                      bool                     resumedWrite    = false;
+                      bool                     firstAck        = false;
+                      bool                     secondAck       = false;
+                      std::uint64_t            ringFullResults = 0;
                       std::vector<std::string> received;
 
                       std::thread producer([&] {
@@ -44,23 +43,37 @@ const speclab::Register saturatedRingResumesAcrossThreads{
                           secondWritten   = ring.tryWrite(numberedInput("1")).admission() == Admission::Written;
                           const auto full = ring.tryWrite(numberedInput("2"));
                           fullRefused     = full.admission() == Admission::Refused && full.refusal()->reason == RefusalReason::RingFull;
-                          filled.count_down();
-                          released.wait();
-                          resumedWrite = ring.tryWrite(numberedInput("2")).admission() == Admission::Written;
-                          resumed.count_down();
+                          ringFullResults = fullRefused ? 1 : 0;
+                          // No latch after startup: only the ring's read cursor can permit reuse.
+                          while (!resumedWrite && std::chrono::steady_clock::now() < deadline) {
+                              const auto result = ring.tryWrite(numberedInput("2"));
+                              if (result.admission() == Admission::Written) {
+                                  resumedWrite = true;
+                              } else if (result.refusal()->reason == RefusalReason::RingFull) {
+                                  ++ringFullResults;
+                                  std::this_thread::yield();
+                              } else {
+                                  break;
+                              }
+                          }
                       });
                       std::thread consumer([&] {
                           start.count_down();
                           start.wait();
-                          filled.wait();
+                          // The relaxed statistic gates the forced-full phase but does not
+                          // publish record bytes. drain() must acquire the write cursor itself.
+                          while (ring.refusalCount() == 0 && std::chrono::steady_clock::now() < deadline)
+                              std::this_thread::yield();
                           const auto initial = ring.drain();
                           for (const auto& record : initial.first())
                               received.emplace_back(record.message());
                           for (const auto& record : initial.second())
                               received.emplace_back(record.message());
                           firstAck = ring.acknowledge(initial, initial.size());
-                          released.count_down();
-                          resumed.wait();
+                          // Polling the ring replaces the old latch that accidentally ordered
+                          // consumer reads before producer slot reuse.
+                          while (ring.writeSequence() < 3 && std::chrono::steady_clock::now() < deadline)
+                              std::this_thread::yield();
                           const auto later = ring.drain();
                           for (const auto& record : later.first())
                               received.emplace_back(record.message());
@@ -75,7 +88,8 @@ const speclab::Register saturatedRingResumesAcrossThreads{
                                     "producer sees two admissions, RingFull, then a resumed admission");
                       checks.expect(firstAck && secondAck, "consumer acknowledges before and after reuse");
                       checks.expect(received == std::vector<std::string>{"0", "1", "2"}, "accepted values are read once and in order");
-                      checks.expect(ring.refusalCount() == 1, "the controlled saturation increments the atomic counter once");
+                      checks.expect(ringFullResults > 0 && ring.refusalCount() == ringFullResults,
+                                    "the atomic counter equals all RingFull results, including retries");
                       checks.expect(ring.writeSequence() == 3 && ring.readSequence() == 3, "both cursors reflect three accepted records");
                       checks.raise();
                   })
