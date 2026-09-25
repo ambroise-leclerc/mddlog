@@ -151,17 +151,20 @@ logger->logAudit(
 Two CMake targets, with a one-way dependency: `mddlog-core` (alias `mddlog::core`) contains only
 governed modules (`mddlog.core.*`) and no sink or adapter module; `mddlog` (alias `mddlog::mddlog`)
 links `mddlog-core` and adds the adapter and sink modules. A consumer that only needs the governed
-core (no `SimpleLogger`, no sinks) can link `mddlog::core` alone - see ADR-001 Decision 6. This is
-a structural boundary only today: the fixed-capacity, allocation-free `mddlog.core.record`/
-`mddlog.core.ring` types ADR-001 describes are not implemented yet, so `mddlog-core` currently
-contains just `LogLevel.cppm`.
+core (no `SimpleLogger`, no sinks) can link `mddlog::core` alone - see ADR-001 Decision 6. The core
+now includes the fixed-capacity `mddlog.core.record` value type and its supporting string and result
+types. The SPSC `mddlog.core.ring` and adapter integration remain planned; the existing logger still
+uses its allocating record and unbounded queue.
 
 ### Core Components
 
 ```
 mddlog/
 ├── core/
-│   └── LogLevel.cppm         # Severity levels and utilities (mddlog-core)
+│   ├── InlineString.cppm     # Fixed-capacity string storage (mddlog-core)
+│   ├── LogLevel.cppm         # Severity levels and utilities (mddlog-core)
+│   ├── WriteResult.cppm      # Admission and truncation result (mddlog-core)
+│   └── Record.cppm           # Governed record and host-supplied time (mddlog-core)
 ├── adapter/
 │   ├── LogRecord.cppm        # Structured log record (allocating; mddlog)
 │   └── Logger.cppm           # Main logger implementation (mddlog)
@@ -174,7 +177,7 @@ mddlog/
 
 ### Log Record Structure
 
-Each log record contains:
+The existing adapter `LogRecord` contains:
 
 - **Core Information**: Timestamp, level, message, category, thread ID
 - **Source Location**: File, line, function (automatic with `std::source_location`)
@@ -182,6 +185,11 @@ Each log record contains:
 - **Audit Information**: Event type, risk level, compliance standard
 - **Metadata**: Custom key-value pairs
 - **Performance**: Processing time tracking
+
+The separate governed `GovernedRecord` owns a bounded message and component, operation and
+correlation identifiers. It captures a host-supplied raw time and source location without reading a
+clock; its `assign()` result reports admission and message truncation. It is not yet connected to
+the adapter logger or a ring.
 
 ## Medical Device Compliance
 

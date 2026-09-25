@@ -106,8 +106,9 @@ drive these values.
 **Field set, capacities and parametrization (the "Standard" preset).** The governed record keeps
 exactly the fields Decision 1 already names — `level`, the raw time value (Decision 7), the emission
 `std::source_location`, `message`, and the three-part context envelope `component`/`operationId`/
-`correlationId` — and no others; no field of the current allocating `LogRecord` beyond those survives
-into the governed type (Decision 6 covers what happens to the rest). Capacities:
+`correlationId` — plus the message-truncation flag required by Decision 2 for sink rendering.
+No other field of the current allocating `LogRecord` survives into the governed type (Decision 6
+covers what happens to the rest). Capacities:
 
 | Field | Kind (Decision 2) | Capacity | Rationale |
 |---|---|---|---|
@@ -509,7 +510,8 @@ buffer) plus 2 (the `std::uint16_t` length), rounded up to the type's alignment 
 | `component` (`InlineString<32>`) | 34 bytes |
 | `operationId` (`InlineString<32>`) | 34 bytes |
 | `correlationId` (`InlineString<40>`) | 42 bytes |
-| **Sum before alignment** | **≈313 bytes** |
+| `truncated.message` (`bool`) | 1 byte |
+| **Sum before alignment** | **≈314 bytes** |
 | **`sizeof(LogRecord)`, rounded to 8-byte alignment** | **≈320 bytes** |
 
 **`RingLog` budget, worked example.** Overhead beyond the slots is three `std::atomic<std::uint64_t>`

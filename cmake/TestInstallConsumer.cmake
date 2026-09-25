@@ -58,12 +58,13 @@ int main() {\n\
 
 # ADR-001 Decision 6 / #32: mddlog-core (installed as mddlog::core) must be usable on its own,
 # without pulling in mddlog::mddlog (SimpleLogger, the sinks, or their dependencies). This
-# consumer only imports the governed mddlog.core.loglevel module and links mddlog::core, so it
-# fails to configure/link if the installed package does not actually expose that target
-# independently.
+# consumer imports the governed mddlog.core.loglevel and mddlog.core.record modules (the latter
+# re-exports inlinestring and writeresult) and links only mddlog::core, so it fails to configure or
+# link if the installed package does not expose that target and its module dependencies independently.
 file(WRITE "${consumer_src}/main_core.cpp" "\
 import std;\n\
 import mddlog.core.loglevel;\n\
+import mddlog.core.record;\n\
 \n\
 int main() {\n\
     if (mddlog::core::toString(mddlog::core::LogLevel::Warn) != \"WARN\") {\n\
@@ -71,6 +72,20 @@ int main() {\n\
     }\n\
     if (!mddlog::core::isComplianceLevel(mddlog::core::LogLevel::Warn)) {\n\
         return 2;\n\
+    }\n\
+    mddlog::core::GovernedRecord record;\n\
+    const auto result = record.assign({\n\
+        .level = mddlog::core::LogLevel::Audit,\n\
+        .time = mddlog::core::RawTime::unavailable(),\n\
+        .location = std::source_location::current(),\n\
+        .message = \"installed core record\",\n\
+        .component = \"consumer\",\n\
+        .operationId = \"install\",\n\
+        .correlationId = \"test\"\n\
+    });\n\
+    if (result.admission() != mddlog::core::Admission::Written ||\n\
+        record.message() != \"installed core record\") {\n\
+        return 3;\n\
     }\n\
     return 0;\n\
 }\n\
