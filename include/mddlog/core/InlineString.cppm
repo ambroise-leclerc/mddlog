@@ -28,7 +28,7 @@ inline constexpr unsigned char fourByteLeadTag      = 0xF0;
 // backtracks by.
 inline constexpr std::size_t maxUtf8ContinuationBytes = 3;
 
-constexpr bool isUtf8ContinuationByte(char c) noexcept {
+static constexpr bool isUtf8ContinuationByte(char c) noexcept {
     return (static_cast<unsigned char>(c) & continuationByteMask) == continuationByteTag;
 }
 
@@ -36,7 +36,7 @@ constexpr bool isUtf8ContinuationByte(char c) noexcept {
 /// for a continuation byte (never a valid lead), and for an invalid lead byte (0xF8-0xFF): the
 /// governed core does not validate well-formedness, so those cases are treated as an opaque
 /// single byte rather than rejected.
-constexpr std::size_t utf8SequenceLength(char c) noexcept {
+static constexpr std::size_t utf8SequenceLength(char c) noexcept {
     const auto b = static_cast<unsigned char>(c);
     if ((b & asciiByteMask) == asciiByteTag)
         return 1;
@@ -64,7 +64,7 @@ constexpr std::size_t utf8SequenceLength(char c) noexcept {
  * malformed input, it only avoids introducing a fresh split in input that was well-formed to
  * begin with.
  */
-constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t capacity) noexcept {
+static constexpr std::size_t utf8TruncationBoundary(std::string_view value, std::size_t capacity) noexcept {
     if (value.size() <= capacity)
         return value.size();
 
