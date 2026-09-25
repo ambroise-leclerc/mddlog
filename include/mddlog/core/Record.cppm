@@ -59,13 +59,14 @@ private:
 /**
  * @brief Caller-owned data captured when the producer emits a record.
  *
- * String views are read only during assign(); the resulting record owns their bytes. Supply
- * location from the emission call site, for example std::source_location::current().
+ * String views are read only during assign(); the resulting record owns their bytes. The default
+ * location captures the aggregate-initialization site, and the default level is Info. The host
+ * must supply time explicitly.
  */
 struct RecordInput {
-    LogLevel             level;
+    LogLevel             level = LogLevel::Info;
     RawTime              time;
-    std::source_location location;
+    std::source_location location = std::source_location::current();
     std::string_view     message;
     std::string_view     component;
     std::string_view     operationId;

@@ -59,10 +59,37 @@ static_assert(recordAssignmentIsConstantEvaluable());
 
 [[nodiscard]] bool sameRecord(const GovernedRecord& lhs, const GovernedRecord& rhs) noexcept {
     return lhs.level() == rhs.level() && lhs.time().availability() == rhs.time().availability() && lhs.time().value() == rhs.time().value()
-           && lhs.location().line() == rhs.location().line() && lhs.location().file_name() == rhs.location().file_name() && lhs.message() == rhs.message()
-           && lhs.component() == rhs.component() && lhs.operationId() == rhs.operationId() && lhs.correlationId() == rhs.correlationId()
-           && lhs.truncated().message == rhs.truncated().message;
+           && lhs.location().line() == rhs.location().line() && std::string_view(lhs.location().file_name()) == std::string_view(rhs.location().file_name())
+           && lhs.message() == rhs.message() && lhs.component() == rhs.component() && lhs.operationId() == rhs.operationId()
+           && lhs.correlationId() == rhs.correlationId() && lhs.truncated().message == rhs.truncated().message;
 }
+
+const speclab::Register defaultInputCapturesEmissionSiteAndInfoLevel{
+    "RecordInput defaults to Info and captures the caller's source location",
+    "unit",
+    [] {
+        return speclab::Test("governed-record-input-defaults")
+            .Then("omitting level and location produces Info and a nonempty location from this call site",
+                  [] {
+                      speclab::core::Checks checks;
+                      const RecordInput     input{.time          = RawTime::unavailable(),
+                                                  .message       = "defaulted",
+                                                  .component     = "core",
+                                                  .operationId   = "test",
+                                                  .correlationId = "id"};
+                      const auto            site = std::source_location::current();
+                      checks.expect(input.level == LogLevel::Info, "omitted level defaults to Info");
+                      checks.expect(input.location.line() != 0, "omitted location has a real line");
+                      checks.expect(std::string_view(input.location.file_name()) == std::string_view(site.file_name()),
+                                    "omitted location names the producer's file");
+                      GovernedRecord record;
+                      checks.expect(record.assign(input).admission() == Admission::Written, "defaulted input is admitted");
+                      checks.expect(record.level() == LogLevel::Info, "record retains Info level");
+                      checks.expect(record.location().line() == input.location.line(), "record retains captured line");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 
 const speclab::Register recordAcceptsExactCapacitiesAndCapturesValues{
     "GovernedRecord accepts each field at its exact byte capacity and owns emission context",

@@ -58,9 +58,9 @@ int main() {\n\
 
 # ADR-001 Decision 6 / #32: mddlog-core (installed as mddlog::core) must be usable on its own,
 # without pulling in mddlog::mddlog (SimpleLogger, the sinks, or their dependencies). This
-# consumer only imports the governed mddlog.core.loglevel module and links mddlog::core, so it
-# fails to configure/link if the installed package does not actually expose that target
-# independently.
+# consumer imports the governed mddlog.core.loglevel and mddlog.core.record modules (the latter
+# re-exports inlinestring and writeresult) and links only mddlog::core, so it fails to configure or
+# link if the installed package does not expose that target and its module dependencies independently.
 file(WRITE "${consumer_src}/main_core.cpp" "\
 import std;\n\
 import mddlog.core.loglevel;\n\
