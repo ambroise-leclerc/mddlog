@@ -19,11 +19,15 @@ export namespace mddlog::core {
  *
  * @code
  * RingLog<8> ring;
- * auto result = ring.tryWrite(input);  // producer thread
+ * if (auto result = ring.tryWrite(input); result.admission() == Admission::Refused) {
+ *     // Producer thread: handle refusal before continuing.
+ * }
  * auto view = ring.drain();            // consumer thread
  * for (const auto& record : view.first()) consume(record);
  * for (const auto& record : view.second()) consume(record);
- * ring.acknowledge(view, view.size()); // only after the last read/copy
+ * if (!ring.acknowledge(view, view.size())) {
+ *     // Stale view: report the error; this call released no slots.
+ * }
  * @endcode
  *
  * @tparam Capacity Number of records held at once; must be positive and below half the 64-bit
@@ -89,21 +93,20 @@ public:
      * @brief Validate and publish one record, or return the first refusal reason.
      *
      * Identifier checks precede the ring-capacity check in component, operation, correlation
-     * order. RingFull is reported last. Every refusal increments the atomic refusal count. No refusal
+     * order. RingFull is reported last and alone increments the atomic saturation counter. No refusal
      * advances the write cursor or modifies any published record. Unavailable RawTime is valid;
      * MalformedTime cannot arise from the current RawTime representation.
      */
     [[nodiscard]] WriteResult tryWrite(const RecordInput& input) noexcept {
+        // Preflight the identifiers before capacity, as ADR-001 requires. assign() checks them
+        // again while constructing the record; keeping that guard protects direct record users.
         if (input.component.size() > componentCapacity) {
-            refusals.fetch_add(1, std::memory_order_relaxed);
             return WriteResult::refused({.reason = RefusalReason::IdentifierTooLong, .field = IdentifierField::Component});
         }
         if (input.operationId.size() > operationIdCapacity) {
-            refusals.fetch_add(1, std::memory_order_relaxed);
             return WriteResult::refused({.reason = RefusalReason::IdentifierTooLong, .field = IdentifierField::OperationId});
         }
         if (input.correlationId.size() > correlationIdCapacity) {
-            refusals.fetch_add(1, std::memory_order_relaxed);
             return WriteResult::refused({.reason = RefusalReason::IdentifierTooLong, .field = IdentifierField::CorrelationId});
         }
 
@@ -118,7 +121,7 @@ public:
         const auto        index  = static_cast<std::size_t>(write % Capacity);
         const WriteResult result = std::span{slots}[index].assign(input);
         if (result.admission() == Admission::Refused) {
-            refusals.fetch_add(1, std::memory_order_relaxed);
+            // Defensive if record validation grows: only RingFull affects saturation telemetry.
             return result;
         }
         // Step 1: fill the slot before publishing the next write sequence with release ordering.
@@ -156,7 +159,7 @@ public:
         return true;
     }
 
-    /** @brief Total refused writes, readable concurrently by an observer. Natural 64-bit wrap. */
+    /** @brief Total RingFull refusals, readable concurrently by an observer. Natural 64-bit wrap. */
     [[nodiscard]] std::uint64_t refusalCount() const noexcept {
         return refusals.load(std::memory_order_relaxed);
     }

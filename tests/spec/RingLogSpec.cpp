@@ -100,11 +100,14 @@ const speclab::Register validationPrecedesCapacityAndTruncationOnlyOnWrite{
                   [] {
                       speclab::core::Checks checks;
                       RingLog<1>            ring;
-                      const std::string     longMessage(mddlog::core::messageCapacity + 1, 'm');
-                      const auto            written = ring.tryWrite(inputWith(longMessage));
+                      const std::string     longComponent(mddlog::core::componentCapacity + 1, 'c');
+                      const auto            invalidEmpty = ring.tryWrite(inputWith("new", longComponent));
+                      checks.expect(invalidEmpty.refusal()->reason == RefusalReason::IdentifierTooLong, "invalid input is refused even when the ring is empty");
+                      checks.expect(ring.refusalCount() == 0 && ring.writeSequence() == 0, "identifier refusal does not signal saturation or publish a record");
+                      const std::string longMessage(mddlog::core::messageCapacity + 1, 'm');
+                      const auto        written = ring.tryWrite(inputWith(longMessage));
                       checks.expect(written.admission() == Admission::Written && written.truncated().message, "overlong message is admitted with truncation");
-                      const std::string longComponent(mddlog::core::componentCapacity + 1, 'c');
-                      const auto        invalid = ring.tryWrite(inputWith("new", longComponent));
+                      const auto invalid = ring.tryWrite(inputWith("new", longComponent));
                       checks.expect(invalid.refusal()->reason == RefusalReason::IdentifierTooLong, "identifier validation precedes ring saturation");
                       checks.expect(invalid.refusal()->field == IdentifierField::Component, "offending identifier is named");
                       checks.expect(!invalid.truncated().message, "refused write has no truncation");
@@ -124,7 +127,7 @@ const speclab::Register validationPrecedesCapacityAndTruncationOnlyOnWrite{
                                     "correlation overflow wins over saturation");
                       const auto full = ring.tryWrite(inputWith("new"));
                       checks.expect(full.refusal()->reason == RefusalReason::RingFull, "valid input sees RingFull");
-                      checks.expect(ring.refusalCount() == 4, "all refusals are counted exactly once");
+                      checks.expect(ring.refusalCount() == 1, "only RingFull increments the saturation counter");
                       checks.expect(ring.writeSequence() == 1, "no refusal publishes a record");
                       const auto view = ring.drain();
                       checks.expect(view.size() == 1 && view.first()[0].message() == std::string(mddlog::core::messageCapacity, 'm'),
