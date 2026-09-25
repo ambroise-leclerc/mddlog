@@ -43,7 +43,6 @@ const speclab::Register isTriviallyCopyableAndConstexprConstructible{
                       checks.expect(std::is_trivially_copyable_v<InlineString<16>>, "InlineString<16> is trivially copyable");
                       InlineString<16> s;
                       checks.expect(s.empty(), "default-constructed instance is empty");
-                      checks.expect(s.size() == 0, "default-constructed instance has size 0");
                       checks.expect(s.view().empty(), "default-constructed instance's view() is empty");
                       checks.raise();
                   })
@@ -61,7 +60,7 @@ const speclab::Register assignExactAcceptsUpToExactCapacity{
 
                       InlineString<8> empty;
                       checks.expect(empty.assignExact(""), "assignExact(\"\") succeeds");
-                      checks.expect(empty.view() == "", "empty value stored as empty");
+                      checks.expect(empty.view().empty(), "empty value stored as empty");
 
                       InlineString<8> partial;
                       checks.expect(partial.assignExact("hi"), "assignExact(\"hi\") succeeds under capacity 8");

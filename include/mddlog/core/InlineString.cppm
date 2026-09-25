@@ -168,14 +168,16 @@ namespace detail::selftest {
 // here rather than surfacing only in a runtime spec.
 
 consteval bool exactAssignStoresValueThatFitsWhole() {
-    InlineString<8> s;
-    return s.assignExact("hello") && s.view() == "hello" && s.size() == 5;
+    constexpr std::string_view     value = "hello";
+    InlineString<value.size() + 1> s;  // one byte of headroom above the exact length
+    return s.assignExact(value) && s.view() == value && s.size() == value.size();
 }
 static_assert(exactAssignStoresValueThatFitsWhole());
 
 consteval bool exactAssignRejectsOverflowWithoutModifyingTheValue() {
-    InlineString<4> s;
-    const bool      accepted = s.assignExact("hello");  // 5 bytes > capacity 4
+    constexpr std::string_view     value = "hello";
+    InlineString<value.size() - 1> s;  // one byte short of what `value` needs
+    const bool                     accepted = s.assignExact(value);
     return !accepted && s.empty();
 }
 static_assert(exactAssignRejectsOverflowWithoutModifyingTheValue());
