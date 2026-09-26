@@ -372,7 +372,7 @@ commercial terms. See [LICENSING.md](LICENSING.md).
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 [`AGENTS.md`](AGENTS.md) is the canonical, tool-neutral contributor guide; tool-specific assistant
-files such as `CLAUDE.md` are intentionally ignored.
+files such as `MISTRAL.md`, `VIBE.md` ou `CLAUDE.md` are intentionally ignored.
 
 ## Medical Device Certification
 
