@@ -312,8 +312,10 @@ if(MDDLOG_BUILD_TESTS)
         else()
             set(_mddlog_consumer_test InstallTreeCoreConsumer)
         endif()
-        add_test(${_mddlog_consumer_test}
-            "${CMAKE_COMMAND}"
+        # NAME/COMMAND form so $<CONFIG> names the configuration CTest is testing, which a
+        # multi-config generator (Ninja Multi-Config) needs for install, build and run paths.
+        add_test(NAME ${_mddlog_consumer_test}
+            COMMAND "${CMAKE_COMMAND}"
             -D "BUILD_DIR=${CMAKE_BINARY_DIR}"
             -D "CXX_COMPILER=${CMAKE_CXX_COMPILER}"
             -D "AR=${CMAKE_AR}"
@@ -324,11 +326,11 @@ if(MDDLOG_BUILD_TESTS)
             # default: on Linux libc++ is not Clang's default, so a consumer built without this flag
             # scans libc++'s std.cppm with libstdc++'s include path and fails on a missing '__config'.
             -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
-            # MSVC's runtime-library selection (/MD vs /MT, Release vs Debug) is driven by
-            # CMAKE_BUILD_TYPE. Without forwarding it, the consumer configures with an empty build
+            # MSVC's runtime-library selection (/MD vs /MT, Release vs Debug) is driven by the
+            # configuration. Without forwarding it, the consumer configures with an empty build
             # type while this build used Release, the two pick different default runtime libraries,
             # and linking the consumer against the installed mddlog.lib fails with LNK4098/LNK1319.
-            -D "BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+            -D "CONFIG=$<CONFIG>"
             -D "GENERATOR=${CMAKE_GENERATOR}"
             -D "EXPECTED_VERSION=${PROJECT_VERSION}"
             -D "SOURCE_DIR=${CMAKE_SOURCE_DIR}"

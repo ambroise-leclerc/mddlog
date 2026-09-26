@@ -8,7 +8,7 @@
 #
 # Run via: cmake -D BUILD_DIR=... -D CXX_COMPILER=... -D GENERATOR=...
 #              -D EXPECTED_VERSION=... -D SOURCE_DIR=... -D CONSUMER_KIND=full|core
-#              -P TestInstallConsumer.cmake
+#              [-D CONFIG=<configuration under test>] -P TestInstallConsumer.cmake
 # (see the two install-consumer add_test() calls in the top-level CMakeLists.txt)
 
 foreach(required_var BUILD_DIR CXX_COMPILER GENERATOR EXPECTED_VERSION SOURCE_DIR CONSUMER_KIND)
@@ -28,11 +28,22 @@ if(CONSUMER_KIND STREQUAL "core")
     set(test_name "InstallTreeCoreConsumer")
 endif()
 
+# Empty for a single-config build without CMAKE_BUILD_TYPE. With a multi-config generator it is
+# the configuration CTest runs (-C), used to install, build and locate that configuration only.
+set(config "")
+if(DEFINED CONFIG)
+    set(config "${CONFIG}")
+endif()
+set(config_arguments)
+if(NOT config STREQUAL "")
+    set(config_arguments --config "${config}")
+endif()
+
 file(REMOVE_RECURSE "${install_prefix}" "${consumer_src}" "${consumer_build}")
 
 message(STATUS "${test_name}: installing to ${install_prefix}")
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --install "${BUILD_DIR}" --prefix "${install_prefix}"
+    COMMAND "${CMAKE_COMMAND}" --install "${BUILD_DIR}" --prefix "${install_prefix}" ${config_arguments}
     RESULT_VARIABLE install_result
     OUTPUT_VARIABLE install_output
     ERROR_VARIABLE install_error
@@ -95,6 +106,9 @@ endif()
 
 set(consumer_required_targets)
 set(consumer_target_definitions)
+# The consumer records each executable's real path per configuration, so no generator-specific
+# output layout (configuration subdirectories, .exe suffix) is guessed here.
+set(consumer_path_content)
 foreach(consumer_executable_spec IN LISTS consumer_executables)
     string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
     list(GET consumer_fields 0 consumer_target)
@@ -108,6 +122,7 @@ if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
     set_target_properties(${consumer_target} PROPERTIES CXX_MODULE_STD ON)\n\
 endif()\n\
 ")
+    string(APPEND consumer_path_content "${consumer_target}=$<TARGET_FILE:${consumer_target}>\\n")
     string(REPLACE " " ";" consumer_link_list "${consumer_links}")
     list(APPEND consumer_required_targets ${consumer_link_list})
 endforeach()
@@ -138,7 +153,9 @@ foreach(required_target IN ITEMS ${consumer_required_targets})\n\
         message(FATAL_ERROR \"Installed package does not provide \${required_target}\")\n\
     endif()\n\
 endforeach()\n\
-${consumer_target_definitions}")
+${consumer_target_definitions}\
+file(GENERATE OUTPUT \"\${CMAKE_BINARY_DIR}/mddlog-consumer-$<CONFIG>.txt\" CONTENT \"${consumer_path_content}\")\n\
+")
 
 message(STATUS "${test_name}: configuring consumer project")
 set(consumer_toolchain_arguments)
@@ -160,11 +177,12 @@ if(DEFINED CXX_FLAGS AND NOT CXX_FLAGS STREQUAL "")
     # the compiler's default standard library while linking an mddlog built against another one.
     list(APPEND consumer_toolchain_arguments "-DCMAKE_CXX_FLAGS=${CXX_FLAGS}")
 endif()
-if(DEFINED BUILD_TYPE AND NOT BUILD_TYPE STREQUAL "")
-    # On MSVC in particular, CMAKE_BUILD_TYPE selects the runtime library (/MD vs /MT, Release vs
+if(NOT config STREQUAL "")
+    # On MSVC in particular, the configuration selects the runtime library (/MD vs /MT, Release vs
     # Debug). A consumer configured without it links against a different default runtime than the
-    # installed mddlog.lib was built with and fails with LNK4098/LNK1319.
-    list(APPEND consumer_toolchain_arguments "-DCMAKE_BUILD_TYPE=${BUILD_TYPE}")
+    # installed mddlog.lib was built with and fails with LNK4098/LNK1319. A multi-config consumer
+    # ignores CMAKE_BUILD_TYPE and receives the same configuration through --config below.
+    list(APPEND consumer_toolchain_arguments "-DCMAKE_BUILD_TYPE=${config}")
 endif()
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -B "${consumer_build}" -S "${consumer_src}"
@@ -182,7 +200,7 @@ endif()
 
 message(STATUS "${test_name}: building consumer project")
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${consumer_build}"
+    COMMAND "${CMAKE_COMMAND}" --build "${consumer_build}" ${config_arguments}
     RESULT_VARIABLE build_result
     OUTPUT_VARIABLE build_output
     ERROR_VARIABLE build_error
@@ -191,13 +209,23 @@ if(NOT build_result EQUAL 0)
     message(FATAL_ERROR "Consumer build failed (${build_result}):\n${build_output}\n${build_error}")
 endif()
 
+set(consumer_path_file "${consumer_build}/mddlog-consumer-${config}.txt")
+if(NOT EXISTS "${consumer_path_file}")
+    message(FATAL_ERROR "Consumer executable paths were not generated for configuration '${config}': ${consumer_path_file}")
+endif()
+file(STRINGS "${consumer_path_file}" consumer_paths)
 foreach(consumer_executable_spec IN LISTS consumer_executables)
     string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
     list(GET consumer_fields 0 consumer_target)
     list(GET consumer_fields 1 consumer_source)
-    set(consumer_executable "${consumer_build}/${consumer_target}")
-    if(WIN32)
-        string(APPEND consumer_executable ".exe")
+    set(consumer_executable "")
+    foreach(consumer_path_entry IN LISTS consumer_paths)
+        if(consumer_path_entry MATCHES "^${consumer_target}=(.+)$")
+            set(consumer_executable "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    if(consumer_executable STREQUAL "" OR NOT EXISTS "${consumer_executable}")
+        message(FATAL_ERROR "${consumer_target} was not built for configuration '${config}' (path: '${consumer_executable}')")
     endif()
     message(STATUS "${test_name}: running ${consumer_target} executable")
     execute_process(
