@@ -65,13 +65,13 @@ jobs:
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       run: cmake --build build-asan
 
-    # InstallTreeConsumer is excluded: it spawns its own nested, unsanitized configure/build/run,
+    # Installed consumers are excluded: they spawn nested, unsanitized configure/build/run,
     # which is not what this job is verifying.
     - name: Run tests under ASan and UBSan
       env:
         ASAN_OPTIONS: detect_leaks=1
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      run: ctest --test-dir build-asan -E 'InstallTreeConsumer' --output-on-failure --no-tests=error --timeout 120
+      run: ctest --test-dir build-asan -E 'InstallTree(Consumer|CoreConsumer)' --output-on-failure --no-tests=error --timeout 120
 
   thread-sanitize:
     name: TSan RingLog (GCC 16.1, Debug)

@@ -1,6 +1,6 @@
 # mddlog - Medical Device Logger
 
-A modern C++23 modules logging library specifically designed for medical devices, conformant to IEC 62304, ISO 13485, and ISO 14971 standards.
+A modern C++23 modules logging experiment shaped by IEC 62304, ISO 13485, and ISO 14971 concerns; it is not certified or validated for medical-device use.
 
 ⚠️ EXPERIMENTAL PROJECT WARNING
 
@@ -36,10 +36,9 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
   [SpecLab](https://github.com/ambroise-leclerc/SpecLab), pinned and test-only - see
   [Testing](#testing))
 - **Cross-platform**: MSVC 17.14+, GCC 16.1+, Clang 20+ - see [Tested Configurations](#tested-configurations)
-- **Thread-safe**, using a mutex-protected queue for asynchronous delivery. This is *not* a
-  real-time guarantee: the queue is unbounded, so a producer that logs faster than the sinks can
-  drain it grows memory usage without bound rather than blocking or dropping records. A bounded,
-  real-time-safe queue is a known limitation, tracked as future work.
+- **Thread-safe delivery paths**: `SimpleLogger` uses a mutex-protected, unbounded asynchronous
+  queue; the governed core provides a separate bounded SPSC ring. Neither is a general real-time
+  guarantee, and the adapter queue may grow without bound if sinks cannot keep up.
 - **Zero-macro design** using modern C++23 features
 
 ## Architecture Overview
@@ -75,7 +74,7 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
 - **NetworkSink** for remote monitoring systems *(planned)*
 - **AuditSink** for tamper-proof audit records *(planned)*
 - **ConsoleSink** with colors and statistics *(implemented)*
-- **Configurable buffering** and batching strategies
+- **Configurable buffering** and batching strategies *(planned)*
 
 #### 4. Custom Formatters *(planned)*
 - **JsonFormatter** for structured data
@@ -156,6 +155,12 @@ now includes the fixed-capacity `mddlog.core.record` value type, its supporting 
 types, and the bounded SPSC `mddlog.core.ring`. `mddlog.adapter.ringdrain` copies governed records
 out of ring spans before acknowledgement and forwards them to existing sinks. The existing
 `SimpleLogger` still uses its allocating record and unbounded queue.
+
+Core-only clients can import `mddlog.core.record` and `mddlog.core.ring`, then link only
+`mddlog::core`. The same write/drain/acknowledge program is tested both as an in-tree target and
+against the installed package, with separate CTest results. See the
+[governed-core migration guide](docs/migration/governed-core.md) for imports, capacities,
+admission, host-supplied time and CMake examples.
 
 ### Core Components
 
@@ -314,9 +319,10 @@ category, medical/audit fields, producer thread id, caller source location); syn
 asynchronous delivery with per-producer ordering; flush-as-barrier and destruction-drains-queue
 semantics; concurrent producers under a shared logger; sink failure isolation (a throwing sink
 does not block other sinks or crash the async worker, and the failure is recorded explicitly in
-that sink's statistics); and the audit-bypass policy described above. `InstallTreeConsumer`
-additionally proves the installed package (`find_package(mddlog CONFIG REQUIRED)`,
-`mddlog::mddlog`) builds and runs outside this source tree.
+that sink's statistics); and the audit-bypass policy described above. `SourceTreeCoreConsumer`
+tests a core-only source-tree target. `InstallTreeCoreConsumer` builds and runs the same program
+from the installed package using only `mddlog::core`; `InstallTreeConsumer` separately exercises
+the full installed `mddlog::mddlog` target.
 
 `RingLog` also has producer/consumer tests on separate threads: controlled saturation and reuse,
 plus several producer-owned rings drained by one consumer, checking order within each ring only.
@@ -364,6 +370,9 @@ commercial terms. See [LICENSING.md](LICENSING.md).
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+[`AGENTS.md`](AGENTS.md) is the canonical, tool-neutral contributor guide; tool-specific assistant
+files such as `MISTRAL.md`, `VIBE.md` ou `CLAUDE.md` are intentionally ignored.
 
 ## Medical Device Certification
 

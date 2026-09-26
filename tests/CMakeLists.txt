@@ -2,6 +2,19 @@
 
 include(${CMAKE_SOURCE_DIR}/cmake/MddlogTestDiscovery.cmake)
 
+# The same core-only program also runs against the installed package. Keep it independent of
+# SpecLab and of mddlog::mddlog so linking or importing an adapter cannot mask a broken split.
+add_executable(mddlog_core_source_consumer consumer/CoreConsumer.cpp)
+target_link_libraries(mddlog_core_source_consumer PRIVATE mddlog::core)
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)
+    set_target_properties(mddlog_core_source_consumer PROPERTIES CXX_MODULE_STD ON)
+endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(mddlog_core_source_consumer PRIVATE /experimental:module /std:c++latest)
+endif()
+add_test(NAME SourceTreeCoreConsumer COMMAND mddlog_core_source_consumer)
+set_tests_properties(SourceTreeCoreConsumer PROPERTIES LABELS "build;core")
+
 # Issue #5's build/cache work: ccache does not model C++20 named-module dependencies. The
 # classifier test is always present and pins the fail-closed response-file parser. The integration
 # test needs real ccache and Clang's explicit BMI paths, so it only registers on that combination.

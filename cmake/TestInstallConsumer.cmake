@@ -6,25 +6,44 @@
 # the installed module, so a successful run means import std + the installed FILE_SET CXX_MODULES
 # are both genuinely usable from outside this source tree, not just present on disk.
 #
-# Run via: cmake -D BUILD_DIR=... -D CXX_COMPILER=... -D GENERATOR=... -D EXPECTED_VERSION=...
-#              -P TestInstallConsumer.cmake
-# (see the InstallTreeConsumer add_test() call in the top-level CMakeLists.txt)
+# Run via: cmake -D BUILD_DIR=... -D CXX_COMPILER=... -D GENERATOR=...
+#              -D EXPECTED_VERSION=... -D SOURCE_DIR=... -D CONSUMER_KIND=full|core
+#              [-D CONFIG=<configuration under test>] -P TestInstallConsumer.cmake
+# (see the two install-consumer add_test() calls in the top-level CMakeLists.txt)
 
-foreach(required_var BUILD_DIR CXX_COMPILER GENERATOR EXPECTED_VERSION)
+foreach(required_var BUILD_DIR CXX_COMPILER GENERATOR EXPECTED_VERSION SOURCE_DIR CONSUMER_KIND)
     if(NOT DEFINED ${required_var})
         message(FATAL_ERROR "TestInstallConsumer.cmake: ${required_var} must be set with -D")
     endif()
 endforeach()
+if(NOT CONSUMER_KIND MATCHES "^(full|core)$")
+    message(FATAL_ERROR "CONSUMER_KIND must be full or core")
+endif()
 
-set(install_prefix "${BUILD_DIR}/_test_install_prefix")
-set(consumer_src "${BUILD_DIR}/_test_consumer_src")
-set(consumer_build "${BUILD_DIR}/_test_consumer_build")
+set(install_prefix "${BUILD_DIR}/_test_install_${CONSUMER_KIND}_prefix")
+set(consumer_src "${BUILD_DIR}/_test_install_${CONSUMER_KIND}_src")
+set(consumer_build "${BUILD_DIR}/_test_install_${CONSUMER_KIND}_build")
+set(test_name "InstallTreeConsumer")
+if(CONSUMER_KIND STREQUAL "core")
+    set(test_name "InstallTreeCoreConsumer")
+endif()
+
+# Empty for a single-config build without CMAKE_BUILD_TYPE. With a multi-config generator it is
+# the configuration CTest runs (-C), used to install, build and locate that configuration only.
+set(config "")
+if(DEFINED CONFIG)
+    set(config "${CONFIG}")
+endif()
+set(config_arguments)
+if(NOT config STREQUAL "")
+    set(config_arguments --config "${config}")
+endif()
 
 file(REMOVE_RECURSE "${install_prefix}" "${consumer_src}" "${consumer_build}")
 
-message(STATUS "InstallTreeConsumer: installing to ${install_prefix}")
+message(STATUS "${test_name}: installing to ${install_prefix}")
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --install "${BUILD_DIR}" --prefix "${install_prefix}"
+    COMMAND "${CMAKE_COMMAND}" --install "${BUILD_DIR}" --prefix "${install_prefix}" ${config_arguments}
     RESULT_VARIABLE install_result
     OUTPUT_VARIABLE install_output
     ERROR_VARIABLE install_error
@@ -35,10 +54,13 @@ endif()
 
 # A minimal external project - deliberately not part of this repository's own CMake build graph,
 # so it can only see mddlog through find_package(), exactly as a real downstream consumer would.
+# Each consumer executable is "target|source|linked targets" (links separated by ',').
+if(CONSUMER_KIND STREQUAL "full")
+# Imports only the umbrella and links only mddlog::mddlog, so the installed full target must bring
+# mddlog::core, its modules and its library through its own declared dependency.
 file(WRITE "${consumer_src}/main.cpp" "\
 import std;\n\
 import mddlog;\n\
-import mddlog.core.ring;\n\
 \n\
 int main() {\n\
     // A real assertion, not just \"it links\": confirms the installed module is actually usable\n\
@@ -53,6 +75,17 @@ int main() {\n\
     logger.addSink(mddlog::createConsoleSink(false, false));\n\
     logger.info(\"install consumer smoke test\");\n\
     logger.flush();\n\
+    return 0;\n\
+}\n\
+")
+# A translation unit that directly imports a governed module must also link the target providing
+# it: CMake 4.1 with GCC does not place transitively linked modules in its module mapper.
+file(WRITE "${consumer_src}/main_ring.cpp" "\
+import std;\n\
+import mddlog;\n\
+import mddlog.core.ring;\n\
+\n\
+int main() {\n\
     mddlog::core::RingLog<1> ring;\n\
     mddlog::RingSinkAdapter adapter;\n\
     adapter.addRing(ring);\n\
@@ -63,51 +96,38 @@ int main() {\n\
     return 0;\n\
 }\n\
 ")
+set(consumer_executables "consumer|main.cpp|mddlog::mddlog" "consumer_ring|main_ring.cpp|mddlog::mddlog,mddlog::core")
+else()
+    # Reuse the exact program exercised in-tree. Only mddlog::core may be linked here.
+    file(MAKE_DIRECTORY "${consumer_src}")
+    file(COPY_FILE "${SOURCE_DIR}/tests/consumer/CoreConsumer.cpp" "${consumer_src}/main_core.cpp")
+    set(consumer_executables "consumer_core|main_core.cpp|mddlog::core")
+endif()
 
-# ADR-001 Decision 6 / #32: mddlog-core (installed as mddlog::core) must be usable on its own,
-# without pulling in mddlog::mddlog (SimpleLogger, the sinks, or their dependencies). This
-# consumer imports the governed mddlog.core.loglevel, mddlog.core.record, and mddlog.core.ring
-# modules (record re-exports inlinestring and writeresult) and links only mddlog::core. The test
-# fails if the installed package does not expose that target and its dependencies independently.
-file(WRITE "${consumer_src}/main_core.cpp" "\
-import std;\n\
-import mddlog.core.loglevel;\n\
-import mddlog.core.record;\n\
-import mddlog.core.ring;\n\
-\n\
-int main() {\n\
-    if (mddlog::core::toString(mddlog::core::LogLevel::Warn) != \"WARN\") {\n\
-        return 1;\n\
-    }\n\
-    if (!mddlog::core::isComplianceLevel(mddlog::core::LogLevel::Warn)) {\n\
-        return 2;\n\
-    }\n\
-    mddlog::core::GovernedRecord record;\n\
-    const auto result = record.assign({\n\
-        .level = mddlog::core::LogLevel::Audit,\n\
-        .time = mddlog::core::RawTime::unavailable(),\n\
-        .location = std::source_location::current(),\n\
-        .message = \"installed core record\",\n\
-        .component = \"consumer\",\n\
-        .operationId = \"install\",\n\
-        .correlationId = \"test\"\n\
-    });\n\
-    if (result.admission() != mddlog::core::Admission::Written ||\n\
-        record.message() != \"installed core record\") {\n\
-        return 3;\n\
-    }\n\
-    mddlog::core::RingLog<1> ring;\n\
-    if (ring.tryWrite({.time = mddlog::core::RawTime::unavailable(), .message = \"installed ring\"}).admission() !=\n\
-        mddlog::core::Admission::Written) {\n\
-        return 4;\n\
-    }\n\
-    const auto view = ring.drain();\n\
-    if (view.size() != 1 || view.first()[0].message() != \"installed ring\" || !ring.acknowledge(view, 1)) {\n\
-        return 5;\n\
-    }\n\
-    return 0;\n\
-}\n\
+set(consumer_required_targets)
+set(consumer_target_definitions)
+# The consumer records each executable's real path per configuration, so no generator-specific
+# output layout (configuration subdirectories, .exe suffix) is guessed here.
+set(consumer_path_content)
+foreach(consumer_executable_spec IN LISTS consumer_executables)
+    string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
+    list(GET consumer_fields 0 consumer_target)
+    list(GET consumer_fields 1 consumer_source)
+    list(GET consumer_fields 2 consumer_links)
+    string(REPLACE "," " " consumer_links "${consumer_links}")
+    string(APPEND consumer_target_definitions "\
+add_executable(${consumer_target} ${consumer_source})\n\
+target_link_libraries(${consumer_target} PRIVATE ${consumer_links})\n\
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
+    set_target_properties(${consumer_target} PROPERTIES CXX_MODULE_STD ON)\n\
+endif()\n\
 ")
+    string(APPEND consumer_path_content "${consumer_target}=$<TARGET_FILE:${consumer_target}>\\n")
+    string(REPLACE " " ";" consumer_link_list "${consumer_links}")
+    list(APPEND consumer_required_targets ${consumer_link_list})
+endforeach()
+list(REMOVE_DUPLICATES consumer_required_targets)
+list(JOIN consumer_required_targets " " consumer_required_targets)
 
 file(WRITE "${consumer_src}/CMakeLists.txt" "\
 cmake_minimum_required(VERSION 4.0.0)\n\
@@ -128,22 +148,16 @@ if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
     set(CMAKE_CXX_MODULE_STD ON)\n\
 endif()\n\
 find_package(mddlog CONFIG REQUIRED)\n\
-if(NOT TARGET mddlog::mddlog)\n\
-    message(FATAL_ERROR \"Installed package does not provide mddlog::mddlog\")\n\
-endif()\n\
-if(NOT TARGET mddlog::core)\n\
-    message(FATAL_ERROR \"Installed package does not provide mddlog::core\")\n\
-endif()\n\
-add_executable(consumer main.cpp)\n\
-target_link_libraries(consumer PRIVATE mddlog::mddlog mddlog::core)\n\
-add_executable(consumer_core main_core.cpp)\n\
-target_link_libraries(consumer_core PRIVATE mddlog::core)\n\
-if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
-    set_target_properties(consumer consumer_core PROPERTIES CXX_MODULE_STD ON)\n\
-endif()\n\
+foreach(required_target IN ITEMS ${consumer_required_targets})\n\
+    if(NOT TARGET \${required_target})\n\
+        message(FATAL_ERROR \"Installed package does not provide \${required_target}\")\n\
+    endif()\n\
+endforeach()\n\
+${consumer_target_definitions}\
+file(GENERATE OUTPUT \"\${CMAKE_BINARY_DIR}/mddlog-consumer-$<CONFIG>.txt\" CONTENT \"${consumer_path_content}\")\n\
 ")
 
-message(STATUS "InstallTreeConsumer: configuring consumer project")
+message(STATUS "${test_name}: configuring consumer project")
 set(consumer_toolchain_arguments)
 if(DEFINED AR AND NOT AR STREQUAL "")
     list(APPEND consumer_toolchain_arguments "-DCMAKE_AR=${AR}")
@@ -163,11 +177,12 @@ if(DEFINED CXX_FLAGS AND NOT CXX_FLAGS STREQUAL "")
     # the compiler's default standard library while linking an mddlog built against another one.
     list(APPEND consumer_toolchain_arguments "-DCMAKE_CXX_FLAGS=${CXX_FLAGS}")
 endif()
-if(DEFINED BUILD_TYPE AND NOT BUILD_TYPE STREQUAL "")
-    # On MSVC in particular, CMAKE_BUILD_TYPE selects the runtime library (/MD vs /MT, Release vs
+if(NOT config STREQUAL "")
+    # On MSVC in particular, the configuration selects the runtime library (/MD vs /MT, Release vs
     # Debug). A consumer configured without it links against a different default runtime than the
-    # installed mddlog.lib was built with and fails with LNK4098/LNK1319.
-    list(APPEND consumer_toolchain_arguments "-DCMAKE_BUILD_TYPE=${BUILD_TYPE}")
+    # installed mddlog.lib was built with and fails with LNK4098/LNK1319. A multi-config consumer
+    # ignores CMAKE_BUILD_TYPE and receives the same configuration through --config below.
+    list(APPEND consumer_toolchain_arguments "-DCMAKE_BUILD_TYPE=${config}")
 endif()
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -B "${consumer_build}" -S "${consumer_src}"
@@ -183,9 +198,9 @@ if(NOT configure_result EQUAL 0)
     message(FATAL_ERROR "Consumer configure failed (${configure_result}):\n${configure_output}\n${configure_error}")
 endif()
 
-message(STATUS "InstallTreeConsumer: building consumer project")
+message(STATUS "${test_name}: building consumer project")
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${consumer_build}"
+    COMMAND "${CMAKE_COMMAND}" --build "${consumer_build}" ${config_arguments}
     RESULT_VARIABLE build_result
     OUTPUT_VARIABLE build_output
     ERROR_VARIABLE build_error
@@ -194,22 +209,32 @@ if(NOT build_result EQUAL 0)
     message(FATAL_ERROR "Consumer build failed (${build_result}):\n${build_output}\n${build_error}")
 endif()
 
-message(STATUS "InstallTreeConsumer: running consumer executable")
-execute_process(
-    COMMAND "${consumer_build}/consumer"
-    RESULT_VARIABLE run_result
-)
-if(NOT run_result EQUAL 0)
-    message(FATAL_ERROR "Consumer executable exited with ${run_result} (expected 0 - see main.cpp's assertions)")
+set(consumer_path_file "${consumer_build}/mddlog-consumer-${config}.txt")
+if(NOT EXISTS "${consumer_path_file}")
+    message(FATAL_ERROR "Consumer executable paths were not generated for configuration '${config}': ${consumer_path_file}")
 endif()
+file(STRINGS "${consumer_path_file}" consumer_paths)
+foreach(consumer_executable_spec IN LISTS consumer_executables)
+    string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
+    list(GET consumer_fields 0 consumer_target)
+    list(GET consumer_fields 1 consumer_source)
+    set(consumer_executable "")
+    foreach(consumer_path_entry IN LISTS consumer_paths)
+        if(consumer_path_entry MATCHES "^${consumer_target}=(.+)$")
+            set(consumer_executable "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    if(consumer_executable STREQUAL "" OR NOT EXISTS "${consumer_executable}")
+        message(FATAL_ERROR "${consumer_target} was not built for configuration '${config}' (path: '${consumer_executable}')")
+    endif()
+    message(STATUS "${test_name}: running ${consumer_target} executable")
+    execute_process(
+        COMMAND "${consumer_executable}"
+        RESULT_VARIABLE run_result
+    )
+    if(NOT run_result EQUAL 0)
+        message(FATAL_ERROR "${consumer_target} exited with ${run_result} (expected 0 - see ${consumer_source}'s assertions)")
+    endif()
+endforeach()
 
-message(STATUS "InstallTreeConsumer: running consumer_core executable")
-execute_process(
-    COMMAND "${consumer_build}/consumer_core"
-    RESULT_VARIABLE run_core_result
-)
-if(NOT run_core_result EQUAL 0)
-    message(FATAL_ERROR "consumer_core executable exited with ${run_core_result} (expected 0 - see main_core.cpp's assertions)")
-endif()
-
-message(STATUS "InstallTreeConsumer: OK")
+message(STATUS "${test_name}: OK")
