@@ -1,0 +1,15 @@
+{
+  "modules": {
+    "mddlog.core.inlinestring": ["std"],
+    "mddlog.core.loglevel": ["std"],
+    "mddlog.core.writeresult": ["std"],
+    "mddlog.core.record": ["std", "mddlog.core.inlinestring", "mddlog.core.loglevel", "mddlog.core.writeresult"],
+    "mddlog.core.ring": ["std", "mddlog.core.record"]
+  },
+  "links": {
+    "mddlog-core": ["mddlog_options", "mddlog_warnings", "__CMAKE::CXX23"],
+    "mddlog_options": ["Threads::Threads", "--coverage"],
+    "mddlog_warnings": [],
+    "Threads::Threads": ["-pthread"]
+  }
+}

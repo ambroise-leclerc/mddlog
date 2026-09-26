@@ -203,6 +203,10 @@ Existing sinks do not preserve every governed field in their output; the console
 
 ## Medical Device Compliance
 
+The governed boundary has separate dependency, source, allocation-symbol and exception-symbol
+checks. See [the evidence note](docs/governed-evidence.md) for how to run them, the covered
+toolchains, and what their results do and do not establish.
+
 ### IEC 62304 Requirements
 
 MddLog addresses IEC 62304 requirements for medical device software:

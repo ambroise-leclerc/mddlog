@@ -180,7 +180,7 @@ include(DependencySummaryTable)
 # (MduX being the motivating one) can import and link the governed core without pulling in
 # SimpleLogger, the sinks, or their dependencies. mddlog-core -> mddlog is a one-way dependency:
 # nothing under mddlog.core.* may import a mddlog.sinks.* or mddlog.adapter.* module (enforced
-# below and by the build.core.boundary test in tests/CMakeLists.txt).
+# below and by the build.core.* tests in tests/CMakeLists.txt).
 add_library(mddlog-core)
 add_library(mddlog::core ALIAS mddlog-core)
 # EXPORT_NAME, not the target name, controls the name after the mddlog:: namespace on install
@@ -265,8 +265,8 @@ target_link_libraries(mddlog-core PRIVATE mddlog_warnings)
 target_link_libraries(mddlog PUBLIC mddlog_options mddlog::core)
 target_link_libraries(mddlog PRIVATE mddlog_warnings)
 
-# Link/import dependency-graph check (ADR-001 Decision 6, the strongest of its three verification
-# strengths): mddlog-core must never link mddlog. Configure-time, not a ctest, so a regression
+# Early direct-link guard: mddlog-core must never link mddlog. The build.core.graph CTest adds
+# evaluated target dependencies and compiler-produced imports after the build. Here a regression
 # fails the build immediately rather than waiting for `ctest` to run. Checks both LINK_LIBRARIES
 # (a PUBLIC/PRIVATE target_link_libraries entry) and INTERFACE_LINK_LIBRARIES (an INTERFACE one,
 # which LINK_LIBRARIES alone would miss even though it still makes mddlog-core depend on mddlog

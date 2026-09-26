@@ -32,7 +32,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y ninja-build wget
+        apt-get install -y ninja-build wget python3
 
     - name: Install pinned CMake
       run: |
@@ -87,7 +87,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y ninja-build wget
+        apt-get install -y ninja-build wget python3
 
     - name: Install pinned CMake
       run: |
@@ -116,3 +116,6 @@ jobs:
       env:
         TSAN_OPTIONS: halt_on_error=1
       run: ctest --test-dir build-tsan -R '^mddlog_specs::.*RingLog' --output-on-failure --no-tests=error --timeout 60
+
+    - name: Verify governed boundary and negative controls
+      run: ctest --test-dir build-tsan -L governed --verbose --no-tests=error --timeout 120
