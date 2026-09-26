@@ -153,8 +153,9 @@ governed modules (`mddlog.core.*`) and no sink or adapter module; `mddlog` (alia
 links `mddlog-core` and adds the adapter and sink modules. A consumer that only needs the governed
 core (no `SimpleLogger`, no sinks) can link `mddlog::core` alone - see ADR-001 Decision 6. The core
 now includes the fixed-capacity `mddlog.core.record` value type, its supporting string and result
-types, and the bounded SPSC `mddlog.core.ring`. Adapter integration remains planned; the existing
-logger still uses its allocating record and unbounded queue.
+types, and the bounded SPSC `mddlog.core.ring`. `mddlog.adapter.ringdrain` copies governed records
+out of ring spans before acknowledgement and forwards them to existing sinks. The existing
+`SimpleLogger` still uses its allocating record and unbounded queue.
 
 ### Core Components
 
@@ -168,6 +169,7 @@ mddlog/
 │   └── Ring.cppm             # Fixed-capacity SPSC queue (mddlog-core)
 ├── adapter/
 │   ├── LogRecord.cppm        # Structured log record (allocating; mddlog)
+│   ├── RingDrain.cppm        # Governed ring-to-sink bridge (mddlog)
 │   └── Logger.cppm           # Main logger implementation (mddlog)
 ├── sinks/
 │   ├── Sink.cppm             # Base sink interface (mddlog)
@@ -192,8 +194,12 @@ correlation identifiers. It captures a host-supplied raw time and source locatio
 clock; its `assign()` result reports admission and message truncation. `RingLog<Capacity>` stores
 these records inline, refuses writes when full, and exposes one or two read-only spans until the
 consumer explicitly acknowledges them. Each ring has one producer and one consumer; separate rings
-have no global ordering. The ring is not yet connected to the adapter logger. Its current ring
-tests exercise single-threaded behavior, not concurrent correctness.
+have no global ordering. `RingSinkAdapter` is the separate adapter-zone path for one or more such
+rings, even when their compile-time capacities differ. It copies each drained record into an owning
+`LogRecord` before acknowledging and dispatching to sinks, including the message-truncation flag
+and an explicit unavailable-time state.
+Existing sinks do not preserve every governed field in their output; the console sink adds a
+`[truncated]` marker but remains a human-readable, non-round-trippable view.
 
 ## Medical Device Compliance
 
