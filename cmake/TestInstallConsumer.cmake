@@ -38,6 +38,7 @@ endif()
 file(WRITE "${consumer_src}/main.cpp" "\
 import std;\n\
 import mddlog;\n\
+import mddlog.core.ring;\n\
 \n\
 int main() {\n\
     // A real assertion, not just \"it links\": confirms the installed module is actually usable\n\
@@ -52,6 +53,13 @@ int main() {\n\
     logger.addSink(mddlog::createConsoleSink(false, false));\n\
     logger.info(\"install consumer smoke test\");\n\
     logger.flush();\n\
+    mddlog::core::RingLog<1> ring;\n\
+    mddlog::RingSinkAdapter adapter;\n\
+    adapter.addRing(ring);\n\
+    if (ring.tryWrite({.time = mddlog::core::RawTime::unavailable(), .message = \"installed bridge\"}).admission() !=\n\
+        mddlog::core::Admission::Written || adapter.drainOnce() != 1) {\n\
+        return 3;\n\
+    }\n\
     return 0;\n\
 }\n\
 ")
@@ -127,7 +135,7 @@ if(NOT TARGET mddlog::core)\n\
     message(FATAL_ERROR \"Installed package does not provide mddlog::core\")\n\
 endif()\n\
 add_executable(consumer main.cpp)\n\
-target_link_libraries(consumer PRIVATE mddlog::mddlog)\n\
+target_link_libraries(consumer PRIVATE mddlog::mddlog mddlog::core)\n\
 add_executable(consumer_core main_core.cpp)\n\
 target_link_libraries(consumer_core PRIVATE mddlog::core)\n\
 if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\

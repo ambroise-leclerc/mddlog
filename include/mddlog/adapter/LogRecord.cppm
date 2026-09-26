@@ -25,20 +25,23 @@ struct LogRecord {
     using Metadata  = std::unordered_map<std::string, std::string>;
 
     // Core logging information
-    TimePoint   timestamp;              ///< When the log was created
-    LogLevel    level{LogLevel::Info};  ///< Severity level
-    std::string message;                ///< Log message content
-    std::string category;               ///< Log category/component
-    ThreadId    threadId;               ///< Thread that created the log
+    TimePoint   timestamp;                ///< Event time; host-supplied for governed records
+    bool        timeAvailable{true};      ///< False when the governed producer had no usable clock
+    LogLevel    level{LogLevel::Info};    ///< Severity level
+    std::string message;                  ///< Log message content
+    bool        messageTruncated{false};  ///< True when the governed message was shortened
+    std::string category;                 ///< Log category/component
+    ThreadId    threadId;                 ///< Origin thread, empty for governed records without one
 
     // Source location information (C++20 feature)
     std::source_location location;  ///< Source code location
 
     // Medical device compliance fields
-    std::string userId;       ///< User who triggered the action
-    std::string sessionId;    ///< Session identifier
-    std::string deviceId;     ///< Medical device identifier
-    std::string operationId;  ///< Operation/procedure identifier
+    std::string userId;         ///< User who triggered the action
+    std::string sessionId;      ///< Session identifier
+    std::string deviceId;       ///< Medical device identifier
+    std::string operationId;    ///< Operation/procedure identifier
+    std::string correlationId;  ///< Governed correlation identifier, if supplied
 
     // Audit trail fields
     std::string auditEventType;      ///< Type of audit event
@@ -124,13 +127,16 @@ struct LogRecord {
 
     /**
      * @brief Get formatted timestamp string
-     * @return ISO 8601 UTC timestamp with millisecond precision, e.g. "2026-09-22T07:15:57.160Z"
+     * @return ISO 8601 UTC timestamp with millisecond precision, or "unavailable" when the host
+     *         supplied no usable time.
      *
      * Formats via std::chrono's formatter rather than std::gmtime(): gmtime() returns a
      * pointer into a static buffer that is not thread-safe, and MSVC additionally deprecates
      * it (C4996), which fails this project's warnings-as-errors build.
      */
     [[nodiscard]] std::string getFormattedTimestamp() const {
+        if (!timeAvailable)
+            return "unavailable";
         using namespace std::chrono;
         return std::format("{:%Y-%m-%dT%H:%M:%S}Z", time_point_cast<milliseconds>(timestamp));
     }

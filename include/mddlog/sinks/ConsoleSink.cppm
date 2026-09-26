@@ -101,6 +101,8 @@ public:
             stream << "[" << record.getFormattedTimestamp() << "] "
                    << "[" << core::toString(record.level) << "] "
                    << "[" << record.category << "] " << record.message;
+            if (record.messageTruncated)
+                stream << " [truncated]";
 
             // Add medical device context if available
             if (!record.userId.empty()) {
