@@ -135,7 +135,7 @@ if(NOT TARGET mddlog::core)\n\
     message(FATAL_ERROR \"Installed package does not provide mddlog::core\")\n\
 endif()\n\
 add_executable(consumer main.cpp)\n\
-target_link_libraries(consumer PRIVATE mddlog::mddlog)\n\
+target_link_libraries(consumer PRIVATE mddlog::mddlog mddlog::core)\n\
 add_executable(consumer_core main_core.cpp)\n\
 target_link_libraries(consumer_core PRIVATE mddlog::core)\n\
 if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
