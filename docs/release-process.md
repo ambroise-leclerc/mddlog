@@ -58,8 +58,8 @@ $ git switch -c release/vX.Y.Z
 
 `CMakeLists.txt`'s `project(mddlog VERSION X.Y.Z ...)` is the single definition. It reaches the code
 through `MDDLOG_VERSION_STRING` (`cmake/CompilerSettings.cmake`), which `mddlog::getVersion()`
-returns, and the package version file through `install(EXPORT ...)`. Never repeat the literal in the
-code.
+returns, and the package version file through `write_basic_package_version_file(...)`. Never repeat
+the literal in the code.
 
 The assertions do repeat it, on purpose:
 

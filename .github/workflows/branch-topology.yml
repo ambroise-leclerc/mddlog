@@ -1,7 +1,7 @@
 name: Branch Topology
 
 # Enforces the release topology of docs/release-process.md, adapted from MduX's workflow of the
-# same name: master carries nothing develop lacks (step 9's back-merge), and master accepts only
+# same name: master carries nothing develop lacks (step 8's back-merge), and master accepts only
 # same-repository release/vX.Y.Z pull requests.
 
 on:
@@ -15,7 +15,7 @@ on:
     # request cannot edit in its own diff. The trigger is privileged, so the job never checks out or
     # runs pull request code: it only reads branch tips fetched by name and event metadata, and
     # `permissions` stays read-only.
-    branches: [ master, develop, '[0-9]+-*' ]
+    branches: [ master, develop ]
     types: [ opened, synchronize, reopened, edited ]
   schedule:
     # A backstop for what push events cannot see: a skipped run or a force-push.
@@ -69,7 +69,7 @@ jobs:
 
           echo "master-only commits: ${master_only}; develop-only commits: ${develop_only}"
           if (( master_only != 0 )); then
-            echo "::error::master carries ${master_only} commit(s) develop lacks; back-merge master as described in docs/release-process.md step 9"
+            echo "::error::master carries ${master_only} commit(s) develop lacks; back-merge master as described in docs/release-process.md step 8"
             failed=1
           fi
         fi
