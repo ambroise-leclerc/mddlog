@@ -2,9 +2,9 @@
 
 ## Status
 Accepted — the governed/adapter boundary and the contracts in Decisions 1–8 are the design the
-codebase is expected to conform to. `GovernedRecord`, `InlineString`, `RingLog`, the adapter boundary
-and its checks are implemented; acceptance alone does not establish validation of a particular build
-(see Consequences and Approval).
+codebase is expected to conform to. `GovernedRecord`, `InlineString`, `RingLog`, the adapter-zone
+ring drain, the adapter boundary and its checks are implemented; acceptance alone does not establish
+validation of a particular build (see Consequences and Approval).
 
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
@@ -12,29 +12,30 @@ the same baseline mddlog issue #5 verifies against, so the comparisons stay chec
 
 ## Context
 
-At the 2026-09-24 decision date, `README.md` described mddlog as "real-time capable" and listed
-"Memory pool allocation for zero-allocation logging" as `(planned)`. The then-current module set
-did not deliver a governed path. The following historical observations motivated the structural
-split; the allocating logger still coexists with the governed path:
+When this ADR was first drafted (2026-09-21, #6), `README.md` described mddlog as "real-time
+capable" and listed "Memory pool allocation for zero-allocation logging" as `(planned)`. The module
+set of that time did not deliver a governed path. The observations below describe the code at that
+drafting date, in the past tense and with the paths of that time; the note after them records what
+has changed since. They motivated the structural split:
 
-- The allocating `LogRecord` (now `include/mddlog/adapter/LogRecord.cppm`) carries ten
+- The allocating `LogRecord` (then `include/mddlog/core/LogRecord.cppm`) carried nine
   `std::string` data members (`message`, `category`, `userId`, `sessionId`, `deviceId`, `operationId`,
-  `auditEventType`, `riskLevel`, `complianceStandard`, `correlationId`) plus a
+  `auditEventType`, `riskLevel`, `complianceStandard`) plus a
   `Metadata = std::unordered_map<std::string, std::string>`. Any of those values may allocate,
   depending on length and the implementation's small-string capacity; `addMetadata()` may
   allocate for the map node and for key/value storage. The point is not that every field allocates
   every time — it is that the type provides no bound on whether it does.
-- `LogRecord::getFormattedTimestamp()` and `getSourceLocationString()` build a
-  `std::stringstream` per call and format through `std::put_time`/`std::gmtime`. `std::gmtime`
+- `LogRecord::getFormattedTimestamp()` and `getSourceLocationString()` built a
+  `std::stringstream` per call and formatted through `std::put_time`/`std::gmtime`. `std::gmtime`
   returns a pointer into an implementation-shared buffer with no standard thread-safety guarantee;
-  calling it from concurrent producers is a data race, which directly contradicts the "thread-safe"
-  claim this same type is meant to support.
-- `SimpleLogger` (now `include/mddlog/adapter/Logger.cppm`) stores sinks as
-  `std::vector<std::shared_ptr<Sink>>` (`SinkPtr`, `sinks/Sink.cppm`), queues records in an
-  **unbounded** `std::queue<LogRecord>` (`logQueue`), and swallows sink
-  exceptions with bare `catch (...)` (`writeToSinks()`, `flushSinks()`) — comments in both admit "In a medical device, this might need more sophisticated error
-  handling" without providing it.
-- `ConsoleSink::write()` (`sinks/ConsoleSink.cppm:44-113`) formats through `std::ostream` and wraps
+  calling it from concurrent producers is a data race, which directly contradicted the "thread-safe"
+  claim this same type was meant to support.
+- `SimpleLogger` (then `include/mddlog/core/Logger.cppm`) stored sinks as
+  `std::vector<std::shared_ptr<Sink>>` (`SinkPtr`, `sinks/Sink.cppm`), queued records in an
+  **unbounded** `std::queue<LogRecord>` (`logQueue`), and swallowed sink exceptions with bare
+  `catch (...)` (`writeToSinks()`, `flushSinks()`) — comments in both admitted "In a medical device,
+  this might need more sophisticated error handling" without providing it.
+- `ConsoleSink::write()` (`sinks/ConsoleSink.cppm`) formatted through `std::ostream` and wrapped
   the whole body in `catch (const std::exception&)`.
 - A second, unregistered copy of most of this (`LogRecord`, `Sink`, `ConsoleSink`, `SimpleLogger`)
   exists in the root-level `mddlog.cppm`, which `CMakeLists.txt` does not build
@@ -47,6 +48,16 @@ split; the allocating logger still coexists with the governed path:
   and treats "persistent/cryptographically protected audit storage" as out of its own scope. The
   queue half is what this ADR closes; the audit record and its delivery contract are ADR-002's, and
   persistent/tamper-evident storage is ADR-004's.
+
+**Since the draft.** Several of these observations no longer describe the code. Before this ADR
+was accepted, #12 (2026-09-22) replaced `std::gmtime` in `getFormattedTimestamp()` with
+`std::format` over the time point (only `getSourceLocationString()` still uses a
+`std::stringstream`), and made `writeToSinks()` record each caught sink failure through the sink's
+`recordWriteFailure()` statistic; `flushSinks()` still ignores flush failures. #32 moved
+`LogRecord` and `SimpleLogger` to `mddlog.adapter.logrecord` and `mddlog.adapter.logger`, and #38
+added a tenth `std::string` member, `correlationId`, for governed records drained through the
+adapter. The allocating logger and its unbounded queue still coexist with the governed path; the
+remaining observations stand.
 
 None of this is a criticism of what exists — a synchronous/asynchronous best-effort logger with a
 console sink is a reasonable first module set. The point of this ADR is that "zero-allocation
@@ -132,8 +143,9 @@ that combinatorial surface. If a second footprint is ever needed (e.g. a more co
 is a **second, distinctly named** governed type — e.g. `CompactGovernedRecord` with its own constants — not a
 second instantiation of the same template family.
 
-Drop `getFormattedTimestamp()`/`getSourceLocationString()`'s `std::stringstream`/`std::gmtime` path
-from the governed type: a governed record stores a raw time value supplied by the host (ADR-002
+Keep the allocating `LogRecord`'s text formatting (`getFormattedTimestamp()`, now `std::format`;
+`getSourceLocationString()`, a `std::stringstream`; formerly also `std::gmtime`, see Context) out of
+the governed type: a governed record stores a raw time value supplied by the host (ADR-002
 Decision 5) and `std::source_location` (which is non-owning and fine as-is), and text formatting is
 a sink-zone concern that may allocate.
 
@@ -341,7 +353,7 @@ be, by construction. What it does require is that the boundary be stated rather 
 - A record's truncation flag (Decision 2) is carried through to the sink, so a sink can render a
   shortened message as shortened rather than as complete.
 - **No existing sink preserves every field.** `ConsoleSink::write()`
-  (`sinks/ConsoleSink.cppm:71-87`) emits `userId`, `deviceId`, `operationId`, `auditEventType` and
+  (`sinks/ConsoleSink.cppm`) emits `userId`, `deviceId`, `operationId`, `auditEventType` and
   `riskLevel`, but not `complianceStandard`, and its output is a human-readable line, not a
   round-trippable encoding. Nothing in this ADR should be read as implying that routing a governed
   record through today's sinks preserves it; the sink responsible for complete audit-field
@@ -375,7 +387,7 @@ been implemented:
   helpers (`toString`, `fromString`, `isComplianceLevel`) allocate nothing, throw nothing, and are
   usable identically by governed and adapter code — they stay under `mddlog.core.loglevel` and count
   as governed. `getColorCode`/`getResetColorCode`, however, are ANSI console-styling helpers with
-  exactly one caller today (`ConsoleSink::write()`, `sinks/ConsoleSink.cppm:61,95`) — ANSI escape
+  exactly one caller (`ConsoleSink::write()`, `sinks/ConsoleSink.cppm`) — ANSI escape
   sequences are a presentation concern, not a governed one, so they move out of `mddlog.core.*` into
   the sink zone (inlined into `mddlog.sinks.consolesink`, since no other consumer justifies a
   separate colors module). Being allocation-free is necessary for a symbol to stay under
@@ -467,8 +479,8 @@ has no usable clock, not lost because of it.
 - **The core reads no clock.** The value is a mandatory parameter the caller supplies at the write
   call site; nothing in `mddlog.core.record` or `mddlog.core.ring` calls
   `std::chrono::system_clock::now()`, `std::gmtime`, or any other clock/time-zone API — that path was
-  already identified as a defect in `LogRecord::getFormattedTimestamp()` (Context) and Decision 1
-  already excludes it from the governed type. `sys_time` names an epoch, it does not read one: the
+  identified as a defect in the drafting-era `LogRecord::getFormattedTimestamp()` (Context; since
+  replaced by `std::format`) and Decision 1 excludes such formatting from the governed type. `sys_time` names an epoch, it does not read one: the
   host converts whatever clock it has (a hardware RTC, an NTP-disciplined counter, or nothing at all)
   to Unix-time nanoseconds itself, or passes `RawTime::unavailable()`. This is now a stated, checkable
   constraint: the governed module's translation units should contain zero references to clock-query
@@ -575,8 +587,9 @@ a mode of this one.
 - Reuses a boundary pattern MduX has already worked through — including the parts MduX found the
   hard way, such as the `import std`/`-fno-exceptions` interaction — which is design *precedent*,
   not transferred validation (see Risks).
-- Formatting stays outside the implemented `GovernedRecord` path. The historical allocating
-  `LogRecord::getFormattedTimestamp()` still calls `std::gmtime`; this ADR does not repair it.
+- Formatting stays outside the implemented `GovernedRecord` path. The `std::gmtime` data race noted
+  in Context was removed from the allocating `LogRecord::getFormattedTimestamp()` by #12, which now
+  formats through `std::format`; that fix is independent of this ADR.
 
 ### Negative
 - Introduces the separate `GovernedRecord` alongside the allocating `LogRecord`, adding a second
@@ -637,7 +650,8 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 ## Approval
 - **Decision Date**: 2026-09-24.
 - **Approved By**: ambroise-leclerc (project maintainer).
-- **Review Date**: 2026-09-26 — revisited after `InlineString` (#33), `GovernedRecord` (#35),
-  `RingLog` (#36), and the boundary checks (#39) landed. This revision aligns implementation
+- **Review Date**: 2026-09-26 — revisited after `InlineString` (#33), `WriteResult` (#34),
+  `GovernedRecord` (#35), `RingLog` (#36), its ThreadSanitizer tests (#37), the adapter-zone ring
+  drain (#38), and the boundary checks (#39) landed. This revision aligns implementation
   names, examples, and historical status; it makes no new normative decision. Review again if
   capacities, record layout, or the drain contract change.
