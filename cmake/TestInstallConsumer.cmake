@@ -43,11 +43,13 @@ endif()
 
 # A minimal external project - deliberately not part of this repository's own CMake build graph,
 # so it can only see mddlog through find_package(), exactly as a real downstream consumer would.
+# Each consumer executable is "target|source|linked targets" (links separated by ',').
 if(CONSUMER_KIND STREQUAL "full")
+# Imports only the umbrella and links only mddlog::mddlog, so the installed full target must bring
+# mddlog::core, its modules and its library through its own declared dependency.
 file(WRITE "${consumer_src}/main.cpp" "\
 import std;\n\
 import mddlog;\n\
-import mddlog.core.ring;\n\
 \n\
 int main() {\n\
     // A real assertion, not just \"it links\": confirms the installed module is actually usable\n\
@@ -62,6 +64,17 @@ int main() {\n\
     logger.addSink(mddlog::createConsoleSink(false, false));\n\
     logger.info(\"install consumer smoke test\");\n\
     logger.flush();\n\
+    return 0;\n\
+}\n\
+")
+# A translation unit that directly imports a governed module must also link the target providing
+# it: CMake 4.1 with GCC does not place transitively linked modules in its module mapper.
+file(WRITE "${consumer_src}/main_ring.cpp" "\
+import std;\n\
+import mddlog;\n\
+import mddlog.core.ring;\n\
+\n\
+int main() {\n\
     mddlog::core::RingLog<1> ring;\n\
     mddlog::RingSinkAdapter adapter;\n\
     adapter.addRing(ring);\n\
@@ -72,19 +85,34 @@ int main() {\n\
     return 0;\n\
 }\n\
 ")
-
-set(consumer_target "consumer")
-# Only the full target: its declared dependency must bring mddlog::core and the core modules.
-set(consumer_link_target "mddlog::mddlog")
-set(consumer_source "main.cpp")
+set(consumer_executables "consumer|main.cpp|mddlog::mddlog" "consumer_ring|main_ring.cpp|mddlog::mddlog,mddlog::core")
 else()
     # Reuse the exact program exercised in-tree. Only mddlog::core may be linked here.
     file(MAKE_DIRECTORY "${consumer_src}")
     file(COPY_FILE "${SOURCE_DIR}/tests/consumer/CoreConsumer.cpp" "${consumer_src}/main_core.cpp")
-    set(consumer_target "consumer_core")
-    set(consumer_link_target "mddlog::core")
-    set(consumer_source "main_core.cpp")
+    set(consumer_executables "consumer_core|main_core.cpp|mddlog::core")
 endif()
+
+set(consumer_required_targets)
+set(consumer_target_definitions)
+foreach(consumer_executable_spec IN LISTS consumer_executables)
+    string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
+    list(GET consumer_fields 0 consumer_target)
+    list(GET consumer_fields 1 consumer_source)
+    list(GET consumer_fields 2 consumer_links)
+    string(REPLACE "," " " consumer_links "${consumer_links}")
+    string(APPEND consumer_target_definitions "\
+add_executable(${consumer_target} ${consumer_source})\n\
+target_link_libraries(${consumer_target} PRIVATE ${consumer_links})\n\
+if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
+    set_target_properties(${consumer_target} PROPERTIES CXX_MODULE_STD ON)\n\
+endif()\n\
+")
+    string(REPLACE " " ";" consumer_link_list "${consumer_links}")
+    list(APPEND consumer_required_targets ${consumer_link_list})
+endforeach()
+list(REMOVE_DUPLICATES consumer_required_targets)
+list(JOIN consumer_required_targets " " consumer_required_targets)
 
 file(WRITE "${consumer_src}/CMakeLists.txt" "\
 cmake_minimum_required(VERSION 4.0.0)\n\
@@ -105,17 +133,12 @@ if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
     set(CMAKE_CXX_MODULE_STD ON)\n\
 endif()\n\
 find_package(mddlog CONFIG REQUIRED)\n\
-foreach(required_target IN ITEMS ${consumer_link_target})\n\
+foreach(required_target IN ITEMS ${consumer_required_targets})\n\
     if(NOT TARGET \${required_target})\n\
         message(FATAL_ERROR \"Installed package does not provide \${required_target}\")\n\
     endif()\n\
 endforeach()\n\
-add_executable(${consumer_target} ${consumer_source})\n\
-target_link_libraries(${consumer_target} PRIVATE ${consumer_link_target})\n\
-if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
-    set_target_properties(${consumer_target} PROPERTIES CXX_MODULE_STD ON)\n\
-endif()\n\
-")
+${consumer_target_definitions}")
 
 message(STATUS "${test_name}: configuring consumer project")
 set(consumer_toolchain_arguments)
@@ -168,17 +191,22 @@ if(NOT build_result EQUAL 0)
     message(FATAL_ERROR "Consumer build failed (${build_result}):\n${build_output}\n${build_error}")
 endif()
 
-set(consumer_executable "${consumer_build}/${consumer_target}")
-if(WIN32)
-    string(APPEND consumer_executable ".exe")
-endif()
-message(STATUS "${test_name}: running ${consumer_target} executable")
-execute_process(
-    COMMAND "${consumer_executable}"
-    RESULT_VARIABLE run_result
-)
-if(NOT run_result EQUAL 0)
-    message(FATAL_ERROR "${consumer_target} exited with ${run_result} (expected 0 - see ${consumer_source}'s assertions)")
-endif()
+foreach(consumer_executable_spec IN LISTS consumer_executables)
+    string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
+    list(GET consumer_fields 0 consumer_target)
+    list(GET consumer_fields 1 consumer_source)
+    set(consumer_executable "${consumer_build}/${consumer_target}")
+    if(WIN32)
+        string(APPEND consumer_executable ".exe")
+    endif()
+    message(STATUS "${test_name}: running ${consumer_target} executable")
+    execute_process(
+        COMMAND "${consumer_executable}"
+        RESULT_VARIABLE run_result
+    )
+    if(NOT run_result EQUAL 0)
+        message(FATAL_ERROR "${consumer_target} exited with ${run_result} (expected 0 - see ${consumer_source}'s assertions)")
+    endif()
+endforeach()
 
 message(STATUS "${test_name}: OK")

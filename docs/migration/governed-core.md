@@ -24,7 +24,11 @@ For an in-tree `add_subdirectory(mddlog)` integration or an installed
 `find_package(mddlog CONFIG REQUIRED)` integration, link `mddlog::core` if the target uses only
 governed modules. Link `mddlog::mddlog` for `SimpleLogger`, the umbrella, adapters or sinks; the
 full target depends on the core target. Do not link the full target to a core-only consumer just
-to make imports work.
+to make imports work. A target that links `mddlog::mddlog` and also directly imports a
+`mddlog.core.*` module (for example to create a `RingLog` for `RingSinkAdapter`) must link
+`mddlog::core` explicitly as well: with GCC and CMake 4.1, modules reached only through a
+transitive link are not placed in the importing file's module mapper, and the import fails with
+"unknown compiled module interface".
 
 ```cmake
 find_package(mddlog CONFIG REQUIRED)
