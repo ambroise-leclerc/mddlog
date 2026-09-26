@@ -160,8 +160,7 @@ Core-only clients can import `mddlog.core.record` and `mddlog.core.ring`, then l
 `mddlog::core`. The same write/drain/acknowledge program is tested both as an in-tree target and
 against the installed package, with separate CTest results. See the
 [governed-core migration guide](docs/migration/governed-core.md) for imports, capacities,
-admission, host-supplied time and CMake examples. `CLAUDE.md` is intentionally ignored;
-[`AGENTS.md`](AGENTS.md) is the canonical, tool-neutral contributor guide.
+admission, host-supplied time and CMake examples.
 
 ### Core Components
 
@@ -371,6 +370,9 @@ commercial terms. See [LICENSING.md](LICENSING.md).
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+[`AGENTS.md`](AGENTS.md) is the canonical, tool-neutral contributor guide; tool-specific assistant
+files such as `CLAUDE.md` are intentionally ignored.
 
 ## Medical Device Certification
 

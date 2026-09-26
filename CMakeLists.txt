@@ -303,8 +303,9 @@ if(MDDLOG_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 
-    # Report the full and core-only installed consumers separately. Their scratch prefixes must
-    # differ so CTest can run both concurrently without either deleting the other's files.
+    # Report the full and core-only installed consumers separately. Their scratch prefixes differ,
+    # but every `cmake --install` of this build tree rewrites ${CMAKE_BINARY_DIR}/install_manifest.txt,
+    # so a shared resource lock keeps the two installs from writing that file concurrently.
     foreach(_mddlog_consumer_kind IN ITEMS full core)
         if(_mddlog_consumer_kind STREQUAL "full")
             set(_mddlog_consumer_test InstallTreeConsumer)
@@ -334,7 +335,7 @@ if(MDDLOG_BUILD_TESTS)
             -D "CONSUMER_KIND=${_mddlog_consumer_kind}"
             -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"
         )
-        set_tests_properties(${_mddlog_consumer_test} PROPERTIES LABELS "build")
+        set_tests_properties(${_mddlog_consumer_test} PROPERTIES LABELS "build" RESOURCE_LOCK mddlog_install_tree)
     endforeach()
 endif()
 

@@ -74,7 +74,8 @@ int main() {\n\
 ")
 
 set(consumer_target "consumer")
-set(consumer_link_target "mddlog::mddlog mddlog::core")
+# Only the full target: its declared dependency must bring mddlog::core and the core modules.
+set(consumer_link_target "mddlog::mddlog")
 set(consumer_source "main.cpp")
 else()
     # Reuse the exact program exercised in-tree. Only mddlog::core may be linked here.
@@ -104,9 +105,11 @@ if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
     set(CMAKE_CXX_MODULE_STD ON)\n\
 endif()\n\
 find_package(mddlog CONFIG REQUIRED)\n\
-if(NOT TARGET mddlog::core)\n\
-    message(FATAL_ERROR \"Installed package does not provide mddlog::core\")\n\
-endif()\n\
+foreach(required_target IN ITEMS ${consumer_link_target})\n\
+    if(NOT TARGET \${required_target})\n\
+        message(FATAL_ERROR \"Installed package does not provide \${required_target}\")\n\
+    endif()\n\
+endforeach()\n\
 add_executable(${consumer_target} ${consumer_source})\n\
 target_link_libraries(${consumer_target} PRIVATE ${consumer_link_target})\n\
 if(23 IN_LIST CMAKE_CXX_COMPILER_IMPORT_STD)\n\
