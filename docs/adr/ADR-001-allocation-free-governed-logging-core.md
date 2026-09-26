@@ -2,7 +2,9 @@
 
 ## Status
 Accepted — the governed/adapter boundary and the contracts in Decisions 1–8 are the design the
-codebase is expected to conform to; none of it is implemented yet (see Consequences and Approval).
+codebase is expected to conform to. `GovernedRecord`, `InlineString`, `RingLog`, the adapter boundary
+and its checks are implemented; acceptance alone does not establish validation of a particular build
+(see Consequences and Approval).
 
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
@@ -10,28 +12,27 @@ the same baseline mddlog issue #5 verifies against, so the comparisons stay chec
 
 ## Context
 
-`README.md` states mddlog is "real-time capable" and lists "Memory pool allocation for
-zero-allocation logging" under Performance & Monitoring, marked `(planned)`. Nothing in the current
-module set delivers that today, and several current design choices make it unreachable without a
-structural change rather than an incremental one:
+At the 2026-09-24 decision date, `README.md` described mddlog as "real-time capable" and listed
+"Memory pool allocation for zero-allocation logging" as `(planned)`. The then-current module set
+did not deliver a governed path. The following historical observations motivated the structural
+split; the allocating logger still coexists with the governed path:
 
-- `LogRecord` (`include/mddlog/core/LogRecord.cppm:18-48`) carries **nine** `std::string` data
-  members (`message`, `category`, `userId`, `sessionId`, `deviceId`, `operationId`,
-  `auditEventType`, `riskLevel`, `complianceStandard`) plus a
+- The allocating `LogRecord` (now `include/mddlog/adapter/LogRecord.cppm`) carries ten
+  `std::string` data members (`message`, `category`, `userId`, `sessionId`, `deviceId`, `operationId`,
+  `auditEventType`, `riskLevel`, `complianceStandard`, `correlationId`) plus a
   `Metadata = std::unordered_map<std::string, std::string>`. Any of those values may allocate,
-  depending on length and the implementation's small-string capacity; `addMetadata()` (line 121) may
+  depending on length and the implementation's small-string capacity; `addMetadata()` may
   allocate for the map node and for key/value storage. The point is not that every field allocates
   every time — it is that the type provides no bound on whether it does.
-- `getFormattedTimestamp()` and `getSourceLocationString()` (lines 138-158) build a
+- `LogRecord::getFormattedTimestamp()` and `getSourceLocationString()` build a
   `std::stringstream` per call and format through `std::put_time`/`std::gmtime`. `std::gmtime`
   returns a pointer into an implementation-shared buffer with no standard thread-safety guarantee;
   calling it from concurrent producers is a data race, which directly contradicts the "thread-safe"
   claim this same type is meant to support.
-- `SimpleLogger` (`include/mddlog/core/Logger.cppm`) stores sinks as
-  `std::vector<std::shared_ptr<Sink>>` (`SinkPtr`, `sinks/Sink.cppm:136`), queues records in an
-  **unbounded** `std::queue<LogRecord>` (`logQueue`, `Logger.cppm:373`), and swallows sink
-  exceptions with bare `catch (...)` (`writeToSinks()`, lines 273-279; `flushSinks()`, lines
-  290-294) — comments in both admit "In a medical device, this might need more sophisticated error
+- `SimpleLogger` (now `include/mddlog/adapter/Logger.cppm`) stores sinks as
+  `std::vector<std::shared_ptr<Sink>>` (`SinkPtr`, `sinks/Sink.cppm`), queues records in an
+  **unbounded** `std::queue<LogRecord>` (`logQueue`), and swallows sink
+  exceptions with bare `catch (...)` (`writeToSinks()`, `flushSinks()`) — comments in both admit "In a medical device, this might need more sophisticated error
   handling" without providing it.
 - `ConsoleSink::write()` (`sinks/ConsoleSink.cppm:44-113`) formats through `std::ostream` and wraps
   the whole body in `catch (const std::exception&)`.
@@ -89,17 +90,19 @@ adapted to a standalone library with no `mdux.governance`/`mdux.evidence` to imp
 
 | Zone | Module(s) | May allocate / throw / block | Public API may contain |
 |---|---|---|---|
-| Governed core | `mddlog.core.record`, `mddlog.core.ring` (new) | No | `std::span`, fixed-capacity value types, `std::string_view` into caller-owned storage |
+| Governed core | `mddlog.core.record`, `mddlog.core.ring` | No | `std::span`, fixed-capacity value types, `std::string_view` into caller-owned storage |
 | Sinks / adapter | `mddlog.sinks.*`, `mddlog.adapter.logger` | Yes | `std::string`, `std::shared_ptr`, `std::ostream`, any allocating container |
 
-### 1. `LogRecord` becomes a fixed-capacity, non-allocating value type
+### 1. `GovernedRecord` is a fixed-capacity, non-allocating value type
 
-Replace every `std::string` field with a caller-sized inline buffer plus length, e.g.
+The governed `mddlog::core::GovernedRecord` is separate from the historical, allocating
+`mddlog::core::LogRecord`, which remains available through `mddlog.adapter.logrecord`. Its bounded
+text fields use an inline buffer plus length, namely
 `InlineString<N>` (a `std::array<char, N>` and a `std::uint16_t` length, `constexpr`, `noexcept`).
 Capacities are declared in **bytes**, not code points; a value is accepted only if it fits whole, so
 no field ever stores a partial UTF-8 sequence. `N` is constrained at compile time to the range the
-`std::uint16_t` length can represent, i.e. `N ∈ [0, 65535]`, to be enforced with a `static_assert`
-once `InlineString` exists.
+`std::uint16_t` length can represent, i.e. `N ∈ [0, 65535]`, enforced by the
+`InlineString` template constraint.
 None of the capacities chosen below come close to that ceiling; it bounds the type, it does not
 drive these values.
 
@@ -119,14 +122,14 @@ covers what happens to the rest). Capacities:
 
 **Parametrization mode.** These four capacities are `constexpr std::size_t` constants declared
 alongside `mddlog.core.record`, forming one fixed preset — not template parameters exposed on the
-public `LogRecord` type itself. `InlineString<N>` stays a reusable template, but the record type
-built from it is a single, concrete (non-template) struct. This is a deliberate choice between the
+public `GovernedRecord` type itself. `InlineString<N>` stays a reusable template, but the record type
+built from it is a single, concrete (non-template) class. This is a deliberate choice between the
 two options the issue that requested this section raised: exposing `N` as template parameters on
-`LogRecord` would let every consumer pick its own capacities, but it would also mean `RingLog`, the
+`GovernedRecord` would let every consumer pick its own capacities, but it would also mean `RingLog`, the
 sinks, and the adapter would each have to agree on (or template over) the same instantiation, and a
 mismatched pair would fail to link rather than fail a documented contract. One named preset avoids
 that combinatorial surface. If a second footprint is ever needed (e.g. a more constrained target), it
-is a **second, distinctly named** type — e.g. `CompactLogRecord` with its own constants — not a
+is a **second, distinctly named** governed type — e.g. `CompactGovernedRecord` with its own constants — not a
 second instantiation of the same template family.
 
 Drop `getFormattedTimestamp()`/`getSourceLocationString()`'s `std::stringstream`/`std::gmtime` path
@@ -310,7 +313,7 @@ saturating arithmetic — unsigned overflow is well-defined by the standard as m
 guarantee `std::atomic<std::uint64_t>` is lock-free on every implementation** — review correctly
 flagged that the lock-free claim above needs a stated condition, not an assumption. This ADR requires
 `std::atomic<std::uint64_t>::is_always_lock_free` to hold on every configuration this governed core
-targets, checkable with a `static_assert` once the type exists (the same enforcement pattern as
+targets, checked by `RingLog`'s `static_assert` (the same enforcement pattern as
 Decision 1's capacity bound); a target where it does not hold is not a target this ADR's "no
 blocking" property covers, and Decision 6's CMake configuration should reject or flag it rather than
 silently link a lock-based fallback into code labeled governed. Wraparound is treated as
@@ -320,10 +323,11 @@ years to wrap. No wrap-handling logic is implemented; the width is chosen specif
 is needed within any device's operational lifetime. This same width and rule (64-bit, monotonic,
 natural modulo wraparound, unreachable in practice) is what ADR-002 Decision 5 asks the implementing
 issue to state for `AuditEvent.sequence`, and this is that statement.
-- **Drain view lifetime**: the consumer obtains the unread region as **one or two**
-  `std::span<const LogRecord>` (two when the unread region wraps). Those spans are valid only until
-  the consumer advances the read cursor; the consumer must finish copying out of them before
-  acknowledging. Nothing outside that window may retain them.
+- **Drain view lifetime**: `RingLog<Capacity>::drain()` returns a `DrainView` whose `first()` and
+  `second()` expose **one or two** `std::span<const GovernedRecord>` (two when the unread region
+  wraps). The consumer must finish reading or copying before calling
+  `acknowledge(view, count)`; a positive acknowledgement invalidates both spans. Nothing outside
+  that window may retain them.
 
 ### 5. Draining to a sink is an adapter-zone operation, with a stated field contract
 
@@ -345,10 +349,9 @@ be, by construction. What it does require is that the boundary be stated rather 
 
 ### 6. The boundary is materialised as modules *and* CMake targets
 
-A table in a document is not a boundary. Today `SimpleLogger` lives in `mddlog.core.logger` and
-imports `mddlog.sinks.sink`, so the `mddlog.core.*` prefix does not currently mean "governed"; and
-`CMakeLists.txt` builds a single `mddlog` target containing every module. Both must change for the
-split to mean anything:
+At the decision date, `SimpleLogger` lived in `mddlog.core.logger` and imported
+`mddlog.sinks.sink`, while `CMakeLists.txt` built one `mddlog` target. The following split has since
+been implemented:
 
 - The governed modules move under names that only contain governed code (`mddlog.core.record`,
   `mddlog.core.ring`). `SimpleLogger` moves out of the `mddlog.core.*` namespace to an adapter
@@ -378,10 +381,10 @@ split to mean anything:
   separate colors module). Being allocation-free is necessary for a symbol to stay under
   `mddlog.core.*`, but this split shows it is not sufficient on its own — semantic ownership (is this
   governed-record logic, or sink presentation?) is the other half of the test.
-- The current allocating `LogRecord` (`include/mddlog/core/LogRecord.cppm`, nine `std::string`
-  fields plus `Metadata`) **cannot** remain under `mddlog.core.*` once the governed record exists,
-  per this decision's own rule. It moves wholesale — together with `LogStatistics`, which lives in
-  the same file today — to an adapter module, `mddlog.adapter.logrecord`. `LogStatistics` is
+- The allocating `LogRecord` (formerly `include/mddlog/core/LogRecord.cppm`, now
+  `include/mddlog/adapter/LogRecord.cppm`) **cannot** remain under `mddlog.core.*`, per this
+  decision's own rule. It moved wholesale — together with `LogStatistics` — to
+  `mddlog.adapter.logrecord`. `LogStatistics` is
   mechanically allocation-free (only atomics), but it is not a governed *record* type: it counts
   outcomes of sink I/O (`bytesWritten`, `flushCount`, `totalWriteTimeNs`), which is adapter-zone
   activity by the same semantic-ownership test just applied to the color helpers, so it moves with
@@ -492,13 +495,12 @@ has no usable clock, not lost because of it.
 
 ### 8. Memory budget: a worked example, and what it does and does not guarantee
 
-**What this budget commits the implementation to.** Once `LogRecord` and `RingLog` exist,
-`sizeof(LogRecord)` must be a compile-time constant, checkable via `sizeof` and `static_assert`
-before first use, and the footprint of `RingLog<Capacity>` must be exactly
-`Capacity * sizeof(LogRecord)` plus a fixed, small overhead for its cursors and refusal counter —
-never anything more, and never subject to growth once constructed, in contrast to today's unbounded
-`std::queue<LogRecord>` (Context), which has no such bound at all. Neither type exists yet; this is a
-requirement on the implementation, not a description of current code.
+**What this budget commits the implementation to.** `GovernedRecord` and `RingLog` now exist.
+`sizeof(GovernedRecord)` is a compile-time constant; the implementation checks it against
+`maximumStandardRecordBytes` (384) with a `static_assert`. `RingLog<Capacity>` contains exactly
+`Capacity` inline `GovernedRecord` slots and three atomic 64-bit counters. Its footprint is
+`Capacity * sizeof(GovernedRecord)` plus fixed counter storage and any ABI padding, and cannot
+grow after construction. The separate adapter's `std::queue<LogRecord>` has no such bound.
 
 **Record layout, "Standard" preset (Decision 1).** `sizeof(InlineString<N>)` is `N` (the byte
 buffer) plus 2 (the `std::uint16_t` length), rounded up to the type's alignment — a fixed cost of
@@ -515,12 +517,14 @@ buffer) plus 2 (the `std::uint16_t` length), rounded up to the type's alignment 
 | `correlationId` (`InlineString<40>`) | 42 bytes |
 | `truncated.message` (`bool`) | 1 byte |
 | **Sum before alignment** | **≈314 bytes** |
-| **`sizeof(LogRecord)`, rounded to 8-byte alignment** | **≈320 bytes** |
+| **`sizeof(GovernedRecord)`, rounded to 8-byte alignment** | **≈320 bytes** |
 
 **`RingLog` budget, worked example.** Overhead beyond the slots is three `std::atomic<std::uint64_t>`
-values (write cursor, read cursor, refusal counter — Decision 4): 24 bytes. A `RingLog<1024>` is
-therefore approximately `1024 × 320 + 24 ≈ 327,704 bytes`, i.e. **≈320 KiB** — a single, static,
-computable number in place of "however large the queue happens to grow."
+values (write cursor, read cursor, refusal counter — Decision 4): approximately 24 bytes on a
+64-bit target, plus possible padding. A `RingLog<1024>` is therefore approximately
+`1024 × 320 + 24 ≈ 327,704 bytes`, i.e. **≈320 KiB** on the illustrative ABI — a static,
+computable footprint in place of "however large the queue happens to grow." The exact value for a
+target is `sizeof(RingLog<1024>)`.
 
 **What is *not* guaranteed:**
 - The exact byte counts above are **not** portable across compilers/ABIs — `std::source_location`'s
@@ -571,13 +575,12 @@ a mode of this one.
 - Reuses a boundary pattern MduX has already worked through — including the parts MduX found the
   hard way, such as the `import std`/`-fno-exceptions` interaction — which is design *precedent*,
   not transferred validation (see Risks).
-- Moving formatting out of the governed record would remove the `std::gmtime` data race from the
-  governed path when implemented. It does not fix it today: `LogRecord::getFormattedTimestamp()`
-  still calls `std::gmtime`, and that defect remains open regardless of this ADR's status.
+- Formatting stays outside the implemented `GovernedRecord` path. The historical allocating
+  `LogRecord::getFormattedTimestamp()` still calls `std::gmtime`; this ADR does not repair it.
 
 ### Negative
-- Introduces a second `LogRecord`-shaped type (or a capacity-parameterized template), more surface
-  to document and keep in sync than the current single struct.
+- Introduces the separate `GovernedRecord` alongside the allocating `LogRecord`, adding a second
+  record contract to document and maintain.
 - Fixed capacities make some inputs refusable that are accepted today (Decision 2), which is a
   behavioral change for existing callers, not only an internal one.
 - The module rename and target split (Decision 6) are a breaking change for any consumer importing
@@ -587,11 +590,12 @@ a mode of this one.
   `mddlog.core.loglevel` (`getColorCode`/`getResetColorCode`) into the adapter/sink zone: the
   breaking surface for direct-module importers is therefore slightly larger than the first draft
   implied, not limited to `SimpleLogger`.
-- No mechanical enforcement exists yet; this ADR makes the boundary reviewable, not enforced.
+- Boundary checks are implemented by #39; their scope and limitations are documented in the
+  [governed evidence note](../governed-evidence.md).
 - Chosen capacities (Decision 1) are a first documented default, not derived from real call-site
   measurements — the same caveat ADR-002 Decision 1 states for its own identifier grammars. An
   under-sized identifier capacity produces refusals in the field; widening a capacity later is a
-  binary-compatibility-breaking change to `LogRecord`'s layout, not a silent fix.
+  binary-compatibility-breaking change to `GovernedRecord`'s layout, not a silent fix.
 
 ### Risks and Mitigations
 - **The precedent is overstated.** MduX describes itself as experimental; its ADRs, dependency
@@ -633,4 +637,7 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 ## Approval
 - **Decision Date**: 2026-09-24.
 - **Approved By**: ambroise-leclerc (project maintainer).
-- **Review Date**: when a follow-up issue implementing `RingLog`/`InlineString` is opened, or when issue #5's build/test work lands, whichever is first.
+- **Review Date**: 2026-09-26 — revisited after `InlineString` (#33), `GovernedRecord` (#35),
+  `RingLog` (#36), and the boundary checks (#39) landed. This revision aligns implementation
+  names, examples, and historical status; it makes no new normative decision. Review again if
+  capacities, record layout, or the drain contract change.
