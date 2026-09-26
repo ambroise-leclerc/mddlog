@@ -1,0 +1,85 @@
+name: Branch Topology
+
+# Enforces the release topology of docs/release-process.md, adapted from MduX's workflow of the
+# same name: master carries nothing develop lacks (step 9's back-merge), and master accepts only
+# same-repository release/vX.Y.Z pull requests.
+
+on:
+  push:
+    # A push to master is what creates drift, so observe it directly rather than waiting for the
+    # cron.
+    branches: [ master, develop ]
+  pull_request_target:
+    # `pull_request_target`, deliberately not `pull_request`: this workflow polices the pull request
+    # it runs on, so its definition must come from the default branch (`develop`), which a pull
+    # request cannot edit in its own diff. The trigger is privileged, so the job never checks out or
+    # runs pull request code: it only reads branch tips fetched by name and event metadata, and
+    # `permissions` stays read-only.
+    branches: [ master, develop, '[0-9]+-*' ]
+    types: [ opened, synchronize, reopened, edited ]
+  schedule:
+    # A backstop for what push events cannot see: a skipped run or a force-push.
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branch-topology:
+    name: Branch Topology
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository history
+      # No `ref:`: under `pull_request_target` this checks out the default branch, never the pull
+      # request head.
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Fetch the authoritative branch tips
+      run: |
+        git fetch --no-tags origin \
+          +refs/heads/master:refs/remotes/origin/master \
+          +refs/heads/develop:refs/remotes/origin/develop
+
+    - name: Enforce the release topology
+      env:
+        BASE_REF: ${{ github.base_ref }}
+        EVENT_NAME: ${{ github.event_name }}
+        HEAD_REF: ${{ github.head_ref }}
+        HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      run: |
+        set -euo pipefail
+        failed=0
+
+        # Drift belongs to the branch tips, not to a pull request, so it is not measured on one:
+        # otherwise every open PR would turn red between a release merge and its back-merge.
+        if [[ "${EVENT_NAME}" != pull_request* ]]; then
+          # Capture before splitting: `read x y <<< "$(cmd)"` takes its status from `read`, so a
+          # failing `git rev-list` would leave empty variables that the arithmetic reads as zero.
+          counts="$(git rev-list --left-right --count origin/master...origin/develop)"
+          read -r master_only develop_only <<< "${counts}"
+          if [[ ! "${master_only}" =~ ^[0-9]+$ || ! "${develop_only}" =~ ^[0-9]+$ ]]; then
+            echo "::error::git rev-list returned no usable commit counts: '${counts}'"
+            exit 1
+          fi
+
+          echo "master-only commits: ${master_only}; develop-only commits: ${develop_only}"
+          if (( master_only != 0 )); then
+            echo "::error::master carries ${master_only} commit(s) develop lacks; back-merge master as described in docs/release-process.md step 9"
+            failed=1
+          fi
+        fi
+
+        if [[ "${EVENT_NAME}" == pull_request* && "${BASE_REF}" == "master" ]]; then
+          if [[ "${HEAD_REPOSITORY}" != "${GITHUB_REPOSITORY}" || \
+                ! "${HEAD_REF}" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::master accepts only same-repository release/vX.Y.Z pull requests; target develop for ordinary work"
+            failed=1
+          fi
+        fi
+
+        exit "${failed}"

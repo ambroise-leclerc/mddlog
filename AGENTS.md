@@ -27,6 +27,8 @@ module-import failures honestly; do not claim a build passed from configuration 
 - Register every new module interface in the `FILE_SET cxx_modules` list in dependency order.
 - Keep generated build output outside version control.
 - Follow `CONTRIBUTING.md` for naming, formatting, licensing, and review conventions.
+- Target `develop` from an `<issue-number>-<slug>` branch. `master` carries releases only; cut a
+  version with `docs/release-process.md`, never by tagging or pushing to `master` directly.
 - Do not describe the library as certified or production-validated solely from its medical-device
   design goals or documentation.
 - Keep tool-specific assistant settings local and ignored. Commit messages, PR descriptions, and

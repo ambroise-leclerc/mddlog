@@ -97,6 +97,7 @@ add_executable(mddlog_specs
     spec/RingLogSpec.cpp
     spec/RingLogConcurrencySpec.cpp
     spec/RingDrainSpec.cpp
+    spec/VersionSpec.cpp
 )
 
 target_link_libraries(mddlog_specs PRIVATE mddlog::mddlog speclab::speclab)
