@@ -22,6 +22,9 @@ compile_commands.json
 *.pcm
 *.pdb
 
+# Python bytecode (test-only tooling)
+__pycache__/
+
 # IDE and operating-system files
 .vs/
 .vscode/

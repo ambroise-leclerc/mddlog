@@ -44,7 +44,7 @@ jobs:
         echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] https://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-21 main" \
           | sudo tee /etc/apt/sources.list.d/llvm-toolchain-21.list
         sudo apt-get update
-        sudo apt-get install -y ninja-build build-essential ccache clang-21 clang-tidy-21 libc++-21-dev libc++abi-21-dev
+        sudo apt-get install -y ninja-build build-essential ccache clang-21 clang-tidy-21 libc++-21-dev libc++abi-21-dev python3
 
     # Verifies the binaries this build actually uses, which are not necessarily the ones on PATH:
     # the toolchain file addresses /usr/lib/llvm-21/bin directly.
@@ -81,6 +81,9 @@ jobs:
 
     - name: Build
       run: cmake --build --preset ninja-clang
+
+    - name: Verify governed boundary and negative controls
+      run: ctest --preset ninja-clang -L governed --verbose --no-tests=error --timeout 120
 
     - name: Run tests
       run: ctest --preset ninja-clang --output-on-failure --no-tests=error --timeout 120

@@ -23,6 +23,11 @@ jobs:
       with:
         persist-credentials: false
 
+    - name: Setup Python for governed checks
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
     - name: Setup pinned CMake
       uses: jwlawson/actions-setup-cmake@v2
       with:
@@ -43,6 +48,9 @@ jobs:
 
     - name: Build
       run: cmake --build --preset ninja-macos-clang --parallel 4
+
+    - name: Verify governed boundary and negative controls
+      run: ctest --preset ninja-macos-clang -L governed --verbose --no-tests=error --timeout 120
 
     - name: Run full test suite
       run: ctest --preset ninja-macos-clang --output-on-failure --no-tests=error --timeout 120

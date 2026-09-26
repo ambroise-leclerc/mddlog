@@ -30,7 +30,7 @@ jobs:
     - name: Install dependencies
       run: |
         apt-get update
-        apt-get install -y cmake ninja-build
+        apt-get install -y cmake ninja-build python3
 
     - name: Install pinned CMake
       run: |
@@ -57,6 +57,9 @@ jobs:
 
     - name: Build
       run: cmake --build --preset ninja-gcc
+
+    - name: Verify governed boundary and negative controls
+      run: ctest --preset ninja-gcc -L governed --verbose --no-tests=error --timeout 120
 
     - name: Run tests
       run: ctest --preset ninja-gcc --output-on-failure --no-tests=error --timeout 120

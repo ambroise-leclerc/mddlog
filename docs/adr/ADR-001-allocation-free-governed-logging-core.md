@@ -394,10 +394,13 @@ split to mean anything:
 
 Verification criteria for that boundary, in decreasing strength: a link/import dependency-graph
 check; an object scan over the compiled governed target; and source-level checks for forbidden
-constructs. mddlog has **no CI workflow at all yet** (issue #5), so none of these exist today and
-this ADR must not be read as claiming them. Three limits apply even once they do:
+constructs. Issue #39 implements these as separate CTest gates on issue #5's CI infrastructure;
+see the [governed evidence note](../governed-evidence.md) for the exact scope, negative controls,
+toolchain coverage and limitations. A configured or unexecuted check is not a passing result.
+Three limits apply:
 
-- an allocation scan shows no allocation; it shows nothing about blocking or bounded time;
+- an allocation scan shows no listed allocator reference in the inspected objects; it is not a
+  whole-program absence-of-allocation proof and shows nothing about blocking or bounded time;
 - MduX's two scan profiles are not interchangeable: `ml-noheap` is the strict no-allocation profile
   over specific objects, while `governed-throw` checks for throws with tooling-dependent limits and
   does **not** forbid allocation
@@ -601,8 +604,9 @@ a mode of this one.
   of mddlog itself. *Mitigation*: keep this sentence in the ADR, and keep README's `(planned)`
   markers honest.
 - **The boundary is stated but not enforced, and drifts under later edits.** *Mitigation*: the
-  dependency-graph and object-scan checks in Decision 6 are tracked as a named follow-up against the
-  implementation issue(s); acceptance here records the contract, not that enforcement exists —
+  dependency-graph, source and object-scan checks in Decision 6 are implemented by #39 with
+  negative controls and [scoped evidence](../governed-evidence.md); acceptance alone does not
+  establish that any particular build executed them —
   MduX's own ADR-004 had to be amended in 2026-08 because it asserted a lint that did not yet exist,
   which is the mistake this mitigation is written to avoid repeating.
 - **Refuse-new starves a slow consumer's producer under sustained load.** *Mitigation*: refusals are
