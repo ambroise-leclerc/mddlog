@@ -50,6 +50,24 @@ def main():
         for check in ("graph", "source", "allocation", "exception"):
             run(check)
 
+        for instrumentation in ("-fsanitize=thread", "-fsanitize=address,undefined"):
+            data = copy.deepcopy(original)
+            data["mddlog-core|LINK_OPTIONS"].append(instrumentation)
+            run("graph", data=data)
+
+        # Both P1689 versions are accepted, but an unknown revision remains fail-closed.
+        source_object = Path(original["objects"][0])
+        for version in (0, 2):
+            data = copy.deepcopy(original)
+            object_copy = temporary / f"version-{version}-{source_object.name}"
+            shutil.copyfile(source_object, object_copy)
+            ddi = json.loads(Path(str(source_object) + ".ddi").read_text(encoding="utf-8"))
+            ddi["version"] = version
+            ddi["rules"][0]["provides"][0]["source-path"] = original["sources"][0]
+            Path(str(object_copy) + ".ddi").write_text(json.dumps(ddi), encoding="utf-8")
+            data["objects"][0] = str(object_copy)
+            run("graph", data=data) if version == 0 else run("graph", "unsupported P1689 scan", data=data)
+
         for key, edge in (("mddlog-core|LINK_LIBRARIES", "mddlog"),
                           ("mddlog-core|INTERFACE_LINK_LIBRARIES", "foreign-library"),
                           ("mddlog_options|INTERFACE_LINK_LIBRARIES", "mddlog::mddlog"),
@@ -58,6 +76,9 @@ def main():
             data = copy.deepcopy(original)
             data[key].append(edge)
             run("graph", "unreviewed link dependency/option", data=data)
+        data = copy.deepcopy(original)
+        data["extra_sources"].append("/tmp/foreign-module.obj")
+        run("graph", "unreviewed extra source", data=data)
 
         for imported in ("mddlog.sinks.sink", "mddlog.adapter.logrecord", "unexpected.module", "mddlog.core.ring"):
             data = copy.deepcopy(original)
@@ -65,6 +86,7 @@ def main():
             object_copy = temporary / source_object.name
             shutil.copyfile(source_object, object_copy)
             ddi = json.loads(Path(str(source_object) + ".ddi").read_text(encoding="utf-8"))
+            ddi["rules"][0]["provides"][0]["source-path"] = original["sources"][0]
             ddi["rules"][0].setdefault("requires", []).append({"logical-name": imported})
             Path(str(object_copy) + ".ddi").write_text(json.dumps(ddi), encoding="utf-8")
             data["objects"][0] = str(object_copy)

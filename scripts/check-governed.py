@@ -42,7 +42,9 @@ def check_links(data, policy):
                     valid = False  # No direct-link injection or removal is currently reviewed.
                 elif prop.endswith("OPTIONS"):
                     # Existing sanitizer instrumentation is not an application dependency.
-                    valid = target == "mddlog_options" and re.fullmatch(
+                    # CMake propagates the reviewed interface sanitizer option to the core's
+                    # evaluated LINK_OPTIONS as well as retaining it on mddlog_options.
+                    valid = target in ("mddlog-core", "mddlog_options") and re.fullmatch(
                         r"-fsanitize=(address|leak|undefined|thread|memory)(,(address|leak|undefined|thread|memory))*", edge
                     )
                 else:
@@ -69,7 +71,13 @@ def check_graph(root, data):
     for source in sources:
         require(source.is_relative_to((root / "include/mddlog/core").resolve()), f"source outside governed tree: {source}")
     for source in data["extra_sources"]:
-        require((root / source).resolve() in sources, f"unreviewed extra source: {source}")
+        # MSVC/CMake injects the compiled standard-module object into SOURCES rather than the
+        # governed file set. Its target and basename are fixed; no application object is allowed.
+        standard_module_object = re.search(
+            r"/CMakeFiles/__cmake_cxx23\.dir/.*/std(?:\.compat)?\.ixx\.obj$", source.replace("\\", "/")
+        )
+        require((root / source).resolve() in sources or standard_module_object,
+                f"unreviewed extra source: {source}")
     objects = data["objects"]
     require(len(objects) == len(sources), "governed object/source inventory mismatch")
     seen = set()
@@ -79,12 +87,25 @@ def check_graph(root, data):
         ddi = Path(obj + ".ddi")
         require(ddi.is_file(), f"missing compiler dependency scan: {ddi}")
         scan = json.loads(ddi.read_text(encoding="utf-8"))
-        require(scan.get("version") == 1 and len(scan.get("rules", [])) == 1, f"unsupported P1689 scan: {ddi}")
+        # CMake's GCC scanner writes P1689 version 0; clang-scan-deps writes version 1.
+        require(scan.get("version") in (0, 1) and len(scan.get("rules", [])) == 1,
+                f"unsupported P1689 scan: {ddi} (version {scan.get('version')})")
         rule = scan["rules"][0]
         name = check_module_rule(rule, policy)
         require(name not in seen, f"duplicate module provider: {name}")
         seen.add(name)
-        source = Path(rule["provides"][0]["source-path"]).resolve()
+        source_path = rule["provides"][0].get("source-path")
+        if source_path:
+            source = Path(source_path).resolve()
+        else:
+            # GCC's P1689 output need not include optional source-path. Validate the concrete
+            # object path against exactly one file in the reviewed file set instead.
+            object_path = Path(obj).resolve().as_posix()
+            matches = [item for item in sources if any(
+                object_path.endswith("/" + item.relative_to(root).as_posix() + suffix)
+                for suffix in (".o", ".obj"))]
+            require(len(matches) == 1, f"cannot identify governed source for {obj}")
+            source = matches[0]
         require(source in sources, f"unreviewed module source: {source}")
         seen_sources.add(source)
     require(seen == set(policy["modules"]), "module inventory differs from reviewed policy")
