@@ -126,9 +126,24 @@ thread jthread future promise async packaged_task semaphore counting_semaphore b
 stringstream ostringstream istringstream basic_stringstream wstringstream wostringstream wistringstream
 iostream fstream ifstream ofstream cout cerr clog cin format vformat format_to vformat_to
 malloc calloc realloc aligned_alloc posix_memalign free strdup strndup alloca
-gmtime gmtime_r gmtime_s localtime localtime_r localtime_s mktime clock
-sleep sleep_for sleep_until usleep nanosleep pthread_mutex_lock pthread_cond_wait
+queue stack priority_queue flat_map flat_multimap flat_set flat_multiset to_string to_wstring any
+regex basic_regex valarray generator stacktrace basic_stacktrace filesystem move_only_function copyable_function
+stable_sort stable_partition inplace_merge get_temporary_buffer
+exception_ptr make_exception_ptr current_exception rethrow_exception
+print println vprint_unicode vprint_nonunicode printf fprintf sprintf snprintf vprintf vfprintf vsnprintf
+puts fputs putchar putc fputc fopen freopen fclose fread fwrite fflush perror getline osyncstream syncbuf
+gmtime gmtime_r gmtime_s localtime localtime_r localtime_s mktime clock now timespec_get difftime asctime ctime strftime
+system_clock steady_clock high_resolution_clock utc_clock tai_clock gps_clock file_clock
+current_zone locate_zone get_tzdb zoned_time
+sleep sleep_for sleep_until usleep nanosleep yield pthread_mutex_lock pthread_cond_wait
+wait wait_for wait_until notify_one notify_all atomic_wait atomic_wait_explicit atomic_notify_one atomic_notify_all
 """.split())
+
+# Suffixes the source check reads from the governed tree. Registered governed sources are always
+# read whatever their suffix; anything else (.DS_Store, editor backups) cannot enter the build,
+# because '#' is rejected and build.core.graph admits only registered governed sources.
+SOURCE_SUFFIXES = {".cppm", ".ixx", ".mpp", ".cxxm", ".ccm", ".c++m", ".cpp", ".cc", ".cxx", ".c++", ".c",
+                   ".h", ".hh", ".hpp", ".hxx", ".h++", ".inl", ".ipp", ".tpp", ".inc"}
 
 TOKEN = re.compile(
     r'(?P<comment>//[^\n]*|/\*.*?\*/)'
@@ -152,19 +167,30 @@ def source_violations(text):
             forbidden = False
         # Local includes/macros could conceal dependencies outside the scanned directory.
         forbidden |= token == "#"
-        if token in ("now", "time") and index and tokens[index - 1][0] == ":":
+        # 'time' is also a governed field name, so only std::time/::time is rejected here; the
+        # unqualified C function is unreachable because using-directives are rejected below.
+        if token == "time" and index and tokens[index - 1][0] == ":":
+            forbidden = True
+        # A using-directive would let unqualified names reach std:: APIs checked only when qualified.
+        if token == "namespace" and index and tokens[index - 1][0] == "using":
             forbidden = True
         if forbidden:
             violations.append(f"line {text.count(chr(10), 0, offset) + 1}: {token}")
     return violations
 
 
-def check_sources(root):
-    files = sorted(path for path in (root / "include/mddlog/core").rglob("*") if path.is_file())
+def check_sources(root, data):
+    tree = (root / "include/mddlog/core").resolve()
+    files = {path.resolve() for path in tree.rglob("*") if path.is_file() and path.suffix.lower() in SOURCE_SUFFIXES}
+    files |= {(root / value).resolve() for value in data["sources"]}
     require(files, "empty governed source tree")
     violations = []
-    for path in files:
-        violations.extend(f"{path}: {value}" for value in source_violations(path.read_text(encoding="utf-8")))
+    for path in sorted(files):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise Violation(f"governed source is not UTF-8 text: {path} ({error.reason})") from error
+        violations.extend(f"{path}: {value}" for value in source_violations(text))
     require(not violations, "forbidden governed constructs:\n" + "\n".join(violations))
     print(f"source: {len(files)} files checked; no forbidden tokens (no suppression list)")
 
@@ -220,7 +246,7 @@ def main():
     if args.check == "graph":
         check_graph(args.root, data)
     elif args.check == "source":
-        check_sources(args.root)
+        check_sources(args.root, data)
     else:
         require(data["objects"], "empty governed object inventory")
         scan_objects(data["objects"] + read_objects(args.probe), args.tool, args.kind, args.check)

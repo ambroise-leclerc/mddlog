@@ -1,4 +1,5 @@
-# Build-time evidence for ADR-001 Decision 6. Keep these profiles independent.
+# Build-time evidence for ADR-001 Decision 6. Keep these profiles independent. Python runs with -B
+# so the checks never write __pycache__ into the source tree.
 find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 
 set(governed_manifest "${CMAKE_CURRENT_BINARY_DIR}/governed-$<CONFIG>.txt")
@@ -47,11 +48,11 @@ set(governed_arguments --root "${PROJECT_SOURCE_DIR}" --manifest "${governed_man
     --tool "${governed_symbol_tool}" --kind "${governed_symbol_kind}")
 foreach(check IN ITEMS graph source allocation exception)
     add_test(NAME build.core.${check}
-        COMMAND "${Python3_EXECUTABLE}" "${governed_checker}" ${check} ${governed_arguments})
+        COMMAND "${Python3_EXECUTABLE}" -B "${governed_checker}" ${check} ${governed_arguments})
     set_tests_properties(build.core.${check} PROPERTIES LABELS "build;governed")
 endforeach()
 add_test(NAME build.core.negativeControls
-    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/boundary/TestGovernedChecks.py"
+    COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tests/boundary/TestGovernedChecks.py"
         ${governed_arguments}
         --bad-allocation "${CMAKE_CURRENT_BINARY_DIR}/governed-bad-allocation-$<CONFIG>.txt"
         --bad-exception "${CMAKE_CURRENT_BINARY_DIR}/governed-bad-exception-$<CONFIG>.txt")

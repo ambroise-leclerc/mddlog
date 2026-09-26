@@ -17,7 +17,7 @@ boundary-check result. Configuration success alone provides none either.
 | Check | Evidence | Limit |
 | --- | --- | --- |
 | `build.core.graph` | Compiler-generated P1689 `.ddi` files for every object of `mddlog-core`, exact module/import inventory, and generation-time evaluated direct/interface CMake link libraries/options of the core and its project dependencies | Standard-library module/runtime internals are trusted toolchain inputs; this is not a whole-program call graph |
-| `build.core.source` | Every file recursively under `include/mddlog/core`, including files not registered in CMake, checked for forbidden C++ tokens | Lexical check, not a C++ semantic proof; indirect calls, aliases and arbitrary external code are not resolved |
+| `build.core.source` | Every C++ source/header file recursively under `include/mddlog/core` (by suffix, including files not registered in CMake) plus every registered governed source whatever its suffix, checked for forbidden C++ tokens | Lexical check, not a C++ semantic proof; indirect calls, aliases and arbitrary external code are not resolved |
 | `build.core.allocation` | Undefined allocator/deallocator references in every governed object plus a representative template-instantiation object | No listed emitted reference in these objects; cannot establish absence of allocation through indirect calls, runtime internals, uninstantiated templates, eliminated code or a different build |
 | `build.core.exception` | A separate scan for exception-runtime entry points and standard-library throw helpers in the same objects | No listed emitted throw reference; does not prove the absence of every exceptional path or establish allocation freedom |
 | `build.core.negativeControls` | Each production check runs against a deliberate violation and must fail with the expected diagnostic; real allocation and throw fixtures are compiled but never linked | Validates the checked violations, not completeness of the forbidden lists |
@@ -45,13 +45,25 @@ representative template coverage, not exhaustive coverage of all possible capaci
 
 ## Source policy and exceptions
 
-The authoritative list is `FORBIDDEN` in `scripts/check-governed.py`. It covers exception keywords,
-allocation/deallocation, owning strings/containers and allocation helpers, locks and waits,
-threads/futures, stream/formatting APIs, allocator functions, and calendar/clock APIs. `::now()`
-is also forbidden. Preprocessor directives (`#`) are rejected so governed sources cannot conceal
-textual dependencies or define local macros. Identifiers are checked irrespective of qualification,
-so `using namespace std; vector<int>` is rejected too. `std::string_view` is a distinct allowed
-token; it is not an owning `std::string`.
+The authoritative list is `FORBIDDEN` in `scripts/check-governed.py`. It covers exception keywords
+and `exception_ptr` helpers; allocation/deallocation; owning strings, containers, container adaptors
+(`queue`, `stack`, `priority_queue`, flat containers), `any`, `regex`, `to_string` and algorithms
+that may allocate a temporary buffer (`stable_sort`, `stable_partition`, `inplace_merge`); locks,
+atomic waits/notifications, `yield` and sleeps; threads/futures; stream, formatting, `print`/
+`println` and C stdio APIs; allocator functions; and clock/calendar APIs, including every standard
+clock type and `now` in any position (`::now()`, `.now()`, `->now()`). Preprocessor directives
+(`#`) are rejected so governed sources cannot conceal textual dependencies or define local macros.
+Identifiers are checked irrespective of qualification, so `std::vector<int>` and `vector<int>` are
+both rejected. `time` is also a governed field and accessor name, so only `std::time`/`::time` is
+rejected; using-directives (`using namespace ...`) are rejected so an unqualified C `time()` cannot
+be reached. `std::string_view` is a distinct allowed token; it is not an owning `std::string`, and
+`sys_time` is an allowed time-point alias that reads no clock.
+
+The check reads C++ source/header suffixes (`.cppm`, `.ixx`, `.cpp`, `.hpp` and the other usual
+spellings) under the governed tree, and every source registered in the governed module file set
+whatever its suffix. Other files, such as `.DS_Store` or editor backups (`Ring.cppm~`), are not
+read: they cannot enter the build, because `#` is rejected and `build.core.graph` admits only
+registered governed sources. A read source that is not UTF-8 fails the check explicitly.
 
 The only syntactic exception is **`= delete;`**, which disables an operation instead of releasing
 heap memory. Comments, ordinary/character literals, and raw string literals are ignored because

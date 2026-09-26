@@ -34,7 +34,7 @@ def main():
             manifest_path = temporary / "manifest.txt"
             manifest_path.write_text("".join(f"{key}={';'.join(values)}\n" for key, values in
                                              (data if data is not None else original).items()), encoding="utf-8")
-            command = [sys.executable, str(checker_path), check, "--manifest", str(manifest_path),
+            command = [sys.executable, "-B", str(checker_path), check, "--manifest", str(manifest_path),
                        "--root", str(root or args.root), "--probe", str(probe or args.probe),
                        "--tool", args.tool, "--kind", args.kind]
             result = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -95,13 +95,31 @@ def main():
         for token in sorted(checker.FORBIDDEN):
             checker.require(checker.source_violations(f"void test() {{ {token}; }}"), f"source token escaped: {token}")
         for text in ("th\\\nrow 1;", "std /* comment */ :: vector<int> values;", "#include <vector>",
-                     "std::chrono::system_clock::now();", "int a = 1'000; throw 1; int b = 2'000;"):
+                     "std::chrono::system_clock::now();", "int a = 1'000; throw 1; int b = 2'000;",
+                     "writeCursor.wait(read, std::memory_order_acquire);", "auto t = clock_source{}.now();",
+                     "using namespace std; auto t = time(nullptr);", "using std::time;", "std::println(\"x\");",
+                     "std::timespec_get(&ts, TIME_UTC);", "std::queue<int> values;", "auto text = std::to_string(1);",
+                     "std::stable_sort(first, last);", "slot.notify_one();"):
             checker.require(checker.source_violations(text), f"source construct escaped: {text}")
         for text in ('// throw new\nstd::string_view value;', '/* std::mutex */ "new throw";',
-                     'auto value = R"tag(throw ") catch)tag";', "char value = 'x';", "Value(const Value&) = delete;"):
+                     'auto value = R"tag(throw ") catch)tag";', "char value = 'x';", "Value(const Value&) = delete;",
+                     "RawTime time; auto value = record.time(); constexpr RawTime time() const noexcept;"):
             checker.require(not checker.source_violations(text), f"source false positive: {text}")
         root = temporary / "source"
         shutil.copytree(args.root / "include/mddlog/core", root / "include/mddlog/core")
+        # Operating-system metadata and editor backups cannot enter the build and must not fail it.
+        (root / "include/mddlog/core/.DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1\xff\xfe")
+        (root / "include/mddlog/core/Ring.cppm~").write_text("void old() { throw 1; }\n", encoding="utf-8")
+        run("source", root=root)
+        # A registered governed source is read whatever its suffix.
+        registered = root / "include/mddlog/core/Registered.txt"
+        registered.write_text("void bad() { throw 1; }\n", encoding="utf-8")
+        data = copy.deepcopy(original)
+        data["sources"].append(str(registered))
+        run("source", "forbidden governed constructs", data=data, root=root)
+        registered.write_bytes(b"\xff\xfe")
+        run("source", "governed source is not UTF-8 text", data=data, root=root)
+        registered.unlink()
         (root / "include/mddlog/core/Injected.cppm").write_text("void bad() { throw 1; }\n", encoding="utf-8")
         run("source", "forbidden governed constructs", root=root)
 
