@@ -303,30 +303,39 @@ if(MDDLOG_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 
-    # Proves the install tree actually works end-to-end: installs to a scratch prefix, then
-    # configures/builds/runs a tiny external consumer project against it via
-    # find_package(mddlog CONFIG REQUIRED) and mddlog::mddlog.
-    add_test(InstallTreeConsumer
-        "${CMAKE_COMMAND}"
-        -D "BUILD_DIR=${CMAKE_BINARY_DIR}"
-        -D "CXX_COMPILER=${CMAKE_CXX_COMPILER}"
-        -D "AR=${CMAKE_AR}"
-        -D "RANLIB=${CMAKE_RANLIB}"
-        -D "STDLIB_MODULES_JSON=${CMAKE_CXX_STDLIB_MODULES_JSON}"
-        -D "OSX_SYSROOT=${CMAKE_OSX_SYSROOT}"
-        # The consumer must select the same standard library as this build, not the compiler's
-        # default: on Linux libc++ is not Clang's default, so a consumer built without this flag
-        # scans libc++'s std.cppm with libstdc++'s include path and fails on a missing '__config'.
-        -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
-        # MSVC's runtime-library selection (/MD vs /MT, Release vs Debug) is driven by
-        # CMAKE_BUILD_TYPE. Without forwarding it, the consumer configures with an empty build
-        # type while this build used Release, the two pick different default runtime libraries,
-        # and linking the consumer against the installed mddlog.lib fails with LNK4098/LNK1319.
-        -D "BUILD_TYPE=${CMAKE_BUILD_TYPE}"
-        -D "GENERATOR=${CMAKE_GENERATOR}"
-        -D "EXPECTED_VERSION=${PROJECT_VERSION}"
-        -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"
-    )
+    # Report the full and core-only installed consumers separately. Their scratch prefixes must
+    # differ so CTest can run both concurrently without either deleting the other's files.
+    foreach(_mddlog_consumer_kind IN ITEMS full core)
+        if(_mddlog_consumer_kind STREQUAL "full")
+            set(_mddlog_consumer_test InstallTreeConsumer)
+        else()
+            set(_mddlog_consumer_test InstallTreeCoreConsumer)
+        endif()
+        add_test(${_mddlog_consumer_test}
+            "${CMAKE_COMMAND}"
+            -D "BUILD_DIR=${CMAKE_BINARY_DIR}"
+            -D "CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+            -D "AR=${CMAKE_AR}"
+            -D "RANLIB=${CMAKE_RANLIB}"
+            -D "STDLIB_MODULES_JSON=${CMAKE_CXX_STDLIB_MODULES_JSON}"
+            -D "OSX_SYSROOT=${CMAKE_OSX_SYSROOT}"
+            # The consumer must select the same standard library as this build, not the compiler's
+            # default: on Linux libc++ is not Clang's default, so a consumer built without this flag
+            # scans libc++'s std.cppm with libstdc++'s include path and fails on a missing '__config'.
+            -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+            # MSVC's runtime-library selection (/MD vs /MT, Release vs Debug) is driven by
+            # CMAKE_BUILD_TYPE. Without forwarding it, the consumer configures with an empty build
+            # type while this build used Release, the two pick different default runtime libraries,
+            # and linking the consumer against the installed mddlog.lib fails with LNK4098/LNK1319.
+            -D "BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+            -D "GENERATOR=${CMAKE_GENERATOR}"
+            -D "EXPECTED_VERSION=${PROJECT_VERSION}"
+            -D "SOURCE_DIR=${CMAKE_SOURCE_DIR}"
+            -D "CONSUMER_KIND=${_mddlog_consumer_kind}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"
+        )
+        set_tests_properties(${_mddlog_consumer_test} PROPERTIES LABELS "build")
+    endforeach()
 endif()
 
 # Installation

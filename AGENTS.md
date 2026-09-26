@@ -15,8 +15,10 @@ cmake -S . -B build -G Ninja -DMDDLOG_BUILD_EXAMPLES=OFF -DMDDLOG_BUILD_TESTS=OF
 cmake --build build --parallel
 ```
 
-The published branch does not contain the `examples/` or `tests/` directories even though the
-CMake options default to `ON`; keep both options disabled until those directories are committed.
+The published branch includes `examples/` and `tests/`. Enable their CMake options to build the
+examples and run CTest; tests fetch a pinned SpecLab revision. `SourceTreeCoreConsumer` and
+`InstallTreeCoreConsumer` separately verify the governed-only target in source and installed
+contexts. See `docs/migration/governed-core.md` before moving direct imports or producers.
 `import std` support is experimental and tied to the CMake/compiler tuple. Report configuration or
 module-import failures honestly; do not claim a build passed from configuration success alone.
 

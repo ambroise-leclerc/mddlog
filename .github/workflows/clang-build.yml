@@ -119,7 +119,7 @@ jobs:
       env:
         ASAN_OPTIONS: detect_leaks=1
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      run: ctest --preset ninja-clang-debug -E 'InstallTreeConsumer' --output-on-failure --no-tests=error --timeout 120
+      run: ctest --preset ninja-clang-debug -E 'InstallTree(Consumer|CoreConsumer)' --output-on-failure --no-tests=error --timeout 120
 
     - name: Verify no source-tree writes
       run: |
