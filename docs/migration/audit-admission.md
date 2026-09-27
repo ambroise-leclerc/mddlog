@@ -17,6 +17,12 @@ may write to it. Calls through one logger are serialized at admission. Call
 `clearAuditRing()` before destroying the ring. Register the same ring with
 `AuditSinkAdapter::addRing()`, configure an `AuditSink`, and drain it from one consumer
 thread. The diagnostic console sink installed by `Log::initialize()` is unrelated.
+Do not bind the same ring to two loggers (including `Log` and a separate
+`SimpleLogger`): each logger serializes only its own calls, so two bindings would
+violate the ring's SPSC producer contract. This exclusivity is a host obligation,
+not checked at run time. `Log::shutdown()` clears the global logger's binding, even
+on a retained handle from `Log::getLogger()`; after a later `Log::initialize()` or
+automatic reinitialization, bind the ring again before calling `Log::logAudit()`.
 
 `logAudit(input)` returns `Unconfigured` with `AuditField::None` when no ring is bound.
 An invalid ring identity returns `InvalidStream`; a full ring returns `RingFull`.

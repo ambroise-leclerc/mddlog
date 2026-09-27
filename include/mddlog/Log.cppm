@@ -179,7 +179,8 @@ public:
      *
      * Resetting the shared static handle does not affect a call already in flight on another
      * thread: that call holds its own shared_ptr copy (see snapshot()), so the logger object
-     * itself stays alive until every such call has returned.
+     * itself stays alive until every such call has returned. Clear the borrowed audit ring
+     * binding on that object too, so retained handles cannot use it after shutdown returns.
      */
     static void shutdown() {
         std::shared_ptr<core::SimpleLogger> toShutdown;
@@ -189,6 +190,7 @@ public:
             globalLogger.reset();
         }
         if (toShutdown) {
+            toShutdown->clearAuditRing();
             toShutdown->flush();
         }
     }

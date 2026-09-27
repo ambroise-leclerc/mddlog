@@ -199,9 +199,12 @@ The existing adapter `LogRecord` contains:
 - **Core Information**: Timestamp, level, message, category, thread ID
 - **Source Location**: File, line, function (automatic with `std::source_location`)
 - **Medical Context**: User ID, session ID, device ID, operation ID
-- **Audit Information**: Event type, risk level, compliance standard
 - **Metadata**: Custom key-value pairs
 - **Performance**: Processing time tracking
+
+Audit fields belong to the separate, bounded `AuditEvent`, admitted through
+`logAudit(AuditInput)` and consumed by `AuditSinkAdapter`. Diagnostic `LogRecord`
+does not contain an event type, risk level, or compliance standard.
 
 The separate governed `GovernedRecord` owns a bounded message and component, operation and
 correlation identifiers. It captures a host-supplied raw time and source location without reading a

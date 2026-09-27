@@ -22,8 +22,9 @@ be part of the host-issued stream identity. `riskLevel` cannot automatically bec
 hazard reference. The old default `IEC_62304` is not a per-event requirement reference.
 Free text with spaces, non-ASCII bytes, or excess length cannot be copied into an
 identifier: choose a stable code and place the description in `detail`. The admission
-result identifies the refused field; only `detail` may shorten, with a flag. #58 must
-apply this mapping to the public logger APIs before those paths satisfy ADR-002.
+result identifies the refused field; only `detail` may shorten, with a flag. #58
+applied this mapping to the public logger APIs. ADR-002 acceptance remains a
+separate maintainer decision.
 
 The initial grammar is ASCII letters, digits, `_`, `.`, `:`, `/`, `-` for every
 identifier. `action`, `target`, and `streamId` are required. Exact limits in bytes are

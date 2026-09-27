@@ -120,6 +120,20 @@ const speclab::Register auditFacade{"Log facade uses the same explicit audit adm
                                                       checks.expect(!refused.wasAdmitted() && refused.refusal()->reason == AuditRefusalReason::InvalidIdentifier
                                                                         && refused.refusal()->field == AuditField::Action,
                                                                     "facade names a rejected field");
+                                                      auto retained = Log::getLogger();
+                                                      Log::shutdown();
+                                                      const auto afterShutdown = retained->logAudit(auditRequest());
+                                                      checks.expect(!afterShutdown.wasAdmitted()
+                                                                        && afterShutdown.refusal()->reason == AuditRefusalReason::Unconfigured,
+                                                                    "shutdown clears the binding on retained logger handles");
+                                                      const auto afterRestart = Log::logAudit(auditRequest());
+                                                      checks.expect(!afterRestart.wasAdmitted()
+                                                                        && afterRestart.refusal()->reason == AuditRefusalReason::Unconfigured,
+                                                                    "a reinitialized global logger needs a new audit binding");
+                                                      Log::setAuditRing(ring);
+                                                      const auto rebound = Log::logAudit(auditRequest());
+                                                      checks.expect(rebound.wasAdmitted() && rebound.sequence() == 2,
+                                                                    "rebinding resumes admission on the same ring without resetting its sequence");
                                                       Log::clearAuditRing();
                                                       Log::shutdown();
                                                       checks.raise();
@@ -149,7 +163,7 @@ const speclab::Register auditLegacyFieldBoundaries{
                           FieldCase{ .field = AuditField::CorrelationId, .capacity = core::auditCorrelationCapacity,  .member = &AuditInput::correlationId}
                       };
                       for (const auto& field : fields) {
-                          AuditRing<1> ring{"device7:boot9:limits"};
+                          AuditRing<2> ring{"device7:boot9:limits"};
                           SimpleLogger logger{"audit-limits", false};
                           logger.setAuditRing(ring);
                           auto        input = auditRequest();
