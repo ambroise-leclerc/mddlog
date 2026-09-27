@@ -218,7 +218,9 @@ target_sources(mddlog
     FILE_SET cxx_modules TYPE CXX_MODULES FILES
         include/mddlog/adapter/LogRecord.cppm
         include/mddlog/sinks/Sink.cppm
+        include/mddlog/sinks/AuditSink.cppm
         include/mddlog/adapter/RingDrain.cppm
+        include/mddlog/adapter/AuditDrain.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
         include/mddlog/mddlog.cppm

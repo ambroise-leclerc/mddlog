@@ -96,6 +96,7 @@ add_executable(mddlog_specs
     spec/GovernedRecordSpec.cpp
     spec/RingLogSpec.cpp
     spec/AuditRingSpec.cpp
+    spec/AuditDrainSpec.cpp
     spec/RingLogConcurrencySpec.cpp
     spec/RingDrainSpec.cpp
     spec/VersionSpec.cpp
