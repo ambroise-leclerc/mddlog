@@ -176,13 +176,17 @@ scripts/run-clang-tidy.sh build-clang
 
 ## Pull Requests
 
-- **One commit on `main` per pull request after merging.** A pull request may contain multiple
-  commits during development and review; squash them into a single commit when merging if needed.
+- **Branches.** Work on an `<issue-number>-<slug>` branch and target `develop`, the default
+  branch. `master` carries releases only and accepts only `release/vX.Y.Z` pull requests; see
+  [`docs/release-process.md`](docs/release-process.md).
+- **One commit on `develop` per pull request after merging.** A pull request may contain multiple
+  commits during development and review; squash-merge it into `develop`. Release pull requests are
+  the exception: they are merged into `master` with `--merge`, never squashed.
 - Keep purely mechanical changes (reformatting, renames) in their own pull request, separate from
   semantic changes, and merge them first so the semantic diff stays readable.
 - The pull request (PR) title must reference the related issue or feature (e.g., `Add CameraManager class [#42]`).
 - Provide a clear description of the changes and the motivation.
-- Ensure your branch is up to date with `main` before submitting.
+- Ensure your branch is up to date with `develop` before submitting.
 - All code must pass CI checks and tests before merging.
 - Request a review from at least one maintainer.
 

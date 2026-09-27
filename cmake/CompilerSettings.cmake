@@ -48,6 +48,9 @@ function(configure_medical_compliance target_name version_major version_minor ve
     MDDLOG_VERSION_MAJOR=${version_major}
     MDDLOG_VERSION_MINOR=${version_minor}
     MDDLOG_VERSION_PATCH=${version_patch}
+    # project(mddlog VERSION ...) is the single definition of the version; getVersion() reads it
+    # from here rather than repeating the literal (docs/release-process.md, step 3).
+    MDDLOG_VERSION_STRING="${version_major}.${version_minor}.${version_patch}"
     MDDLOG_MEDICAL_DEVICE_COMPLIANCE=1
   )
 endfunction()
