@@ -8,11 +8,12 @@ export import mddlog.core.record;
 
 export namespace mddlog::core {
 
-inline constexpr std::size_t auditActionCapacity      = 64;
-inline constexpr std::size_t auditActorCapacity       = 64;
-inline constexpr std::size_t auditTargetCapacity      = 96;
-inline constexpr std::size_t auditReferenceCapacity   = 64;
-inline constexpr std::size_t auditCorrelationCapacity = 96;
+inline constexpr std::size_t auditActionCapacity    = 64;
+inline constexpr std::size_t auditActorCapacity     = 64;
+inline constexpr std::size_t auditTargetCapacity    = 96;
+inline constexpr std::size_t auditReferenceCapacity = 64;
+// A 96-byte source stream ID, ':' and the full 20-digit uint64 source sequence fit.
+inline constexpr std::size_t auditCorrelationCapacity = 117;
 inline constexpr std::size_t auditStreamCapacity      = 96;
 inline constexpr std::size_t auditDetailCapacity      = 160;
 

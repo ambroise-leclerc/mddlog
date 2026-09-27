@@ -20,11 +20,16 @@ ASCII letters, digits, `_`, `.`, `:`, `/`, and `-`. No identifier is shortened.
 | `target` | 96 | `deviceId`, when it is the object acted on |
 | `requirementRef` | 64 | explicit caller reference |
 | `riskRef` | 64 | `riskLevel` if it is a stable identifier |
-| `correlationId` | 96 | source stream identity plus source sequence |
+| `correlationId` | 117 | source stream identity plus source sequence |
 | `streamId` | 96 | host-supplied identity of device, boot session, producer instance |
 | `detail` | 160 | `message`; UTF-8 boundary truncation is flagged |
 
 These limits are an initial public contract, based on examples available in this repository.
+The correlation capacity covers the full 96-byte source stream identity, a `:` separator,
+and all 20 decimal digits of a 64-bit source sequence. With the stated identifier grammar,
+`<sourceStreamId>:<decimalSourceSequence>` is unambiguous when split at the final colon.
+The host must ensure the source stream identity is unique across producer recreation and
+boot sessions; mddlog cannot establish that uniqueness from string syntax alone.
 They need review against deployment call sites before ADR-002 can be accepted. Longer free text
 belongs in `detail`; an invalid event-field identifier is refused with
 `InvalidIdentifier` and the offending `AuditField`. An invalid `streamId` returns
@@ -55,6 +60,9 @@ audit sequence. Keep the source sequence in `sourceSequence` only as provenance.
 shared `correlationId` from both the source stream identity and source sequence; the bare
 number is insufficient across producer recreation. `RawTime::unavailable()` is admitted;
 timestamps may repeat or move backwards, so order within a stream is given by sequence.
+`sourceSequence` alone is provenance, and never substitutes for the newly assigned audit
+sequence. See [the scenario evidence](../audit-scenario-validation.md) for the tested
+ActionTrace conversion, field boundaries, and time and identity cases.
 
 ## Audit-only hand-off and health (#57)
 

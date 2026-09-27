@@ -3,6 +3,9 @@
 ## Status
 Proposed — drafted for maintainer review, not yet acted on.
 
+Scenario and boundary evidence for #59 is recorded in
+[the validation report](../audit-scenario-validation.md). It does not change this status.
+
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
 the baseline mddlog issue #5 verifies against.
