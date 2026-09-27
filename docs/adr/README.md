@@ -29,11 +29,10 @@ WebFront as the concrete consumer — and ADR-004 holds the storage and tamper-e
 ADR-002 deferred, in a state of "bounded, not settled": it exists to keep the claims honest while
 its own Decision 4 lists five questions it does not answer.
 
-One further record is anticipated and deliberately not drafted: an **export format** for the
-"automated compliance report generation" claim in the root `README.md`, which ADR-004 Decision 4
-lists among its open questions. It is left out rather than stubbed, because an export format is read
-by tools this project does not control and should not be sketched before there is something to
-export.
+One further record is anticipated and deliberately not drafted: an **export format** for
+automated compliance reporting, which ADR-004 Decision 4 lists among its open questions. The root
+`README.md` no longer presents reporting as a delivered feature. An export format is read by tools
+this project does not control and should not be sketched before there is something to export.
 
 ## Relationship to MduX
 
