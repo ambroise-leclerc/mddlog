@@ -1,5 +1,10 @@
 # Migrating to the CamelCase `LogLevel` enumerators
 
+This page records the earlier #7 rename. Since #58, `LogLevel::Audit` has been
+removed: audit is a separate `AuditEvent`, not a diagnostic severity. See
+[audit admission migration](audit-admission.md). `fromString()` now returns
+`std::optional<LogLevel>` and rejects `"AUDIT"` or any unknown input.
+
 `mddlog::LogLevel` enumerators were renamed to `UpperCamelCase` to satisfy
 `readability-identifier-naming.EnumConstantCase: CamelCase` (see `CONTRIBUTING.md`).
 
@@ -14,17 +19,18 @@ alias is provided**: code using `LogLevel::INFO` and friends stops compiling unt
 | `LogLevel::WARN`  | `LogLevel::Warn`  | 3 | `"WARN"`  |
 | `LogLevel::ERROR` | `LogLevel::Error` | 4 | `"ERROR"` |
 | `LogLevel::FATAL` | `LogLevel::Fatal` | 5 | `"FATAL"` |
-| `LogLevel::AUDIT` | `LogLevel::Audit` | 6 | `"AUDIT"` |
+| `LogLevel::AUDIT` | `LogLevel::Audit` (historical; removed in #58) | 6 (historical) | `"AUDIT"` (historical) |
 
-What did **not** change:
+What did **not** change in the #7 rename (before the #58 audit migration):
 
 - Numeric values and the underlying type (`std::uint8_t`), so comparisons, filtering thresholds and
   any stored or transmitted numeric level behave exactly as before.
-- Produced and accepted text: `toString()` still returns the upper-case strings above (and
-  `"UNKNOWN"` outside the enumeration); `fromString()` still accepts them and still falls back to
-  `Info` for an unrecognised string. Console output and messages are identical.
+- At that time, `toString()` still returned the upper-case strings above and
+  `fromString()` still fell back to `Info` for an unrecognised string. Since #58,
+  `"AUDIT"` is rejected and all unknown strings yield `nullopt`; diagnostic console
+  output retains the six remaining spellings.
 
-A mechanical migration of call sites is a word-bounded search and replace of the seven qualified
+A mechanical migration of the remaining diagnostic call sites is a word-bounded search and replace of the six qualified
 names in the first two columns, for example `perl -pi -e 's/\bLogLevel::INFO\b/LogLevel::Info/g' <files>`
 (Perl rather than `sed`, whose `\b` word boundary is not portable to BSD/macOS `sed`).
 Do not touch string literals such as `"INFO"`.

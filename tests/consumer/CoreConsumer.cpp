@@ -6,9 +6,9 @@ int main() {
     using namespace mddlog::core;
 
     RingLog<2> ring;
-    const auto first    = ring.tryWrite({.level         = LogLevel::Audit,
+    const auto first    = ring.tryWrite({.level         = LogLevel::Info,
                                          .time          = RawTime::unavailable(),
-                                         .message       = "governed audit",
+                                         .message       = "governed diagnostic",
                                          .component     = "consumer",
                                          .operationId   = "operation-1",
                                          .correlationId = "correlation-1"});
@@ -21,7 +21,7 @@ int main() {
     }
 
     const auto view = ring.drain();
-    if (view.size() != 2 || view.first().size() != 2 || view.first()[0].level() != LogLevel::Audit || view.first()[0].message() != "governed audit"
+    if (view.size() != 2 || view.first().size() != 2 || view.first()[0].level() != LogLevel::Info || view.first()[0].message() != "governed diagnostic"
         || view.first()[0].component() != "consumer" || view.first()[0].operationId() != "operation-1" || view.first()[0].correlationId() != "correlation-1"
         || view.first()[0].time().availability() != TimeAvailability::Unavailable || view.first()[1].message() != "governed warning"
         || view.first()[1].time().availability() != TimeAvailability::Available || view.first()[1].time().value() != hostTime) {

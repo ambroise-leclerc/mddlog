@@ -22,7 +22,7 @@ enum class AuditCategory : std::uint8_t { Lifecycle, Configuration, Access, Risk
 /** @brief A request, an optional confirmation, or the actual outcome. */
 enum class AuditPhase : std::uint8_t { Requested, Confirmed, Executed, Failed };
 enum class AuditField : std::uint8_t { None, Action, Actor, Target, RequirementRef, RiskRef, CorrelationId };
-enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, SequenceExhausted, InvalidStream };
+enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, SequenceExhausted, InvalidStream, Unconfigured };
 
 struct AuditRefusal {
     AuditRefusalReason reason = AuditRefusalReason::RingFull;

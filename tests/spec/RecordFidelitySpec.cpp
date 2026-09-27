@@ -75,35 +75,6 @@ const speclab::Register medicalFieldsPreserved{
             .Execute();
     }};
 
-const speclab::Register auditFieldsPreserved{"logAudit() preserves the event type, risk level and AUDIT severity", "unit", [] {
-                                                 return speclab::Test<SingleSinkState>("fidelity-audit-fields")
-                                                     .Given("a sink attached to a logger",
-                                                            [](SingleSinkState& s) {
-                                                                s.logger.addSink(s.sink);
-                                                            })
-                                                     .When("an audit event is logged",
-                                                           [](SingleSinkState& s) {
-                                                               s.logger.logAudit("data accessed", "DATA_ACCESS", "user123", "device789", "LOW");
-                                                           })
-                                                     .Then("the record is AUDIT severity with the event type and risk level intact",
-                                                           [](SingleSinkState& s) {
-                                                               speclab::core::Checks checks;
-                                                               const auto            records = s.sink->records();
-                                                               checks.expect(records.size() == 1, "one record was delivered");
-                                                               if (!records.empty()) {
-                                                                   const auto& r = records.front();
-                                                                   checks.expect(r.level == LogLevel::Audit, "level is AUDIT");
-                                                                   checks.expect(r.category == "audit", "category is 'audit'");
-                                                                   checks.expect(r.auditEventType == "DATA_ACCESS", "event type matches");
-                                                                   checks.expect(r.riskLevel == "LOW", "risk level matches");
-                                                                   checks.expect(r.userId == "user123", "userId matches");
-                                                                   checks.expect(r.deviceId == "device789", "deviceId matches");
-                                                               }
-                                                               checks.raise();
-                                                           })
-                                                     .Execute();
-                                             }};
-
 const speclab::Register threadIdentityPreserved{"The record's thread id identifies the producer that logged it", "unit", [] {
                                                     return speclab::Test<SingleSinkState>("fidelity-thread-identity")
                                                         .Given("a sink attached to a logger",

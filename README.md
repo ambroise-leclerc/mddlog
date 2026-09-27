@@ -55,24 +55,24 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
 
 #### 1. Core Logging Infrastructure
 - **Structured logging** with `LogRecord` containing timestamp, severity, category, message, and metadata
-- **Multiple severity levels**: Trace, Debug, Info, Warn, Error, Fatal, Audit
+- **Multiple diagnostic severity levels**: Trace, Debug, Info, Warn, Error, Fatal
 - **Thread-safe operations** using `std::thread`, `std::mutex`, and atomic operations
 
 #### 2. Medical Device Compliance
-- **Audit Trail**: `logAudit()` records intentionally bypass the logger's own
-  enablement/minimum-level filtering, so a reconfigured or disabled logger cannot silently erase
-  compliance evidence (see `AuditPolicySpec.cpp` for the behavioral contract). Persistent,
-  tamper-evident storage of those records is *not* implemented - only the in-process record shape
-  and delivery policy are.
-- **Risk Management**: `LogRecord` carries a risk-level field associated with audit events, for
-  callers to populate per their own ISO 14971 process *(structural support only)*
+- **Audit admission**: `logAudit(AuditInput)` returns an explicit result from a configured,
+  bounded `AuditRing`. It is independent of diagnostic thresholds and sinks. The separate
+  `AuditSinkAdapter` reports hand-off failures and health; only in-memory admission is
+  guaranteed. See [migration guidance](docs/migration/audit-admission.md).
+- **Risk Management**: `AuditEvent` can carry a stable risk-control reference
+  *(structural support only)*.
 - **Lifecycle Logging**: Development, verification, and validation event tracking *(planned)*
 - **Regulatory Reporting**: Automated compliance report generation *(planned)*
 
 #### 3. Advanced Sink System
 - **FileSink** with log rotation and compression *(planned)*
 - **NetworkSink** for remote monitoring systems *(planned)*
-- **AuditSink** for tamper-proof audit records *(planned)*
+- **AuditSink** for in-memory audit hand-off *(implemented)*; durable and tamper-evident
+  storage *(planned, #11)*
 - **ConsoleSink** with colors and statistics *(implemented)*
 - **Configurable buffering** and batching strategies *(planned)*
 
@@ -135,14 +135,20 @@ logger->logMedical(
     "device_789"         // Device ID
 );
 
-// Audit trail logging
-logger->logAudit(
-    "User accessed patient data",
-    "DATA_ACCESS",       // Event type
-    "user123",           // User ID
-    "device_789",        // Device ID
-    "LOW"                // Risk level
-);
+// Audit admission into a host-owned ring; configure an AuditSinkAdapter separately.
+AuditRing<16> ring{"device_789:boot_12:ui_1"};
+logger->setAuditRing(ring);
+const auto result = logger->logAudit({.category      = AuditCategory::Access,
+                                      .phase         = AuditPhase::Executed,
+                                      .action        = "DATA_ACCESS",
+                                      .actor         = "user123",
+                                      .target        = "device_789",
+                                      .correlationId = "device_789:boot_12:input_1:41",
+                                      .detail        = "User accessed patient data"});
+if (!result.wasAdmitted()) {
+    // Handle result.refusal() according to the host procedure.
+}
+logger->clearAuditRing();
 ```
 
 > **Migrating from `LogLevel::INFO`-style names?** The enumerators are now CamelCase
@@ -243,11 +249,11 @@ MddLog supports ISO 13485 quality management requirements:
 
 ### Audit Trail Features
 
-- **Tamper-proof records** with cryptographic signatures *(planned)*
-- **User authentication** and authorization logging
-- **Data access tracking** with privacy compliance
-- **System configuration** change logging
-- **Emergency procedures** and incident logging
+- **Bounded audit admission and observable hand-off** *(implemented)*
+- **Cryptographic signatures and tamper evidence** *(planned, #11)*
+- **User authentication and authorization integration** *(planned)*
+- **Application-defined data access, configuration and emergency-action events**
+  *(record shape implemented; producer policy remains with the host)*
 
 ## Building and Integration
 

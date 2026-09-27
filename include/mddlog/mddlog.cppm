@@ -1,17 +1,16 @@
 /**
  * @brief MddLog - Modern C++23 Medical Device Logger
  *
- * A header-only logging library designed for medical devices,
- * conformant to IEC 62304 and ISO 13485 standards.
+ * A C++23 module library with diagnostic logging and bounded in-memory audit admission.
  *
  * Features:
  * - Thread-safe logging with C++23 features
- * - Multiple sink support (file, console, network, audit)
- * - Medical device compliance logging
- * - Audit trail with tamper-proof records
+ * - Diagnostic console sinks and separate audit sink interface
+ * - Medical device design context, without a certification claim
+ * - Audit admission and hand-off without durability or tamper-evidence
  * - Risk management and lifecycle logging
  * - Performance monitoring and metrics
- * - Zero-dependency (import std only)
+ * - Standard library module support
  * - Cross-platform (MSVC, GCC, Clang)
  */
 
@@ -21,6 +20,7 @@ import std;
 
 // Import submodules
 import mddlog.core.loglevel;
+import mddlog.core.auditring;
 import mddlog.adapter.logrecord;
 import mddlog.adapter.ringdrain;
 import mddlog.adapter.auditdrain;
@@ -39,11 +39,21 @@ using adapter::AuditDrainStatus;
 using adapter::AuditHealthSnapshot;
 using adapter::AuditSinkAdapter;
 using adapter::RingSinkAdapter;
+using core::AuditCategory;
+using core::AuditEvent;
+using core::AuditField;
+using core::AuditInput;
+using core::AuditPhase;
+using core::AuditRefusal;
+using core::AuditRefusalReason;
+using core::AuditRing;
+using core::AuditWriteResult;
 using core::fromString;
 using core::isComplianceLevel;
 using core::LogLevel;
 using core::LogRecord;
 using core::LogStatistics;
+using core::RawTime;
 using core::SimpleLogger;
 using core::toString;
 
