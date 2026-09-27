@@ -87,7 +87,8 @@ private:
 /**
  * @brief Single-consumer bridge from audit rings to one audit-only sink.
  *
- * Rings and the sink must outlive any call to drainOnce(). Registration, sink replacement and
+ * Registered rings must outlive the adapter: both drainOnce() and healthSnapshot() access them.
+ * The adapter owns a shared reference to the sink. Registration, sink replacement and
  * drainOnce() belong to one consumer thread. Complete registration before concurrent observers
  * call healthSnapshot(); producers may write to their own rings concurrently. A successful sink accept() followed by ring
  * acknowledgement is a hand-off, not durable confirmation. A rejection or exception retains
@@ -158,8 +159,9 @@ public:
                                 return result;
                             },
                             [&ring] {
-                                const auto read = ring.acknowledgedCount();
-                                return ring.admittedCount() - read;
+                                const auto read  = ring.acknowledgedCount();
+                                const auto write = ring.admittedCount();
+                                return write >= read ? write - read : std::uint64_t{0};
                             }});
     }
 
