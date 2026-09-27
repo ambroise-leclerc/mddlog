@@ -1,9 +1,12 @@
 /** @brief Emit representative governed template bodies for the separate object scans. */
 import std;
 import mddlog.core.ring;
+import mddlog.core.auditring;
 
 template class mddlog::core::RingLog<1>;
 template class mddlog::core::RingLog<3>;
+template class mddlog::core::AuditRing<1>;
+template class mddlog::core::AuditRing<3>;
 template class mddlog::core::InlineString<mddlog::core::messageCapacity>;
 
 // NOLINTNEXTLINE(misc-use-internal-linkage): external linkage keeps this scan probe emitted in optimized builds.

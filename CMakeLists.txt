@@ -203,6 +203,8 @@ set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/WriteResult.cppm
     include/mddlog/core/Record.cppm
     include/mddlog/core/Ring.cppm
+    include/mddlog/core/AuditEvent.cppm
+    include/mddlog/core/AuditRing.cppm
 )
 target_sources(mddlog-core
     PUBLIC
