@@ -47,8 +47,7 @@ when full and never overwrites admitted ones. Only `RingFull` increments `refusa
 one consumer may use a ring concurrently.
 
 The return value means **admitted to memory**, not handled by a sink or persisted. Loss of
-power discards the queue. Consumer failures and unacknowledged events still require the
-dedicated audit health signal and adapter work in #9.
+power discards the queue. The separate consumer and health contract is described below.
 
 For an ActionTrace-style critical action, emit `Requested`, then `Confirmed` when a real
 confirmation occurs, then `Executed` or `Failed` after the host acts. Each call gets a new
@@ -56,3 +55,33 @@ audit sequence. Keep the source sequence in `sourceSequence` only as provenance.
 shared `correlationId` from both the source stream identity and source sequence; the bare
 number is insufficient across producer recreation. `RawTime::unavailable()` is admitted;
 timestamps may repeat or move backwards, so order within a stream is given by sequence.
+
+## Audit-only hand-off and health (#57)
+
+`mddlog.sinks.auditsink` defines `AuditSink`, which accepts an `AuditEvent` directly and has
+no diagnostic severity threshold. `mddlog.adapter.auditdrain` defines `AuditSinkAdapter`.
+Register producer-owned rings with `addRing()`, configure one audit sink with `setSink()`,
+and call `drainOnce()` from exactly one consumer thread. Registration and sink replacement
+also belong to that thread. A diagnostic `Sink` is a different interface and cannot be
+installed as an audit sink.
+
+`AuditSink::accept()` returns true only when the sink has taken responsibility for the
+event in memory. The adapter then acknowledges that event in its ring and increments
+`handedOff`. A false return or exception leaves it queued. `drainOnce()` returns a
+`SinkRejected` or `SinkThrew` status, and `healthSnapshot()` records the failed attempt,
+pending ring records, and events taken for an attempt but not acknowledged. A later call
+can retry. If a sink partly acted before reporting failure, it may see the same event
+again; sink implementations should deduplicate by `(streamId, sequence)`.
+
+A missing or disabled audit sink returns `MissingSink` or `DisabledSink`, increments the
+configuration-error counter and leaves every event queued. The audit path does not read
+`SimpleLogger::setEnabled()`, its diagnostic threshold, or diagnostic sink filters.
+`healthSnapshot()` is an atomic, independently readable signal; its counters are not one
+cross-thread transaction. A sink or host that discovers a loss *after hand-off* calls
+`reportLoss()`. The adapter cannot detect an unreported downstream loss. A rejection that
+leaves an event queued is a dispatch failure, not a loss.
+
+Neither a true `accept()` result nor ring acknowledgement confirms durable storage.
+The third level of the delivery contract remains the work of #11. In-memory admission and
+hand-off do not survive loss of power. The legacy `logAudit()` API remains separate until
+#58 migrates it.

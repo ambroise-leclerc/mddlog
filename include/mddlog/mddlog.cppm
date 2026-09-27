@@ -23,8 +23,10 @@ import std;
 import mddlog.core.loglevel;
 import mddlog.adapter.logrecord;
 import mddlog.adapter.ringdrain;
+import mddlog.adapter.auditdrain;
 import mddlog.adapter.logger;
 import mddlog.sinks.sink;
+import mddlog.sinks.auditsink;
 import mddlog.sinks.console;
 
 // Re-export for convenience
@@ -32,6 +34,10 @@ export namespace mddlog {
 // NOLINTBEGIN(misc-unused-using-decls): these using-declarations ARE the module's exported API; nothing
 // in this interface unit uses them, only importers do.
 // Re-export core types
+using adapter::AuditDrainResult;
+using adapter::AuditDrainStatus;
+using adapter::AuditHealthSnapshot;
+using adapter::AuditSinkAdapter;
 using adapter::RingSinkAdapter;
 using core::fromString;
 using core::isComplianceLevel;
@@ -42,6 +48,8 @@ using core::SimpleLogger;
 using core::toString;
 
 // Re-export sinks
+using sinks::AuditSink;
+using sinks::AuditSinkPtr;
 using sinks::ConsoleSink;
 using sinks::createConsoleSink;
 using sinks::getColorCode;
