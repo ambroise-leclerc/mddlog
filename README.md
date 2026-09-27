@@ -84,7 +84,10 @@ C++ module systems in a regulated-software-shaped domain, not as validated medic
 #### 5. Performance & Monitoring
 - **Asynchronous delivery** via a mutex-protected, unbounded queue and a dedicated worker thread
   (not lock-free - see the note under [Technical Requirements](#technical-requirements))
-- **Memory pool allocation** for zero-allocation logging *(planned)*
+- **Allocation-free governed path** *(implemented)*: the fixed-capacity `GovernedRecord` and the
+  bounded SPSC `RingLog` in `mddlog::core` store records inline and refuse new writes when full;
+  see [Module Architecture](#module-architecture). `SimpleLogger` itself still allocates.
+- **Memory pool allocation** for the allocating `SimpleLogger` path *(planned)*
 - **Per-sink statistics**: records written/dropped, bytes written, flush count, write time
   (`LogStatistics`, exposed via `Sink::getStatistics()`)
 - **Real-time constraints**: not currently guaranteed; see the unbounded-queue limitation above

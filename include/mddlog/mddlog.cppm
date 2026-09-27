@@ -56,7 +56,8 @@ using sinks::WeakSinkPtr;
  * @return Version string in format "major.minor.patch"
  */
 constexpr std::string_view getVersion() noexcept {
-    return "0.1.0";
+    // Derived from project(mddlog VERSION ...) through mddlog_options; never repeat the literal here.
+    return MDDLOG_VERSION_STRING;
 }
 
 /**
