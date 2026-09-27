@@ -8,7 +8,7 @@ is executable evidence for the bounded record and memory admission contract.
 
 | Scenario and evidence | Category | Stable action and references | Assessment |
 | --- | --- | --- | --- |
-| MduX `ActionTrace` for `SystemEvent::TriggerHalt` on `emergency-halt`, `REQ-EM-003` | `RiskControl` | `TriggerHalt`, `REQ-EM-003`; hazard ID only if the host has one | Fits a request, confirmation, and result. `ActionTrace` itself reports a request, never an execution. |
+| MduX `ActionTrace` for `SystemEvent::TriggerHalt` on `emergency-halt`, `REQ-EM-003` | `RiskControl` | `TriggerHalt`, `REQ-EM-003`; hazard ID only if the host has one | Fits a request, confirmation, and result. MduX describes the trace as a critical press the host is about to act on; the host owns execution. |
 | `examples/basic_usage.cpp` and `examples/simple_usage.cpp`: `CONFIG_CHANGE`, `admin456`, `device_789`, `MEDIUM` | `Configuration` | `CONFIG_CHANGE`; setting or configuration object should replace a device-only target where known | `MEDIUM` is a risk *level*, not a risk-control reference. Leave `riskRef` empty unless the caller supplies a stable hazard ID. |
 | `examples/basic_usage.cpp` and `tests/spec/AuditPolicySpec.cpp`: access to patient data, `DATA_ACCESS`, `user123` | `Access` | `DATA_ACCESS`; identify the accessed object without putting patient data into an identifier | Fits, but the examples provide only a device ID as target; a real producer must define the actual protected object. |
 | Device start, stop, or maintenance state transition | `Lifecycle` | Host-defined stable transition ID | Category is plausible; no runtime audit call site in this repository validates its vocabulary. |
@@ -34,7 +34,9 @@ deployment call sites have not been surveyed; acceptance needs that review.
 
 ## ActionTrace conversion and event order
 
-At the host boundary, copy `ActionTrace.nodeId` to `target`, map the closed
+The [pinned MduX `ActionTrace` declaration](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/include/mdux/medui/Input.cppm#L834-L853)
+defines a trace of a critical press and explicitly assigns device behavior and audit
+persistence to the host. At the host boundary, copy `ActionTrace.nodeId` to `target`, map the closed
 `SystemEvent` to a stable `action`, copy `requirement` to `requirementRef`, and copy
 `sequence` to `sourceSequence`. The host supplies `actor`, `riskRef`, `time`, and a
 source stream identity. It constructs `correlationId` from that identity and source

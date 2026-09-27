@@ -43,13 +43,16 @@ const speclab::Register interleavedActions{
                           checks.expect(result.wasAdmitted() && result.sequence() == i + 1, "fresh audit sequence");
                       }
                       const auto view = ring.drain();
-                      for (std::size_t i = 0; i < phases.size(); ++i) {
-                          const auto& event = view.first()[i];
-                          checks.expect(event.streamId() == "device7:boot9:audit1" && event.sequence() == i + 1, "stream and sequence identify each event");
-                          checks.expect(event.phase() == phases.at(i) && event.sourceSequence() == sources.at(i), "phase and provenance retained");
-                          checks.expect(event.correlationId() == correlations.at(i), "source identity and sequence remain in correlation");
-                          checks.expect(event.requirementRef() == "REQ-EM-003" && event.target() == "emergency-halt",
-                                        "ActionTrace fields are copied without MduX dependency");
+                      checks.expect(view.first().size() == phases.size(), "all interleaved events are present");
+                      if (view.first().size() == phases.size()) {
+                          for (std::size_t i = 0; i < phases.size(); ++i) {
+                              const auto& event = view.first()[i];
+                              checks.expect(event.streamId() == "device7:boot9:audit1" && event.sequence() == i + 1, "stream and sequence identify each event");
+                              checks.expect(event.phase() == phases.at(i) && event.sourceSequence() == sources.at(i), "phase and provenance retained");
+                              checks.expect(event.correlationId() == correlations.at(i), "source identity and sequence remain in correlation");
+                              checks.expect(event.requirementRef() == "REQ-EM-003" && event.target() == "emergency-halt",
+                                            "ActionTrace fields are copied without MduX dependency");
+                          }
                       }
                       checks.raise();
                   })
@@ -61,42 +64,59 @@ const speclab::Register timeAndIdentity{
     "unit",
     [] {
         return speclab::Test("audit-time-and-identity")
-            .Then("time is data and producer instance identifies the sequence scope",
-                  [] {
-                      speclab::core::Checks checks;
-                      using namespace std::chrono;
-                      const auto   t       = RawTime::available(sys_time<nanoseconds>{seconds{100}});
-                      const auto   earlier = RawTime::available(sys_time<nanoseconds>{seconds{98}});
-                      AuditRing<4> producerA{"device7:boot9:auditA1"};
-                      AuditRing<2> producerB{"device7:boot9:auditB1"};
-                      AuditRing<1> recreated{"device7:boot9:auditA2"};
-                      AuditRing<1> restarted{"device7:boot10:auditA1"};
-                      checks.expect(producerA.tryRecord(action("device7:boot9:uiA:1", 1, AuditPhase::Requested, t)).sequence() == 1, "first time admitted");
-                      checks.expect(producerB.tryRecord(action("device7:boot9:uiB:1", 1, AuditPhase::Requested, t)).sequence() == 1,
-                                    "concurrent producer has its own sequence");
-                      checks.expect(producerA.tryRecord(action("device7:boot9:uiA:2", 2, AuditPhase::Requested, t)).sequence() == 2,
-                                    "identical time does not merge events");
-                      checks.expect(producerA.tryRecord(action("device7:boot9:uiA:3", 3, AuditPhase::Failed, earlier)).sequence() == 3,
-                                    "clock regression does not change order");
-                      checks.expect(producerA.tryRecord(action("device7:boot9:uiA:4", 4, AuditPhase::Requested)).sequence() == 4,
-                                    "unavailable time is admitted");
-                      checks.expect(recreated.tryRecord(action("device7:boot9:uiA2:1", 1, AuditPhase::Requested)).sequence() == 1,
-                                    "recreated producer restarts under a new stream");
-                      checks.expect(restarted.tryRecord(action("device7:boot10:uiA:1", 1, AuditPhase::Requested)).sequence() == 1,
-                                    "new boot restarts under a new stream");
-                      const auto events = producerA.drain().first();
-                      checks.expect(events[0].time().value() == events[1].time().value(), "same timestamp retained");
-                      checks.expect(events[2].time().value() < events[1].time().value() && events[2].sequence() > events[1].sequence(),
-                                    "sequence orders backward clock correction");
-                      checks.expect(events[3].time().availability() == TimeAvailability::Unavailable, "missing clock stays explicit");
-                      checks.expect(events[0].streamId() != producerB.drain().first()[0].streamId()
-                                        && events[0].streamId() != recreated.drain().first()[0].streamId()
-                                        && events[0].streamId() != restarted.drain().first()[0].streamId(),
-                                    "equal sequence values have distinct stream identities");
-                      checks.expect(events[0].correlationId() != producerB.drain().first()[0].correlationId(),
-                                    "equal source sequence values do not collide across sources");
-                      checks.raise();
-                  })
+            .Then(
+                "time is data and producer instance identifies the sequence scope",
+                [] {
+                    speclab::core::Checks checks;
+                    using namespace std::chrono;
+                    const auto                      t       = RawTime::available(sys_time<nanoseconds>{seconds{100}});
+                    const auto                      earlier = RawTime::available(sys_time<nanoseconds>{seconds{98}});
+                    AuditRing<4>                    producerA{"device7:boot9:auditA1"};
+                    AuditRing<2>                    producerB{"device7:boot9:auditB1"};
+                    AuditRing<1>                    recreated{"device7:boot9:auditA2"};
+                    AuditRing<1>                    restarted{"device7:boot10:auditA1"};
+                    std::barrier                    start{3};
+                    std::optional<AuditWriteResult> firstA;
+                    std::optional<AuditWriteResult> firstB;
+                    std::jthread                    a([&] {
+                        start.arrive_and_wait();
+                        firstA = producerA.tryRecord(action("device7:boot9:uiA:1", 1, AuditPhase::Requested, t));
+                    });
+                    std::jthread                    b([&] {
+                        start.arrive_and_wait();
+                        firstB = producerB.tryRecord(action("device7:boot9:uiB:1", 1, AuditPhase::Requested, t));
+                    });
+                    start.arrive_and_wait();
+                    a.join();
+                    b.join();
+                    checks.expect(firstA.has_value() && firstA->wasAdmitted() && firstA->sequence() == 1, "first time admitted");
+                    checks.expect(firstB.has_value() && firstB->wasAdmitted() && firstB->sequence() == 1, "concurrent producer has its own sequence");
+                    checks.expect(producerA.tryRecord(action("device7:boot9:uiA:2", 2, AuditPhase::Requested, t)).sequence() == 2,
+                                  "identical time does not merge events");
+                    checks.expect(producerA.tryRecord(action("device7:boot9:uiA:3", 3, AuditPhase::Failed, earlier)).sequence() == 3,
+                                  "clock regression does not change order");
+                    checks.expect(producerA.tryRecord(action("device7:boot9:uiA:4", 4, AuditPhase::Requested)).sequence() == 4, "unavailable time is admitted");
+                    checks.expect(recreated.tryRecord(action("device7:boot9:uiA2:1", 1, AuditPhase::Requested)).sequence() == 1,
+                                  "recreated producer restarts under a new stream");
+                    checks.expect(restarted.tryRecord(action("device7:boot10:uiA:1", 1, AuditPhase::Requested)).sequence() == 1,
+                                  "new boot restarts under a new stream");
+                    const auto events     = producerA.drain().first();
+                    const auto other      = producerB.drain().first();
+                    const auto recreation = recreated.drain().first();
+                    const auto restart    = restarted.drain().first();
+                    checks.expect(events.size() == 4 && other.size() == 1 && recreation.size() == 1 && restart.size() == 1, "every producer event is present");
+                    if (events.size() == 4 && other.size() == 1 && recreation.size() == 1 && restart.size() == 1) {
+                        checks.expect(events[0].time().value() == events[1].time().value(), "same timestamp retained");
+                        checks.expect(events[2].time().value() < events[1].time().value() && events[2].sequence() > events[1].sequence(),
+                                      "sequence orders backward clock correction");
+                        checks.expect(events[3].time().availability() == TimeAvailability::Unavailable, "missing clock stays explicit");
+                        checks.expect(events[0].streamId() != other[0].streamId() && events[0].streamId() != recreation[0].streamId()
+                                          && events[0].streamId() != restart[0].streamId(),
+                                      "equal sequence values have distinct stream identities");
+                        checks.expect(events[0].correlationId() != other[0].correlationId(), "equal source sequence values do not collide across sources");
+                    }
+                    checks.raise();
+                })
             .Execute();
     }};
 
@@ -145,9 +165,11 @@ const speclab::Register fieldBoundaries{
                       AuditRing<1>      overlong{longStream};
                       AuditRing<1>      invalid{"bad stream"};
                       checks.expect(valid.tryRecord(action("src:1", 1, AuditPhase::Requested)).wasAdmitted(), "stream accepts exact capacity");
-                      checks.expect(overlong.tryRecord(action("src:1", 1, AuditPhase::Requested)).refusal()->reason == AuditRefusalReason::InvalidStream,
+                      const auto overlongResult = overlong.tryRecord(action("src:1", 1, AuditPhase::Requested));
+                      checks.expect(!overlongResult.wasAdmitted() && overlongResult.refusal()->reason == AuditRefusalReason::InvalidStream,
                                     "stream overflow is refused");
-                      checks.expect(invalid.tryRecord(action("src:1", 1, AuditPhase::Requested)).refusal()->reason == AuditRefusalReason::InvalidStream,
+                      const auto invalidResult = invalid.tryRecord(action("src:1", 1, AuditPhase::Requested));
+                      checks.expect(!invalidResult.wasAdmitted() && invalidResult.refusal()->reason == AuditRefusalReason::InvalidStream,
                                     "stream grammar is refused");
                       for (const auto field : {AuditField::Action, AuditField::Target}) {
                           auto emptyInput = action("src:1", 1, AuditPhase::Requested);
@@ -156,10 +178,12 @@ const speclab::Register fieldBoundaries{
                           else
                               emptyInput.target = "";
                           AuditRing<1> required{"device7:boot9:required"};
-                          checks.expect(required.tryRecord(emptyInput).refusal()->field == field, "required identifier cannot be empty");
+                          const auto   requiredResult = required.tryRecord(emptyInput);
+                          checks.expect(!requiredResult.wasAdmitted() && requiredResult.refusal()->field == field, "required identifier cannot be empty");
                       }
                       AuditRing<1> emptyStream{""};
-                      checks.expect(emptyStream.tryRecord(action("src:1", 1, AuditPhase::Requested)).refusal()->reason == AuditRefusalReason::InvalidStream,
+                      const auto   emptyStreamResult = emptyStream.tryRecord(action("src:1", 1, AuditPhase::Requested));
+                      checks.expect(!emptyStreamResult.wasAdmitted() && emptyStreamResult.refusal()->reason == AuditRefusalReason::InvalidStream,
                                     "stream identity cannot be empty");
                       const std::string maximalCorrelation = validStream + ":" + std::to_string(std::numeric_limits<std::uint64_t>::max());
                       AuditRing<1>      maximum{"device7:boot9:maximum"};
@@ -170,12 +194,17 @@ const speclab::Register fieldBoundaries{
                       auto              input = action("src:1", 1, AuditPhase::Requested);
                       const std::string exact(auditDetailCapacity, 'd');
                       const std::string longDetail(auditDetailCapacity + 1, 'd');
-                      input.detail = exact;
-                      checks.expect(!detailRing.tryRecord(input).detailTruncated(), "exact detail is preserved");
+                      input.detail           = exact;
+                      const auto exactResult = detailRing.tryRecord(input);
+                      checks.expect(exactResult.wasAdmitted() && !exactResult.detailTruncated(), "exact detail is admitted whole");
                       input.detail         = longDetail;
                       const auto shortened = detailRing.tryRecord(input);
-                      checks.expect(shortened.wasAdmitted() && shortened.detailTruncated() && detailRing.drain().first()[1].detail() == exact,
-                                    "overlong detail alone is shortened and flagged");
+                      const auto view      = detailRing.drain();
+                      checks.expect(shortened.wasAdmitted() && shortened.detailTruncated(), "overlong detail is admitted and flagged");
+                      checks.expect(view.size() == 2, "both detail records are present");
+                      if (view.size() == 2)
+                          checks.expect(view.first()[0].detail() == exact && view.first()[1].detail() == exact,
+                                        "exact detail is preserved and overlong detail is shortened");
                       checks.raise();
                   })
             .Execute();
