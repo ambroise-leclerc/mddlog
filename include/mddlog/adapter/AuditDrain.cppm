@@ -97,12 +97,18 @@ private:
  */
 class AuditSinkAdapter {
 public:
-    AuditSinkAdapter()                                   = default;
+    // User-provided rather than defaulted: GCC 16.1 crashed (ICE in synthesize_method) while
+    // synthesizing the defaulted constructor in an importer (tests/spec/AuditPolicySpec.cpp).
+    // A body in the module interface is not implicitly inline, so it is compiled here once and
+    // importers only call it.
+    // NOLINTBEGIN(modernize-use-equals-default,hicpp-use-equals-default): GCC 16.1 workaround above.
+    AuditSinkAdapter() {}
+    ~AuditSinkAdapter() {}
+    // NOLINTEND(modernize-use-equals-default,hicpp-use-equals-default)
     AuditSinkAdapter(const AuditSinkAdapter&)            = delete;
     AuditSinkAdapter& operator=(const AuditSinkAdapter&) = delete;
     AuditSinkAdapter(AuditSinkAdapter&&)                 = delete;
     AuditSinkAdapter& operator=(AuditSinkAdapter&&)      = delete;
-    ~AuditSinkAdapter()                                  = default;
 
     template <std::size_t Capacity>
     void addRing(core::AuditRing<Capacity>& ring) {
