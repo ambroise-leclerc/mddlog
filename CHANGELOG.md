@@ -10,7 +10,7 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ---
 
-## 0.1.0 — unreleased
+## 0.1.0 — 27 September 2026
 
 The first version, closing epic #8: a bounded, allocation-free governed logging core separated from
 the allocating adapter and sinks, as accepted in [ADR-001](docs/adr/ADR-001-allocation-free-governed-logging-core.md).

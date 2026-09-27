@@ -64,8 +64,8 @@ the literal in the code.
 The assertions do repeat it, on purpose:
 
 ```console
-$ grep -rn 'declaredVersion =' tests/
-tests/spec/VersionSpec.cpp:      1 literal
+$ grep -r 'declaredVersion =' tests/spec/
+tests/spec/VersionSpec.cpp:constexpr std::string_view declaredVersion = "0.1.0";
 ```
 
 A test that derived its expectation from the same macro would assert nothing; the hard-coded literal
