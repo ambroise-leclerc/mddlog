@@ -48,36 +48,32 @@ public:
         std::span<const AuditEvent> secondSpan;
     };
 
-    explicit constexpr AuditRing(std::string_view identity) noexcept : identityValid(streamId.assignExact(identity) && !identity.empty()) {
-        if (identityValid) {
-            for (char ch : identity) {
-                if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.' || ch == ':' || ch == '/'
-                      || ch == '-'))
-                    identityValid = false;
-            }
-        }
+    explicit constexpr AuditRing(std::string_view identity) noexcept : identityValid(AuditEvent::validStreamId(identity)) {
+        if (identityValid)
+            (void)streamId.assignExact(identity);
     }
     AuditRing(const AuditRing&)            = delete;
     AuditRing& operator=(const AuditRing&) = delete;
     AuditRing(AuditRing&&)                 = delete;
     AuditRing& operator=(AuditRing&&)      = delete;
+    ~AuditRing()                           = default;
 
     /** @brief Admit to memory, or refuse without consuming a sequence or overwriting a slot. */
     [[nodiscard]] AuditWriteResult tryRecord(const AuditInput& input) noexcept {
         if (!identityValid)
-            return AuditWriteResult::refused({AuditRefusalReason::InvalidStream, AuditField::StreamId});
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::InvalidStream});
         if (auto failure = AuditEvent::validate(input, streamId.view()); failure.has_value())
             return AuditWriteResult::refused(*failure);
         if (nextSequence == 0)
-            return AuditWriteResult::refused({AuditRefusalReason::SequenceExhausted});
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::SequenceExhausted});
 
         const std::uint64_t write = writeCursor.load(std::memory_order_relaxed);
         const std::uint64_t read  = readCursor.load(std::memory_order_acquire);
         if (write - read >= Capacity) {
             refusals.fetch_add(1, std::memory_order_relaxed);
-            return AuditWriteResult::refused({AuditRefusalReason::RingFull});
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::RingFull});
         }
-        const auto result = slots[static_cast<std::size_t>(write % Capacity)].assign(input, streamId.view(), nextSequence);
+        const auto result = std::span{slots}[static_cast<std::size_t>(write % Capacity)].assign(input, streamId.view(), nextSequence);
         if (!result.wasAdmitted())
             return result;
         ++nextSequence;  // Unsigned wrap to zero permanently marks exhaustion.

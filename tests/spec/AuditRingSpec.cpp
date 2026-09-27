@@ -7,6 +7,7 @@ import speclab;
 namespace {
 
 using mddlog::core::AuditCategory;
+using mddlog::core::AuditEvent;
 using mddlog::core::AuditField;
 using mddlog::core::AuditInput;
 using mddlog::core::AuditPhase;
@@ -39,10 +40,15 @@ const speclab::Register auditAdmissionAndSequence{
                       const auto            full  = ring.tryRecord(request());
                       checks.expect(first.wasAdmitted() && first.sequence() == 1, "first event takes sequence 1");
                       checks.expect(!full.wasAdmitted() && full.refusal()->reason == AuditRefusalReason::RingFull, "second event is refused");
+                      checks.expect(full.refusal()->field == AuditField::None, "saturation has no offending identifier");
                       checks.expect(ring.refusalCount() == 1, "saturation is counted");
-                      auto invalidInput   = request();
-                      invalidInput.action = "has space";
-                      checks.expect(ring.tryRecord(invalidInput).refusal()->field == AuditField::Action, "identifier validation precedes saturation");
+                      auto invalidInput           = request();
+                      invalidInput.action         = "has space";
+                      const auto invalidWhileFull = ring.tryRecord(invalidInput);
+                      checks.expect(invalidWhileFull.refusal()->reason == AuditRefusalReason::InvalidIdentifier
+                                        && invalidWhileFull.refusal()->field == AuditField::Action,
+                                    "identifier validation precedes saturation");
+                      checks.expect(ring.refusalCount() == 1, "invalid identifier does not increment saturation count");
                       const auto view = ring.drain();
                       checks.expect(view.size() == 1 && view.first()[0].sequence() == 1, "admitted event survives saturation");
                       checks.expect(view.first()[0].sourceSequence() == 41, "source sequence remains provenance");
@@ -65,8 +71,18 @@ const speclab::Register auditFieldsAndIdentity{
                       speclab::core::Checks checks;
                       AuditRing<2>          first{"device:boot:producerA"};
                       AuditRing<2>          second{"device:boot:producerB"};
-                      auto                  input = request();
-                      const std::string     tooLong(mddlog::core::auditActionCapacity + 1, 'x');
+                      AuditRing<1>          invalidStream{"invalid stream"};
+                      auto                  input           = request();
+                      const auto            invalidIdentity = invalidStream.tryRecord(input);
+                      checks.expect(invalidIdentity.refusal()->reason == AuditRefusalReason::InvalidStream
+                                        && invalidIdentity.refusal()->field == AuditField::None,
+                                    "invalid stream has no offending identifier field");
+                      AuditEvent direct;
+                      const auto zeroSequence = direct.assign(input, "device:boot:producer", 0);
+                      checks.expect(zeroSequence.refusal()->reason == AuditRefusalReason::SequenceExhausted
+                                        && zeroSequence.refusal()->field == AuditField::None,
+                                    "sequence exhaustion has no offending identifier field");
+                      const std::string tooLong(mddlog::core::auditActionCapacity + 1, 'x');
                       input.action       = tooLong;
                       const auto invalid = first.tryRecord(input);
                       checks.expect(!invalid.wasAdmitted() && invalid.refusal()->field == AuditField::Action, "action overflow is named");

@@ -20,12 +20,13 @@ inline constexpr std::size_t auditDetailCapacity      = 160;
 enum class AuditCategory : std::uint8_t { Lifecycle, Configuration, Access, RiskControl, Operator };
 /** @brief A request, an optional confirmation, or the actual outcome. */
 enum class AuditPhase : std::uint8_t { Requested, Confirmed, Executed, Failed };
-enum class AuditField : std::uint8_t { Action, Actor, Target, RequirementRef, RiskRef, CorrelationId, StreamId };
+enum class AuditField : std::uint8_t { None, Action, Actor, Target, RequirementRef, RiskRef, CorrelationId };
 enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, SequenceExhausted, InvalidStream };
 
 struct AuditRefusal {
     AuditRefusalReason reason = AuditRefusalReason::RingFull;
-    AuditField         field  = AuditField::Action;
+    /** @brief Meaningful only for InvalidIdentifier; None for all other reasons. */
+    AuditField field = AuditField::None;
 };
 
 /** @brief Synchronous, in-memory admission only; no hand-off or durability is implied. */
@@ -86,7 +87,7 @@ public:
 
     [[nodiscard]] constexpr AuditWriteResult assign(const AuditInput& input, std::string_view streamId, std::uint64_t sequence) noexcept {
         if (sequence == 0)
-            return AuditWriteResult::refused({AuditRefusalReason::SequenceExhausted});
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::SequenceExhausted});
         if (auto failure = validate(input, streamId); failure.has_value())
             return AuditWriteResult::refused(*failure);
         AuditEvent next;
@@ -109,20 +110,24 @@ public:
 
     [[nodiscard]] static constexpr std::optional<AuditRefusal> validate(const AuditInput& input, std::string_view streamId) noexcept {
         if (!validIdentifier(input.action, auditActionCapacity, true))
-            return AuditRefusal{AuditRefusalReason::InvalidIdentifier, AuditField::Action};
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Action};
         if (!validIdentifier(input.actor, auditActorCapacity, false))
-            return AuditRefusal{AuditRefusalReason::InvalidIdentifier, AuditField::Actor};
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Actor};
         if (!validIdentifier(input.target, auditTargetCapacity, true))
-            return AuditRefusal{AuditRefusalReason::InvalidIdentifier, AuditField::Target};
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Target};
         if (!validIdentifier(input.requirementRef, auditReferenceCapacity, false))
-            return AuditRefusal{AuditRefusalReason::InvalidIdentifier, AuditField::RequirementRef};
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::RequirementRef};
         if (!validIdentifier(input.riskRef, auditReferenceCapacity, false))
-            return AuditRefusal{AuditRefusalReason::InvalidIdentifier, AuditField::RiskRef};
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::RiskRef};
         if (!validIdentifier(input.correlationId, auditCorrelationCapacity, false))
-            return AuditRefusal{AuditRefusalReason::InvalidIdentifier, AuditField::CorrelationId};
-        if (!validIdentifier(streamId, auditStreamCapacity, true))
-            return AuditRefusal{AuditRefusalReason::InvalidStream, AuditField::StreamId};
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::CorrelationId};
+        if (!validStreamId(streamId))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidStream};
         return std::nullopt;
+    }
+
+    [[nodiscard]] static constexpr bool validStreamId(std::string_view value) noexcept {
+        return validIdentifier(value, auditStreamCapacity, true);
     }
 
     [[nodiscard]] constexpr AuditCategory category() const noexcept {
@@ -172,12 +177,10 @@ private:
     [[nodiscard]] static constexpr bool validIdentifier(std::string_view value, std::size_t capacity, bool required) noexcept {
         if (value.size() > capacity || (required && value.empty()))
             return false;
-        for (char ch : value) {
-            if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.' || ch == ':' || ch == '/'
-                  || ch == '-'))
-                return false;
-        }
-        return true;
+        return std::ranges::all_of(value, [](char ch) {
+            return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.' || ch == ':' || ch == '/'
+                   || ch == '-';
+        });
     }
 
     AuditCategory                          categoryValue = AuditCategory::Lifecycle;
