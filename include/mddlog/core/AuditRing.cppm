@@ -20,6 +20,7 @@ class AuditRing {
     static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 
 public:
+    /** @brief Read-only spans that become invalid after any positive acknowledgement. */
     class DrainView {
     public:
         [[nodiscard]] constexpr std::span<const AuditEvent> first() const noexcept {

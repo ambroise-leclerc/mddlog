@@ -26,8 +26,10 @@ ASCII letters, digits, `_`, `.`, `:`, `/`, and `-`. No identifier is shortened.
 
 These limits are an initial public contract, based on examples available in this repository.
 They need review against deployment call sites before ADR-002 can be accepted. Longer free text
-belongs in `detail`; an identifier outside its grammar or byte limit is refused with the
-offending `AuditField`. Other refusal reasons carry `AuditField::None`. The old default `complianceStandard = "IEC_62304"` is not copied onto
+belongs in `detail`; an invalid event-field identifier is refused with
+`InvalidIdentifier` and the offending `AuditField`. An invalid `streamId` returns
+`InvalidStream` with `AuditField::None`, as do refusals unrelated to identifiers.
+The old default `complianceStandard = "IEC_62304"` is not copied onto
 every event. A meaningful per-event standard reference belongs in `requirementRef`.
 
 ## Admission and sequence
