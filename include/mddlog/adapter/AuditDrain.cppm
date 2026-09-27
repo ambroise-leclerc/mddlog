@@ -105,11 +105,11 @@ public:
 
     template <std::size_t Capacity>
     void addRing(core::AuditRing<Capacity>& ring) {
-        ringList.push_back({[&ring, pendingFailure = false](sinks::AuditSink& sink, AuditHealth& signal) mutable {
+        ringList.push_back({[&ring, pendingFailure = false](sinks::AuditSink& auditSink, AuditHealth& signal) mutable {
                                 AuditDrainResult  result;
                                 const std::size_t available = ring.drain().size();
                                 for (std::size_t index = 0; index < available; ++index) {
-                                    if (!sink.isEnabled()) {
+                                    if (!auditSink.isEnabled()) {
                                         signal.recordConfigurationError(AuditDrainStatus::DisabledSink);
                                         result.status = AuditDrainStatus::DisabledSink;
                                         break;
@@ -120,7 +120,7 @@ public:
                                     const core::AuditEvent& event    = view.first().empty() ? view.second().front() : view.first().front();
                                     bool                    accepted = false;
                                     try {
-                                        accepted = sink.accept(event);
+                                        accepted = auditSink.accept(event);
                                     } catch (...) {
                                         signal.recordDispatchFailure(AuditDrainStatus::SinkThrew);
                                         result.status = AuditDrainStatus::SinkThrew;
