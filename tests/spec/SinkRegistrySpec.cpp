@@ -204,17 +204,21 @@ const speclab::Register removerIgnoresSlotReusedAfterItsOwnGenerationFinalizes{
                       speclab::core::Checks checks;
                       CountingRegistry      registry;
 
-                      // Oversubscribe every core with spinning noise threads for the duration of
-                      // this scenario. The race below depends on the remover thread NOT being
-                      // rescheduled promptly after its wait() is notified; on an otherwise idle
-                      // machine the OS tends to wake and run it almost immediately, which starves
-                      // this test of the interleaving it exists to catch. Competing for every core
-                      // makes that wake-and-reschedule latency far less predictable.
-                      const auto               noiseCount = std::max(2u, std::thread::hardware_concurrency()) * 2;
+                      // A handful of spinning noise threads for the duration of this scenario, not
+                      // one per core: the race below depends on the remover thread NOT being
+                      // rescheduled promptly after its wait() is notified, and some extra
+                      // contention makes that wake-and-reschedule latency less predictable than on
+                      // an otherwise idle machine. Oversubscribing every core (as an earlier version
+                      // of this test did) made thread creation itself pathologically slow on a
+                      // constrained CI runner (observed hanging past a two-minute ctest timeout on
+                      // Windows and under TSan's own heavy instrumentation) without actually being
+                      // needed to reproduce the race locally - four is enough to add contention
+                      // without starving the runner.
+                      constexpr unsigned       kNoiseThreads = 4;
                       std::atomic<bool>        stopNoise{false};
                       std::vector<std::thread> noiseThreads;
-                      noiseThreads.reserve(noiseCount);
-                      for (unsigned n = 0; n < noiseCount; ++n) {
+                      noiseThreads.reserve(kNoiseThreads);
+                      for (unsigned n = 0; n < kNoiseThreads; ++n) {
                           noiseThreads.emplace_back([&stopNoise] {
                               while (!stopNoise.load(std::memory_order_relaxed)) {}
                           });
@@ -223,13 +227,15 @@ const speclab::Register removerIgnoresSlotReusedAfterItsOwnGenerationFinalizes{
                       // Whether the free list hands the retired slot to the second registration
                       // before or after the remover thread wakes up and re-checks depends on OS
                       // scheduling, not on anything this test controls directly. Repeating the whole
-                      // sequence many times, racing as tightly as each iteration can, gives the
-                      // unfavorable interleaving many chances to occur instead of depending on
-                      // winning it on a single attempt - this is a stress test, not a single
-                      // deterministic reproduction, and CI's typically busier, more contended
-                      // scheduling is, if anything, more likely to hit it than a quiet local run.
-                      constexpr int kIterations = 5000;
-                      for (int iteration = 0; iteration < kIterations; ++iteration) {
+                      // sequence for a bounded time budget instead of a fixed iteration count, racing
+                      // as tightly as each attempt can, gives the unfavorable interleaving many
+                      // chances to occur instead of depending on winning it once, while keeping
+                      // total runtime predictable regardless of how slow thread creation is on a
+                      // given platform (a fixed count of 5000 attempts took over two minutes under
+                      // Windows and TSan, and was still killed by the CI timeout before finishing).
+                      // This is a stress test, not a single deterministic reproduction.
+                      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{3};
+                      while (std::chrono::steady_clock::now() < deadline) {
                           std::latch        firstEntered{1};
                           std::latch        firstRelease{1};
                           std::atomic<bool> removeReturned{false};
