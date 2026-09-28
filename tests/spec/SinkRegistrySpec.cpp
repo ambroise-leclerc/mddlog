@@ -193,6 +193,121 @@ const speclab::Register removalWaitsForInFlightInvocation{
             .Execute();
     }};
 
+const speclab::Register removerIgnoresSlotReusedAfterItsOwnGenerationFinalizes{
+    "SinkRegistry: remove() is not confused by a different callback that reuses its just-retired slot",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-remover-ignores-reused-slot")
+            .Then("remove() stops waiting once its own generation is quiescent, even if the free list hands "
+                  "the exact same slot to a new, busy registration before the waiting thread wakes up",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registry;
+
+                      // Oversubscribe every core with spinning noise threads for the duration of
+                      // this scenario. The race below depends on the remover thread NOT being
+                      // rescheduled promptly after its wait() is notified; on an otherwise idle
+                      // machine the OS tends to wake and run it almost immediately, which starves
+                      // this test of the interleaving it exists to catch. Competing for every core
+                      // makes that wake-and-reschedule latency far less predictable.
+                      const auto               noiseCount = std::max(2u, std::thread::hardware_concurrency()) * 2;
+                      std::atomic<bool>        stopNoise{false};
+                      std::vector<std::thread> noiseThreads;
+                      noiseThreads.reserve(noiseCount);
+                      for (unsigned n = 0; n < noiseCount; ++n) {
+                          noiseThreads.emplace_back([&stopNoise] {
+                              while (!stopNoise.load(std::memory_order_relaxed)) {}
+                          });
+                      }
+
+                      // Whether the free list hands the retired slot to the second registration
+                      // before or after the remover thread wakes up and re-checks depends on OS
+                      // scheduling, not on anything this test controls directly. Repeating the whole
+                      // sequence many times, racing as tightly as each iteration can, gives the
+                      // unfavorable interleaving many chances to occur instead of depending on
+                      // winning it on a single attempt - this is a stress test, not a single
+                      // deterministic reproduction, and CI's typically busier, more contended
+                      // scheduling is, if anything, more likely to hit it than a quiet local run.
+                      constexpr int kIterations = 5000;
+                      for (int iteration = 0; iteration < kIterations; ++iteration) {
+                          std::latch        firstEntered{1};
+                          std::latch        firstRelease{1};
+                          std::atomic<bool> removeReturned{false};
+
+                          const auto handle = registry.add([&] {
+                              firstEntered.count_down();
+                              firstRelease.wait();
+                          });
+
+                          std::thread firstEmitter([&] {
+                              registry.emit();
+                          });
+                          firstEntered.wait();
+
+                          std::promise<void> removeDone;
+                          auto               removeFuture = removeDone.get_future();
+                          std::thread        remover([&] {
+                              registry.remove(handle);
+                              removeReturned.store(true, std::memory_order_release);
+                              removeDone.set_value();
+                          });
+
+                          // A brief head start so remover has actually retired the slot and entered
+                          // waitForQuiescence's blocking wait - not still merely starting up - before
+                          // the release below. Short enough to leave the subsequent race close.
+                          std::this_thread::sleep_for(std::chrono::microseconds{200});
+
+                          firstRelease.count_down();
+                          // Busy-poll activeCount() rather than joining firstEmitter or sleeping:
+                          // both of those are voluntary yield points that tend to let the scheduler
+                          // give the (already notified) remover thread a turn to re-observe the
+                          // slot's state before this thread reuses it. A tight, non-yielding spin
+                          // reacts to finalize() removing the slot from the published snapshot -
+                          // which happens synchronously inside exit(), before emit() can return -
+                          // about as fast as this thread can, racing to reuse the slot before the
+                          // remover thread gets rescheduled.
+                          while (registry.activeCount() != 0) {}
+
+                          // Immediately hand the exact same, now-recycled slot to a second,
+                          // currently busy registration. A remove() that only checks the slot's
+                          // count instead of its generation would now be waiting on *this*
+                          // callback instead of the one it was asked to remove.
+                          std::latch  secondEntered{1};
+                          std::latch  secondRelease{1};
+                          const auto  secondHandle = registry.add([&] {
+                              secondEntered.count_down();
+                              secondRelease.wait();
+                          });
+                          std::thread secondEmitter([&] {
+                              registry.emit();
+                          });
+                          secondEntered.wait();
+
+                          // The second callback is deliberately still blocked here. remove() must
+                          // have already returned (or be about to, independent of secondRelease) -
+                          // not be waiting on it.
+                          joinWithinBoundOrAbort(remover,
+                                                 removeFuture,
+                                                 std::chrono::seconds{5},
+                                                 "remove() waiting on a callback that only reused its retired slot");
+                          checks.expect(removeReturned.load(std::memory_order_acquire),
+                                        "remove() returned without regard to the reused slot's unrelated in-flight callback");
+
+                          secondRelease.count_down();
+                          secondEmitter.join();
+                          registry.remove(secondHandle);
+                          firstEmitter.join();
+                      }
+
+                      stopNoise.store(true, std::memory_order_relaxed);
+                      for (auto& noise : noiseThreads)
+                          noise.join();
+
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 const speclab::Register selfRemovalIsDeferred{"SinkRegistry: A callback that removes its own handle returns immediately and is never invoked again",
                                               "unit",
                                               [] {

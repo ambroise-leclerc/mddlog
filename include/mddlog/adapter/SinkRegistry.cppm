@@ -163,7 +163,7 @@ public:
             }
         }
 
-        waitForQuiescence(slot);
+        waitForQuiescence(slot, handle.generation);
 
         {
             std::scoped_lock lock(waitGraphMutex);
@@ -331,9 +331,23 @@ private:
         }
     }
 
-    static void waitForQuiescence(Slot& slot) noexcept {
+    /**
+     * @brief Block until @p generation's retirement is quiescent - or until it no longer is this
+     *        generation at all.
+     *
+     * The generation check, not just the count, is what makes this correct: once this slot is
+     * fully quiescent, finalize() advances its generation and it may immediately be handed to a
+     * new add() (the free list is what recycles it, and reuse can happen before this thread ever
+     * wakes up). Stopping only on countOf(observed) == 0 would then have this thread keep waiting
+     * on - and be woken by - an entirely unrelated *new* registration's own traffic through the
+     * same slot, which can run indefinitely and has no reason to ever quiesce on this thread's
+     * account. Once generationOf(observed) has moved past @p generation, this generation's count
+     * already reached zero (that is the only way finalize() advances it), so there is nothing left
+     * to wait for.
+     */
+    static void waitForQuiescence(Slot& slot, std::uint32_t generation) noexcept {
         auto observed = slot.state.load(std::memory_order_acquire);
-        while (countOf(observed) != 0) {
+        while (generationOf(observed) == generation && countOf(observed) != 0) {
             slot.state.wait(observed, std::memory_order_acquire);
             observed = slot.state.load(std::memory_order_acquire);
         }
