@@ -12,6 +12,28 @@ using mddlog::adapter::SinkRegistry;
 
 using CountingRegistry = SinkRegistry<void()>;
 
+/**
+ * @brief Join @p thread within @p bound, or fail the process outright instead of hanging.
+ *
+ * std::thread::join() has no timeout, so waiting on it directly would hang CI forever if the
+ * registry actually deadlocked - exactly the failure mode these tests exist to catch. Waiting on
+ * a future set at the end of the thread's own work instead lets a passing run join normally
+ * within the bound. Detaching past the bound would leave the thread free to keep touching the
+ * test's stack locals (the registry, captured references) after this function - and the whole
+ * scenario - returns: that is undefined behavior on top of the failure being reported, and can
+ * turn one flaky test into a crash in some unrelated later one. Aborting the process immediately
+ * is the safe failure here: the thread never gets a chance to run past locals that no longer
+ * exist, and the test binary reports a hard, unambiguous failure instead of a hang.
+ */
+void joinWithinBoundOrAbort(std::thread& thread, std::future<void>& completion, std::chrono::seconds bound, std::string_view what) {
+    if (completion.wait_for(bound) == std::future_status::ready) {
+        thread.join();
+        return;
+    }
+    std::cerr << std::format("SinkRegistrySpec: {} did not complete within {}; aborting instead of hanging or detaching\n", what, bound);
+    std::abort();
+}
+
 const speclab::Register singleAddReturnsOneHandle{"SinkRegistry: add() of a single callback returns one handle, unchanged in shape", "unit", [] {
                                                       return speclab::Test("sink-registry-single-add-returns-handle")
                                                           .Then("the handle is valid and the callback is invoked on emit()",
@@ -63,7 +85,8 @@ const speclab::Register multiAddReturnsArrayOfHandles{
                       static_assert(std::same_as<decltype(handles), std::array<CountingRegistry::Handle, 3>>);
 
                       checks.expect(handles[0].valid() && handles[1].valid() && handles[2].valid(), "all three handles are valid");
-                      checks.expect(!(handles[0] == handles[1]) && !(handles[1] == handles[2]), "the three handles are distinct");
+                      checks.expect(!(handles[0] == handles[1]) && !(handles[1] == handles[2]) && !(handles[0] == handles[2]),
+                                    "the three handles are pairwise distinct");
                       checks.expect(registry.activeCount() == 3, "all three callbacks are registered");
 
                       registry.emit();
@@ -271,22 +294,13 @@ const speclab::Register mutualCrossRemovalAvoidsDeadlock{
                           doneB.set_value();
                       });
 
-                      // A join() has no timeout, so a real deadlock here would hang CI forever. Wait on a
-                      // future set at the end of each thread's work instead: within the bound, join it
-                      // normally; past it, detach rather than block, and fail the check explicitly.
-                      constexpr auto bound      = std::chrono::seconds{5};
-                      const bool     aCompleted = futureA.wait_for(bound) == std::future_status::ready;
-                      const bool     bCompleted = futureB.wait_for(bound) == std::future_status::ready;
-                      if (aCompleted)
-                          threadA.join();
-                      else
-                          threadA.detach();
-                      if (bCompleted)
-                          threadB.join();
-                      else
-                          threadB.detach();
+                      // A real deadlock here must fail this test process outright, not hang CI - see
+                      // joinWithinBoundOrAbort().
+                      constexpr auto bound = std::chrono::seconds{5};
+                      joinWithinBoundOrAbort(threadA, futureA, bound, "thread A's mutual-cross-removal emit()");
+                      joinWithinBoundOrAbort(threadB, futureB, bound, "thread B's mutual-cross-removal emit()");
 
-                      checks.expect(aCompleted && bCompleted, "mutual cross-removal completes within the time bound, not by hanging");
+                      checks.expect(true, "mutual cross-removal completed within the time bound instead of hanging or aborting");
                       checks.expect(registry.activeCount() == 0, "both handles finish fully retired");
                       checks.raise();
                   })
@@ -396,16 +410,11 @@ const speclab::Register nestedEmissionAncestorRemovalDoesNotDeadlock{
                           done.set_value();
                       });
 
-                      // No join() timeout exists, so a real regression here would hang CI forever instead
-                      // of failing; wait on a future with a bound and detach rather than block past it.
-                      constexpr auto bound     = std::chrono::seconds{5};
-                      const bool     completed = future.wait_for(bound) == std::future_status::ready;
-                      if (completed)
-                          worker.join();
-                      else
-                          worker.detach();
+                      // A real regression here must fail this test process outright, not hang CI - see
+                      // joinWithinBoundOrAbort().
+                      joinWithinBoundOrAbort(worker, future, std::chrono::seconds{5}, "the nested-emission worker");
 
-                      checks.expect(completed, "the nested emission completes instead of the outer frame deadlocking on itself");
+                      checks.expect(true, "the nested emission completed instead of the outer frame deadlocking on itself");
                       checks.expect(aCalls >= 1 && bCalls >= 1, "both callbacks ran");
                       checks.expect(registry.activeCount() == 1, "only B remains registered; A was removed from the nested callback");
                       checks.raise();

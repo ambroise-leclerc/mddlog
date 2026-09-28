@@ -74,7 +74,7 @@ public:
         Handle() noexcept = default;
 
         [[nodiscard]] bool valid() const noexcept {
-            return slot_ != nullptr;
+            return slot != nullptr;
         }
 
         friend bool operator==(const Handle&, const Handle&) noexcept = default;
@@ -82,12 +82,12 @@ public:
     private:
         friend class SinkRegistry;
 
-        Handle(std::shared_ptr<Slot> slot, std::uint32_t generation, const SinkRegistry* owner) noexcept
-            : slot_(std::move(slot)), generation_(generation), owner_(owner) { }
+        Handle(std::shared_ptr<Slot> registeredSlot, std::uint32_t registeredGeneration, const SinkRegistry* owningRegistry) noexcept
+            : slot(std::move(registeredSlot)), generation(registeredGeneration), owner(owningRegistry) { }
 
-        std::shared_ptr<Slot> slot_;
-        std::uint32_t         generation_ = 0;
-        const SinkRegistry*   owner_      = nullptr;
+        std::shared_ptr<Slot> slot;
+        std::uint32_t         generation = 0;
+        const SinkRegistry*   owner      = nullptr;
     };
 
     /** @brief Register one callback. Single registration keeps this shape: one handle back. */
@@ -123,13 +123,13 @@ public:
      * registered on this registry instance (each Handle remembers which registry issued it).
      */
     void remove(const Handle& handle) {
-        if (!handle.valid() || handle.owner_ != this)
+        if (!handle.valid() || handle.owner != this)
             return;
-        Slot& slot = *handle.slot_;
+        Slot& slot = *handle.slot;
 
         const bool isSelfRemoval = isCurrentlyInvokingOnThisThread(&slot);
 
-        if (!retire(slot, handle.generation_))
+        if (!retire(slot, handle.generation))
             return;  // already retired/reused under this generation: nothing to do
 
         if (isSelfRemoval) {
@@ -139,8 +139,8 @@ public:
         const std::thread::id me      = std::this_thread::get_id();
         const auto&           myStack = localInvocationStack();
         {
-            std::scoped_lock lock(waitGraphMutex_);
-            waitingFor_[me] = &slot;
+            std::scoped_lock lock(waitGraphMutex);
+            waitingFor[me] = &slot;
             if (!myStack.empty()) {
                 // Cross-sink removal: is some thread U currently invoking `slot` (our target)
                 // itself blocked waiting for a slot that *we* are currently invoking (anywhere in
@@ -149,14 +149,14 @@ public:
                 // once U's wait completes, which only happens once one of our own invocations
                 // returns - a two-party cycle. Break it by not blocking; the other side proceeds
                 // and this handle still finishes retiring on its own once quiescent.
-                for (const auto& [otherThread, invokingSlots] : invoking_) {
+                for (const auto& [otherThread, invokingSlots] : invoking) {
                     if (std::find(invokingSlots.begin(), invokingSlots.end(), &slot) == invokingSlots.end())
                         continue;
-                    const auto waiting = waitingFor_.find(otherThread);
-                    if (waiting == waitingFor_.end())
+                    const auto waiting = waitingFor.find(otherThread);
+                    if (waiting == waitingFor.end())
                         continue;
                     if (std::find(myStack.begin(), myStack.end(), waiting->second) != myStack.end()) {
-                        waitingFor_.erase(me);
+                        waitingFor.erase(me);
                         return;
                     }
                 }
@@ -166,11 +166,11 @@ public:
         waitForQuiescence(slot);
 
         {
-            std::scoped_lock lock(waitGraphMutex_);
-            waitingFor_.erase(me);
+            std::scoped_lock lock(waitGraphMutex);
+            waitingFor.erase(me);
         }
 
-        finalize(slot, handle.generation_);
+        finalize(slot, handle.generation);
     }
 
     /**
@@ -182,7 +182,7 @@ public:
      * callback is swallowed so the rest of the snapshot is still delivered.
      */
     void emit(Args... args) {
-        const auto snapshot = std::atomic_load_explicit(&published_, std::memory_order_acquire);
+        const auto snapshot = std::atomic_load_explicit(&published, std::memory_order_acquire);
         if (!snapshot)
             return;
 
@@ -195,8 +195,8 @@ public:
             stack.push_back(&slot);
             const std::thread::id me = std::this_thread::get_id();
             {
-                std::scoped_lock lock(waitGraphMutex_);
-                invoking_[me].push_back(&slot);
+                std::scoped_lock lock(waitGraphMutex);
+                invoking[me].push_back(&slot);
             }
 
             try {
@@ -206,11 +206,11 @@ public:
             }
 
             {
-                std::scoped_lock lock(waitGraphMutex_);
-                auto&            mine = invoking_[me];
+                std::scoped_lock lock(waitGraphMutex);
+                auto&            mine = invoking[me];
                 mine.pop_back();
                 if (mine.empty())
-                    invoking_.erase(me);
+                    invoking.erase(me);
             }
             stack.pop_back();
 
@@ -220,7 +220,7 @@ public:
 
     /** @brief Number of callbacks currently registered (a snapshot, may change immediately). */
     [[nodiscard]] std::size_t activeCount() const {
-        const auto snapshot = std::atomic_load_explicit(&published_, std::memory_order_acquire);
+        const auto snapshot = std::atomic_load_explicit(&published, std::memory_order_acquire);
         return snapshot ? snapshot->size() : 0;
     }
 
@@ -231,8 +231,8 @@ public:
      * list rather than growing this without bound.
      */
     [[nodiscard]] std::size_t poolSize() const {
-        std::scoped_lock lock(publishMutex_);
-        return pool_.size();
+        std::scoped_lock lock(publishMutex);
+        return pool.size();
     }
 
 private:
@@ -295,8 +295,9 @@ private:
     }
 
     /**
-     * @brief Leave an invocation entered via enter(). Wakes a waiting remove(), and finalizes the
-     *        slot itself if no one is waiting (the self-removal and deferred-cross-removal case).
+     * @brief Leave an invocation entered via enter(). Wakes a blocked remove() and attempts
+     *        finalize() itself, so the slot is released whether or not anyone is waiting on it
+     *        (the self-removal and deferred-cross-removal case have no waiter to do it instead).
      */
     void exit(Slot& slot) {
         auto cur = slot.state.load(std::memory_order_acquire);
@@ -341,21 +342,26 @@ private:
      * @brief Release the callback's resources and return the slot to the free list.
      *
      * Idempotent and safe to call from more than one thread for the same retirement (exit() and a
-     * blocked remove() may both reach this for the same slot): only the thread that wins the
-     * generation-advancing CAS below performs the work, so the slot is never pushed to the free
-     * list twice.
+     * blocked remove() may both reach this for the same slot). publishMutex is held across the
+     * generation-advancing CAS *and* the release/publish work below, not just the latter: without
+     * that, the loser of the CAS could return from finalize() - and remove() could return to its
+     * caller - before the winner has actually cleared the callback and unpublished the slot,
+     * which is exactly the "no access after the owner is destroyed" guarantee this exists for.
+     * With the whole thing under one lock, the loser blocks on entry and, by the time it acquires
+     * the mutex and re-reads the state, the winner has already finished.
      */
     void finalize(Slot& slot, std::uint32_t generation) {
+        std::scoped_lock lock(publishMutex);
+
         auto cur = slot.state.load(std::memory_order_acquire);
         if (generationOf(cur) != generation || activeOf(cur) || countOf(cur) != 0)
             return;  // already finalized under this generation, reused, or not actually quiescent
         if (!slot.state.compare_exchange_strong(cur, pack(generation + 1, false, 0), std::memory_order_acq_rel, std::memory_order_acquire))
             return;  // another thread claimed this retirement first
 
-        std::scoped_lock lock(publishMutex_);
         slot.callback = Callback{};
 
-        auto current = std::atomic_load_explicit(&published_, std::memory_order_acquire);
+        auto current = std::atomic_load_explicit(&published, std::memory_order_acquire);
         auto next    = std::make_shared<Snapshot>();
         if (current) {
             next->reserve(current->size());
@@ -363,26 +369,26 @@ private:
                 if (entry.slot.get() != &slot)
                     next->push_back(entry);
         }
-        std::atomic_store_explicit(&published_, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
+        std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
 
-        for (auto& pooled : pool_) {
+        for (auto& pooled : pool) {
             if (pooled.get() == &slot) {
-                free_.push_back(pooled);
+                freeList.push_back(pooled);
                 break;
             }
         }
     }
 
     [[nodiscard]] Handle addOne(Callback callback) {
-        std::scoped_lock lock(publishMutex_);
+        std::scoped_lock lock(publishMutex);
 
         std::shared_ptr<Slot> slot;
-        if (!free_.empty()) {
-            slot = free_.back();
-            free_.pop_back();
+        if (!freeList.empty()) {
+            slot = freeList.back();
+            freeList.pop_back();
         } else {
             slot = std::make_shared<Slot>();
-            pool_.push_back(slot);
+            pool.push_back(slot);
         }
 
         const auto          previous   = slot->state.load(std::memory_order_relaxed);
@@ -390,35 +396,35 @@ private:
         slot->callback                 = std::move(callback);
         slot->state.store(pack(generation, true, 0), std::memory_order_release);
 
-        auto current = std::atomic_load_explicit(&published_, std::memory_order_acquire);
+        auto current = std::atomic_load_explicit(&published, std::memory_order_acquire);
         auto next    = std::make_shared<Snapshot>();
         if (current) {
             next->reserve(current->size() + 1);
             next->insert(next->end(), current->begin(), current->end());
         }
         next->push_back(SnapshotEntry{slot, generation});
-        std::atomic_store_explicit(&published_, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
+        std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
 
         return Handle(slot, generation, this);
     }
 
     // Not std::atomic<std::shared_ptr<T>> (P0718): libc++ 21's std::atomic primary template
     // requires a trivially copyable T and does not yet specialize shared_ptr, so this uses the
-    // shared_ptr-specific atomic free functions instead. Every access to `published_` - reads
+    // shared_ptr-specific atomic free functions instead. Every access to `published` - reads
     // included - must go through them; a plain load/store on a shared_ptr is not thread-safe.
-    mutable std::mutex                 publishMutex_;
-    std::shared_ptr<const Snapshot>    published_;
-    std::vector<std::shared_ptr<Slot>> pool_;
-    std::vector<std::shared_ptr<Slot>> free_;
+    mutable std::mutex                 publishMutex;
+    std::shared_ptr<const Snapshot>    published;
+    std::vector<std::shared_ptr<Slot>> pool;
+    std::vector<std::shared_ptr<Slot>> freeList;
 
     // Deadlock avoidance for mutual cross-removal (Decision 4): kept on the side, touched only
     // while a callback is being entered/exited and while remove() is deciding whether to block,
-    // never on the emit() fast path beyond that bookkeeping. invoking_ mirrors each thread's
+    // never on the emit() fast path beyond that bookkeeping. invoking mirrors each thread's
     // localInvocationStack() (nested emit() may hold several slots at once), so a thread U is
     // recorded as "currently invoking `slot`" for as long as `slot` is anywhere on U's stack.
-    std::mutex                                                    waitGraphMutex_;
-    std::unordered_map<std::thread::id, std::vector<const Slot*>> invoking_;
-    std::unordered_map<std::thread::id, const Slot*>              waitingFor_;
+    std::mutex                                                    waitGraphMutex;
+    std::unordered_map<std::thread::id, std::vector<const Slot*>> invoking;
+    std::unordered_map<std::thread::id, const Slot*>              waitingFor;
 };
 
 }  // namespace mddlog::adapter
