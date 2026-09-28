@@ -15,6 +15,12 @@
  * already snapshotted, so it is only visible to the next drainOnce() call - never re-entered
  * within the current one, on any thread.
  *
+ * This depends on RingLog's own single-producer contract: a ring written to by a transport's
+ * reentrant logging (running on the consumer thread, inside write()) must not also be written to
+ * by another, independent producer thread - that would be two producers on one SPSC ring,
+ * regardless of this adapter. A host whose transport writes log reentrantly gives the consumer
+ * thread its own ring for that purpose, separate from the rings fed by its other producer threads.
+ *
  * Detachment on transport failure reuses SinkRegistry's (#67, ADR-003 Decision 4) deferred
  * self-removal: a synchronous throw from write() retires that transport's own handle from inside
  * its own invocation (non-blocking, no further invocation admitted), and an asynchronous failure
@@ -88,10 +94,14 @@ private:
 /**
  * @brief Single-consumer bridge from bounded rings to transport-backed write callbacks.
  *
- * Registered rings must outlive this adapter. Exactly one consumer thread calls drainOnce();
- * addTransport()/reportFailure()/healthSnapshot() may be called from any thread. A transport that
- * throws synchronously, or whose failure is reported later through reportFailure(), is detached
- * before any further record reaches it and receives no invocation after that point.
+ * Registered rings must outlive this adapter. addRing() mutates this adapter's ring list without
+ * synchronization: every addRing() call must complete before the consumer thread starts calling
+ * drainOnce() and before any concurrent healthSnapshot() call, exactly as a ring's own producer
+ * must be established before that ring is used. Once registration is complete, exactly one
+ * consumer thread calls drainOnce(); addTransport()/reportFailure()/healthSnapshot() may then be
+ * called from any thread. A transport that throws synchronously, or whose failure is reported
+ * later through reportFailure(), is detached before any further record reaches it and receives no
+ * invocation after that point.
  *
  * @code
  * TransportConsumer consumer;
@@ -118,6 +128,9 @@ public:
 
     /**
      * @brief Register a producer-owned ring that must outlive this adapter.
+     *
+     * Not synchronized against drainOnce() or healthSnapshot(): call this only before the
+     * consumer thread starts and before any concurrent observer, as documented on the class.
      * @tparam Capacity This ring's compile-time capacity; registered rings may differ.
      */
     template <std::size_t Capacity>
@@ -150,25 +163,29 @@ public:
      * happens from inside the very invocation emit() is running.
      *
      * The handle is not known until registry.add() returns, after the closure below is already
-     * constructed, so the closure reads it through a small shared, mutex-guarded cell rather than
-     * capturing it directly. addTransport() holds that mutex from before add() until the handle is
-     * stored into the cell, so a drainOnce() call that races in and invokes this transport before
-     * addTransport() returns blocks on the same mutex until the handle is valid, rather than
-     * observing a default-constructed one. registry.add() never invokes any callback (only emit()
-     * does), so holding the mutex across it cannot deadlock.
+     * constructed, so the closure reads it through a small mutex-guarded cell (SelfRef) rather
+     * than capturing it directly. addTransport() holds that mutex from before add() until the
+     * handle is stored into the cell, so a drainOnce() call that races in and invokes this
+     * transport before addTransport() returns blocks on the same mutex until the handle is valid,
+     * rather than observing a default-constructed one. registry.add() never invokes any callback
+     * (only emit() does), so holding the mutex across it cannot deadlock.
+     *
+     * The callback captures a weak_ptr to its SelfRef, not a shared_ptr: SelfRef.handle owns a
+     * shared_ptr back to this very Slot (that is what makes it useful for self-removal), so a
+     * shared_ptr captured inside the Slot's own callback would be a reference cycle no shared_ptr
+     * can collect - exactly the leak a cycle like that produces. selfRefs, a member of this
+     * adapter rather than of the slot, holds the one strong owner, so the cycle never forms; the
+     * callback's weak_ptr only ever resolves while this TransportConsumer itself is alive.
      */
     [[nodiscard]] Handle addTransport(TransportWriteFn write) {
-        struct SelfRef {
-            std::mutex mutex;
-            Handle     handle;
-        };
-        auto             self = std::make_shared<SelfRef>();
-        std::scoped_lock claim(self->mutex);
-        Handle           handle = registry.add([this, write = std::move(write), self](const core::LogRecord& record) mutable {
+        auto                   self     = std::make_shared<SelfRef>();
+        std::weak_ptr<SelfRef> weakSelf = self;
+        std::scoped_lock       claim(self->mutex);
+        Handle                 handle = registry.add([this, write = std::move(write), weakSelf](const core::LogRecord& record) mutable {
             Handle mine;
-            {
-                std::scoped_lock lock(self->mutex);
-                mine = self->handle;
+            if (auto locked = weakSelf.lock()) {
+                std::scoped_lock lock(locked->mutex);
+                mine = locked->handle;
             }
             try {
                 write(record);
@@ -178,7 +195,11 @@ public:
                 registry.remove(mine);
             }
         });
-        self->handle            = handle;
+        self->handle = handle;
+        {
+            std::scoped_lock lock(selfRefsMutex);
+            selfRefs.push_back(std::move(self));
+        }
         return handle;
     }
 
@@ -242,6 +263,18 @@ private:
         std::function<std::uint64_t()>                refusalCount;
     };
 
+    /**
+     * @brief Lets a registered transport's own callback look up its own Handle.
+     *
+     * Owned strongly only by TransportConsumer::selfRefs, never by the callback itself (which
+     * captures a weak_ptr) - see addTransport()'s own comment for why a shared_ptr there would be
+     * a reference cycle back through the very Slot the callback lives in.
+     */
+    struct SelfRef {
+        std::mutex mutex;
+        Handle     handle;
+    };
+
     [[nodiscard]] static core::LogRecord copyRecord(const core::GovernedRecord& source) {
         core::LogRecord record;
         record.level            = source.level();
@@ -258,9 +291,11 @@ private:
         return record;
     }
 
-    std::vector<RingSource> ringList;
-    Registry                registry;
-    TransportHealth         health;
+    std::vector<RingSource>               ringList;
+    Registry                              registry;
+    TransportHealth                       health;
+    std::mutex                            selfRefsMutex;
+    std::vector<std::shared_ptr<SelfRef>> selfRefs;
 };
 
 }  // namespace mddlog::adapter

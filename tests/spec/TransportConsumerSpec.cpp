@@ -240,7 +240,7 @@ const speclab::Register healthReadableWithoutAnySink{
                                     "a freshly constructed consumer reports zeroed counters");
                       checks.expect(empty.activeTransports == 0, "no transport is registered yet");
 
-                      std::ignore = consumer.addTransport([](const LogRecord&) { });
+                      std::ignore = consumer.addTransport([](const LogRecord&) {});
                       checks.expect(ring.tryWrite(inputWith("ok")).admission() == Admission::Written, "record admitted");
                       checks.expect(consumer.drainOnce() == 1, "record dispatched");
 
