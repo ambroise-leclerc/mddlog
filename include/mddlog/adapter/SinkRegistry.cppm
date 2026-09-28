@@ -171,6 +171,13 @@ public:
         }
 
         finalize(slot, handle.generation);
+        // finalize() releases the callback in two locked phases with the destruction itself
+        // outside the lock (see its own comment); a thread that loses the claim to do that
+        // release returns from finalize() immediately, before the actual winner has necessarily
+        // finished. Waiting again here - which is a no-op if this thread *was* the winner, since
+        // finalize() only returns once its own two phases are both complete - is what keeps this
+        // remove() call from returning while the callback is still being destroyed elsewhere.
+        waitForQuiescence(slot, handle.generation);
     }
 
     /**
@@ -357,41 +364,73 @@ private:
      * @brief Release the callback's resources and return the slot to the free list.
      *
      * Idempotent and safe to call from more than one thread for the same retirement (exit() and a
-     * blocked remove() may both reach this for the same slot). publishMutex is held across the
-     * generation-advancing CAS *and* the release/publish work below, not just the latter: without
-     * that, the loser of the CAS could return from finalize() - and remove() could return to its
-     * caller - before the winner has actually cleared the callback and unpublished the slot,
-     * which is exactly the "no access after the owner is destroyed" guarantee this exists for.
-     * With the whole thing under one lock, the loser blocks on entry and, by the time it acquires
-     * the mutex and re-reads the state, the winner has already finished.
+     * blocked remove() may both reach this for the same slot): only the thread that wins the first
+     * CAS below performs the release; the other returns immediately (its caller, remove(), waits
+     * again afterwards - see its own comment - rather than relying on this call alone).
+     *
+     * The release happens in two locked phases with the callback's destruction itself *outside*
+     * any lock, in between:
+     *
+     * 1. Claim the retirement by moving `pack(generation, false, 0)` (quiescent) to a "releasing"
+     *    sentinel that keeps the same generation but sets the count to kCountMask. enter() still
+     *    rejects it (inactive); retire() still treats it as already retiring; waitForQuiescence()
+     *    still waits on it (its count is not 0, so a waiter for this generation is not fooled into
+     *    returning early). Move the callback out into a local and publish the snapshot without
+     *    this slot, all under publishMutex.
+     * 2. Destroy the local, and with it the callback's captures - with no lock held. Captures are
+     *    user code: a capture can be an RAII handle whose destructor itself calls add() or
+     *    remove() on this same registry, and both of those take publishMutex. Running that
+     *    destructor while still holding the lock this function took to get here would be a
+     *    same-thread double lock of a non-recursive mutex - undefined behavior, and in practice a
+     *    deadlock - exactly the class of bug this registry exists to rule out, just one level
+     *    removed (through a capture's destructor rather than a callback body).
+     *
+     * Only once destruction has completed does a third, brief locked step push the slot onto the
+     * free list and advance its generation, which is what lets a concurrently blocked
+     * waitForQuiescence() (this retirement's or a later add()'s) proceed.
      */
     void finalize(Slot& slot, std::uint32_t generation) {
-        std::scoped_lock lock(publishMutex);
+        Callback released;
+        {
+            std::scoped_lock lock(publishMutex);
 
-        auto cur = slot.state.load(std::memory_order_acquire);
-        if (generationOf(cur) != generation || activeOf(cur) || countOf(cur) != 0)
-            return;  // already finalized under this generation, reused, or not actually quiescent
-        if (!slot.state.compare_exchange_strong(cur, pack(generation + 1, false, 0), std::memory_order_acq_rel, std::memory_order_acquire))
-            return;  // another thread claimed this retirement first
+            auto cur = slot.state.load(std::memory_order_acquire);
+            if (generationOf(cur) != generation || activeOf(cur) || countOf(cur) != 0)
+                return;  // already finalized under this generation, reused, or not actually quiescent
+            if (!slot.state.compare_exchange_strong(cur, pack(generation, false, kCountMask), std::memory_order_acq_rel, std::memory_order_acquire))
+                return;  // another thread claimed this retirement first
 
-        slot.callback = Callback{};
+            // Not `released = std::move(slot.callback)`: a moved-from std::function is left in a
+            // "valid but unspecified" state by the standard, not guaranteed empty - and, at least
+            // with the standard library this was verified against, is not empty in practice,
+            // leaking the old target's lifetime into whatever this slot is reused for next. swap()
+            // has no such escape hatch: slot.callback is guaranteed empty afterward.
+            released.swap(slot.callback);
 
-        auto current = std::atomic_load_explicit(&published, std::memory_order_acquire);
-        auto next    = std::make_shared<Snapshot>();
-        if (current) {
-            next->reserve(current->size());
-            for (const auto& entry : *current)
-                if (entry.slot.get() != &slot)
-                    next->push_back(entry);
-        }
-        std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
-
-        for (auto& pooled : pool) {
-            if (pooled.get() == &slot) {
-                freeList.push_back(pooled);
-                break;
+            auto current = std::atomic_load_explicit(&published, std::memory_order_acquire);
+            auto next    = std::make_shared<Snapshot>();
+            if (current) {
+                next->reserve(current->size());
+                for (const auto& entry : *current)
+                    if (entry.slot.get() != &slot)
+                        next->push_back(entry);
             }
+            std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
         }
+
+        released = Callback{};  // destroys the callback's captures; no registry lock is held here
+
+        {
+            std::scoped_lock lock(publishMutex);
+            for (auto& pooled : pool) {
+                if (pooled.get() == &slot) {
+                    freeList.push_back(pooled);
+                    break;
+                }
+            }
+            slot.state.store(pack(generation + 1, false, 0), std::memory_order_release);
+        }
+        slot.state.notify_all();
     }
 
     [[nodiscard]] Handle addOne(Callback callback) {

@@ -583,4 +583,70 @@ const speclab::Register handleFromAnotherRegistryIsRejected{
             .Execute();
     }};
 
+const speclab::Register captureDestructorMayReenterRegistry{
+    "SinkRegistry: a callback capture's destructor can safely call add()/remove() on the same registry",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-capture-destructor-reenters-registry")
+            .Then("finalize() destroys the callback's captures with no registry lock held, so a capture's "
+                  "destructor calling back into add()/remove() does not deadlock",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registry;
+                      std::atomic<bool>     destructorCompleted{false};
+
+                      const auto idleHandle = registry.add([] {});
+
+                      struct ReentrantOwner {
+                          CountingRegistry*        targetRegistry;
+                          CountingRegistry::Handle otherHandle;
+                          std::atomic<bool>*       completed;
+
+                          ReentrantOwner(CountingRegistry* registry, CountingRegistry::Handle handle, std::atomic<bool>* flag)
+                              : targetRegistry(registry), otherHandle(std::move(handle)), completed(flag) {}
+                          ReentrantOwner(const ReentrantOwner&)            = delete;
+                          ReentrantOwner& operator=(const ReentrantOwner&) = delete;
+                          ReentrantOwner(ReentrantOwner&&)                 = delete;
+                          ReentrantOwner& operator=(ReentrantOwner&&)      = delete;
+
+                          // add()/remove() can throw (e.g. bad_alloc); this fixture exists specifically
+                          // to exercise a realistic reentrant destructor and isn't testing OOM behavior.
+                          ~ReentrantOwner() {  // NOLINT(bugprone-exception-escape)
+                              // Runs from inside finalize(), with no registry lock held - the property
+                              // under test. Before the fix, either call below would try to re-lock
+                              // publishMutex on the same thread and deadlock.
+                              targetRegistry->remove(otherHandle);
+                              const auto transient = targetRegistry->add([] {});
+                              targetRegistry->remove(transient);
+                              completed->store(true, std::memory_order_release);
+                          }
+                      };
+
+                      auto       owner  = std::make_shared<ReentrantOwner>(&registry, idleHandle, &destructorCompleted);
+                      const auto handle = registry.add([owner = std::move(owner)] {
+                          (void)owner;
+                      });
+
+                      registry.emit();
+
+                      std::promise<void> removeDone;
+                      auto               removeFuture = removeDone.get_future();
+                      std::thread        remover([&] {
+                          registry.remove(handle);
+                          removeDone.set_value();
+                      });
+
+                      joinWithinBoundOrAbort(remover,
+                                             removeFuture,
+                                             std::chrono::seconds{5},
+                                             "remove() whose callback capture's destructor re-enters the registry");
+
+                      checks.expect(destructorCompleted.load(std::memory_order_acquire),
+                                    "the capture's destructor ran to completion, including its own add()/remove() calls");
+                      checks.expect(registry.activeCount() == 0, "the registry ends with nothing registered");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 }  // namespace
