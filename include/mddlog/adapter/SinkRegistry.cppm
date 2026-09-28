@@ -201,8 +201,9 @@ public:
 
             try {
                 std::invoke(slot.callback, args...);
-            } catch (...) {
-                // A throwing callback must not stop delivery to the remaining snapshot entries.
+            } catch (...) {  // NOLINT(bugprone-empty-catch): a throwing callback must not stop delivery to the
+                             // remaining snapshot entries; this registry has no statistics object of its own
+                             // to record the failure into (unlike sinks::Sink::recordWriteFailure()).
             }
 
             {
@@ -236,9 +237,9 @@ public:
     }
 
 private:
-    static constexpr std::uint64_t kActiveBit       = std::uint64_t{1} << 31;
+    static constexpr std::uint64_t kActiveBit       = std::uint64_t{1} << 31u;
     static constexpr std::uint64_t kCountMask       = kActiveBit - 1;
-    static constexpr int           kGenerationShift = 32;
+    static constexpr unsigned      kGenerationShift = 32u;
 
     struct Slot {
         std::atomic<std::uint64_t> state{0};  // packed: generation(32) | active(1) | count(31)

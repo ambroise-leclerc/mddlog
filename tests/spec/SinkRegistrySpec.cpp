@@ -70,7 +70,9 @@ const speclab::Register multiAddReturnsArrayOfHandles{
                   [] {
                       speclab::core::Checks checks;
                       CountingRegistry      registry;
-                      int                   a = 0, b = 0, c = 0;
+                      int                   a = 0;
+                      int                   b = 0;
+                      int                   c = 0;
 
                       auto handles = registry.add(
                           [&] {
@@ -106,15 +108,16 @@ const speclab::Register registrationRacesWithEmission{"SinkRegistry: Registratio
                                                           return speclab::Test("sink-registry-registration-races-with-emission")
                                                               .Then("many threads adding, removing and emitting concurrently complete cleanly",
                                                                     [] {
-                                                                        speclab::core::Checks checks;
-                                                                        CountingRegistry      registry;
-                                                                        std::atomic<long>     totalInvocations{0};
-                                                                        std::atomic<bool>     stop{false};
-                                                                        constexpr int         kAdders   = 4;
-                                                                        constexpr int         kEmitters = 4;
+                                                                        speclab::core::Checks     checks;
+                                                                        CountingRegistry          registry;
+                                                                        std::atomic<std::int64_t> totalInvocations{0};
+                                                                        std::atomic<bool>         stop{false};
+                                                                        constexpr int             kAdders   = 4;
+                                                                        constexpr int             kEmitters = 4;
                                                                         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
                                                                         std::vector<std::thread> threads;
+                                                                        threads.reserve(kAdders + kEmitters);
                                                                         for (int i = 0; i < kAdders; ++i) {
                                                                             threads.emplace_back([&] {
                                                                                 while (std::chrono::steady_clock::now() < deadline) {
@@ -227,7 +230,8 @@ const speclab::Register crossRemovalOfIdleSink{
                   [] {
                       speclab::core::Checks    checks;
                       CountingRegistry         registry;
-                      int                      aCalls = 0, bCalls = 0;
+                      int                      aCalls = 0;
+                      int                      bCalls = 0;
                       CountingRegistry::Handle handleB;
 
                       handleB            = registry.add([&] {
@@ -251,7 +255,7 @@ const speclab::Register crossRemovalOfIdleSink{
             .Execute();
     }};
 
-enum class WhichSink { A, B };
+enum class WhichSink : std::uint8_t { A, B };
 using DiscriminatedRegistry = SinkRegistry<void(WhichSink)>;
 
 const speclab::Register mutualCrossRemovalAvoidsDeadlock{
@@ -264,7 +268,8 @@ const speclab::Register mutualCrossRemovalAvoidsDeadlock{
                       speclab::core::Checks         checks;
                       DiscriminatedRegistry         registry;
                       std::latch                    bothEntered{2};
-                      DiscriminatedRegistry::Handle handleA, handleB;
+                      DiscriminatedRegistry::Handle handleA;
+                      DiscriminatedRegistry::Handle handleB;
 
                       handleA = registry.add([&](WhichSink which) {
                           if (which != WhichSink::A)
@@ -281,7 +286,8 @@ const speclab::Register mutualCrossRemovalAvoidsDeadlock{
                           registry.remove(handleA);
                       });
 
-                      std::promise<void> doneA, doneB;
+                      std::promise<void> doneA;
+                      std::promise<void> doneB;
                       auto               futureA = doneA.get_future();
                       auto               futureB = doneB.get_future();
 
@@ -385,7 +391,8 @@ const speclab::Register nestedEmissionAncestorRemovalDoesNotDeadlock{
                   [] {
                       speclab::core::Checks    checks;
                       CountingRegistry         registry;
-                      int                      aCalls = 0, bCalls = 0;
+                      int                      aCalls = 0;
+                      int                      bCalls = 0;
                       CountingRegistry::Handle handleA;
 
                       // A's outermost invocation calls emit() again, nesting B's invocation inside it while
