@@ -195,7 +195,7 @@ public:
                 registry.remove(mine);
             }
         });
-        self->handle = handle;
+        self->handle                  = handle;
         {
             std::scoped_lock lock(selfRefsMutex);
             selfRefs.push_back(std::move(self));
