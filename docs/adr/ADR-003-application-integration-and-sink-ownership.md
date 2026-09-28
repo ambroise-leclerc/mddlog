@@ -124,8 +124,9 @@ creation time or a host-issued session identity.
 WebFront is header-only, `cmake_minimum_required(VERSION 3.31)`, `cxx_std_23`
 (`CMakeLists.txt:1, 33`). mddlog requires CMake 4.0 through 4.3, C++23 **modules** and `import std`
 (`CMakeLists.txt:1, 7-10`), and admits only MSVC 17.14+, GCC 16.1+ (excluding 16.2) or upstream
-Clang 20+, refusing AppleClang (`CMakeLists.txt:30-60`). Both using C++23 does not make one
-consumable by the other, and this record must not imply otherwise.
+Clang 20+, refusing AppleClang (`CMakeLists.txt:30-60`). On macOS the pin is stricter: exactly
+upstream Clang 21.1.8 and exactly CMake 4.3.1 (`CMakeLists.txt:66-80`). Both using C++23 does not
+make one consumable by the other, and this record must not imply otherwise.
 
 ## Medical Device Considerations
 
@@ -171,11 +172,11 @@ enable mask and maps it explicitly:
 `webfront::log::Debug` for display and `LogLevel::Fatal` into `webfront::log::Error`. Audit is not a
 `LogLevel` since #58, and `AuditEvent` is **not routed to this facade at all** (Decision 6).
 
-**The mask lives in the adapter** (settled by #66). mddlog's `SimpleLogger` keeps its single
-threshold: no other consumer needs per-level enablement, and adding it there would change the
-filtering semantics every existing mddlog user relies on for one consumer's benefit. The adapter's
-mask is a set of atomic per-level flags, so `set()` concurrent with logging is not the data race the
-plain `bool` array is today.
+**Proposed: the mask lives in the adapter** (chosen by #66, subject to review of this record).
+mddlog's `SimpleLogger` keeps its single threshold: no other consumer needs per-level enablement,
+and adding it there would change the filtering semantics every existing mddlog user relies on for
+one consumer's benefit. The adapter's mask is a set of atomic per-level flags, so `set()` concurrent
+with logging is not the data race the plain `bool` array is today.
 
 ### 3. Consumption without modules is an explicit choice, not an implicit promise
 
@@ -193,7 +194,7 @@ Three options, and this record recommends the second:
 What this record rules out is a fourth, unstated option: implying that "both are C++23" makes the
 dependency work. It does not, and the CMake floors differ by a major version.
 
-**Option 2 is adopted, with this split of responsibilities** (settled by #66):
+**Proposed: option 2, with this split of responsibilities** (chosen by #66, subject to review of this record):
 
 - **mddlog** gains the module-side pieces that are general, not WebFront-specific: the sink registry
   of Decision 4 and the bounded transport consumer of Decision 5, in the adapter zone and registered
@@ -236,8 +237,8 @@ chooses the break rather than a compatibility wrapper, because the single-id ret
 convenience to preserve — it is the defect that makes every sink but the last unremovable. For
 single-sink registration the shape is unchanged.
 
-**Spelling** (settled by #66): `addSinks(sink)` returns one handle, and `addSinks(s1, …, sN)` with
-N > 1 returns `std::array<Handle, N>` in argument order. An array rather than a tuple, because every
+**Proposed spelling** (chosen by #66, subject to review of this record): `addSinks(sink)` returns
+one handle, and `addSinks(s1, …, sN)` with N > 1 returns `std::array<Handle, N>` in argument order. An array rather than a tuple, because every
 element has the same type and a caller can iterate it to remove them all. The WebFront revalidation
 found **no multi-sink call site**: all four calls at the baseline register a single sink
 (`WebLink.hpp:120`, `test/LoggerTests.cpp:17`, `src/HelloWorld.cpp:31`,
@@ -387,7 +388,7 @@ Facts the draft did not record, now in Context and Decisions:
   connections.
 - `~WebLink` logs before removing its own sink.
 
-Points the draft left to implementation, settled here: the mask stays in the adapter
+Points the draft left to implementation, now proposed here for review: the mask stays in the adapter
 (Decision 2); option 2 with mddlog owning the registry and transport consumer and WebFront owning
 the facade and adapter TU behind an off-by-default option (Decision 3); `std::array` of handles for
 multi-sink registration (Decision 4).
