@@ -82,10 +82,12 @@ public:
     private:
         friend class SinkRegistry;
 
-        Handle(std::shared_ptr<Slot> slot, std::uint32_t generation) noexcept : slot_(std::move(slot)), generation_(generation) { }
+        Handle(std::shared_ptr<Slot> slot, std::uint32_t generation, const SinkRegistry* owner) noexcept
+            : slot_(std::move(slot)), generation_(generation), owner_(owner) { }
 
         std::shared_ptr<Slot> slot_;
         std::uint32_t         generation_ = 0;
+        const SinkRegistry*   owner_      = nullptr;
     };
 
     /** @brief Register one callback. Single registration keeps this shape: one handle back. */
@@ -117,15 +119,15 @@ public:
      * being removed (self-removal) or as the losing side of a two-party mutual cross-removal, it
      * returns immediately instead, per the class documentation above.
      *
-     * A stale or already-removed handle is a safe no-op.
+     * A stale or already-removed handle is a safe no-op, and so is a handle that was never
+     * registered on this registry instance (each Handle remembers which registry issued it).
      */
     void remove(const Handle& handle) {
-        if (!handle.valid())
+        if (!handle.valid() || handle.owner_ != this)
             return;
         Slot& slot = *handle.slot_;
 
-        const auto selfSlot      = threadLocalInvokingSlot();
-        const bool isSelfRemoval = selfSlot == &slot;
+        const bool isSelfRemoval = isCurrentlyInvokingOnThisThread(&slot);
 
         if (!retire(slot, handle.generation_))
             return;  // already retired/reused under this generation: nothing to do
@@ -134,21 +136,26 @@ public:
             return;  // deferred: quiescence completes on its own when the current call returns
         }
 
-        const std::thread::id me = std::this_thread::get_id();
+        const std::thread::id me      = std::this_thread::get_id();
+        const auto&           myStack = localInvocationStack();
         {
             std::scoped_lock lock(waitGraphMutex_);
             waitingFor_[me] = &slot;
-            if (selfSlot != nullptr) {
-                // Cross-sink removal: does some thread currently invoking `slot` wait for the
-                // slot *we* are being invoked from? If so, waiting here would complete only once
-                // that thread's wait completes, which only happens once our own invocation
+            if (!myStack.empty()) {
+                // Cross-sink removal: is some thread U currently invoking `slot` (our target)
+                // itself blocked waiting for a slot that *we* are currently invoking (anywhere in
+                // our own stack, not just the innermost frame - nested emit() can put several
+                // slots in flight on this thread at once)? If so, waiting here would complete only
+                // once U's wait completes, which only happens once one of our own invocations
                 // returns - a two-party cycle. Break it by not blocking; the other side proceeds
                 // and this handle still finishes retiring on its own once quiescent.
-                for (const auto& [otherThread, invokingSlot] : invoking_) {
-                    if (invokingSlot != &slot)
+                for (const auto& [otherThread, invokingSlots] : invoking_) {
+                    if (std::find(invokingSlots.begin(), invokingSlots.end(), &slot) == invokingSlots.end())
                         continue;
-                    auto waiting = waitingFor_.find(otherThread);
-                    if (waiting != waitingFor_.end() && waiting->second == selfSlot) {
+                    const auto waiting = waitingFor_.find(otherThread);
+                    if (waiting == waitingFor_.end())
+                        continue;
+                    if (std::find(myStack.begin(), myStack.end(), waiting->second) != myStack.end()) {
                         waitingFor_.erase(me);
                         return;
                     }
@@ -184,11 +191,12 @@ public:
             if (!enter(slot, entry.generation))
                 continue;
 
-            const Slot* previous = threadLocalInvokingSlot();
-            setThreadLocalInvokingSlot(&slot);
+            auto& stack = localInvocationStack();
+            stack.push_back(&slot);
+            const std::thread::id me = std::this_thread::get_id();
             {
                 std::scoped_lock lock(waitGraphMutex_);
-                invoking_[std::this_thread::get_id()] = &slot;
+                invoking_[me].push_back(&slot);
             }
 
             try {
@@ -199,9 +207,12 @@ public:
 
             {
                 std::scoped_lock lock(waitGraphMutex_);
-                invoking_.erase(std::this_thread::get_id());
+                auto&            mine = invoking_[me];
+                mine.pop_back();
+                if (mine.empty())
+                    invoking_.erase(me);
             }
-            setThreadLocalInvokingSlot(previous);
+            stack.pop_back();
 
             exit(slot);
         }
@@ -253,16 +264,22 @@ private:
         return (std::uint64_t{generation} << kGenerationShift) | (active ? kActiveBit : 0) | (count & kCountMask);
     }
 
-    /** @brief Thread-local slot this thread's callback invocation belongs to, if any. */
-    [[nodiscard]] static const Slot*& threadLocalInvokingSlotRef() noexcept {
-        thread_local const Slot* current = nullptr;
-        return current;
+    /**
+     * @brief Slots this thread is currently inside an invocation of, outermost first.
+     *
+     * Ordinarily has at most one entry, but a callback that itself calls emit() (nested
+     * emission) pushes another - remove() must recognize self-removal against every frame on
+     * this stack, not only the innermost one, or removing an *ancestor* frame's handle from a
+     * nested invocation would be treated as an ordinary cross-removal and deadlock waiting for
+     * quiescence on an invocation this same thread cannot make progress on.
+     */
+    [[nodiscard]] static std::vector<const Slot*>& localInvocationStack() noexcept {
+        thread_local std::vector<const Slot*> stack;
+        return stack;
     }
-    [[nodiscard]] static const Slot* threadLocalInvokingSlot() noexcept {
-        return threadLocalInvokingSlotRef();
-    }
-    static void setThreadLocalInvokingSlot(const Slot* slot) noexcept {
-        threadLocalInvokingSlotRef() = slot;
+    [[nodiscard]] static bool isCurrentlyInvokingOnThisThread(const Slot* slot) noexcept {
+        const auto& stack = localInvocationStack();
+        return std::find(stack.begin(), stack.end(), slot) != stack.end();
     }
 
     /** @brief Try to enter an invocation of @p slot at @p generation. False: skip, do not call. */
@@ -382,7 +399,7 @@ private:
         next->push_back(SnapshotEntry{slot, generation});
         std::atomic_store_explicit(&published_, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
 
-        return Handle(slot, generation);
+        return Handle(slot, generation, this);
     }
 
     // Not std::atomic<std::shared_ptr<T>> (P0718): libc++ 21's std::atomic primary template
@@ -396,10 +413,12 @@ private:
 
     // Deadlock avoidance for mutual cross-removal (Decision 4): kept on the side, touched only
     // while a callback is being entered/exited and while remove() is deciding whether to block,
-    // never on the emit() fast path beyond that bookkeeping.
-    std::mutex                                       waitGraphMutex_;
-    std::unordered_map<std::thread::id, const Slot*> invoking_;
-    std::unordered_map<std::thread::id, const Slot*> waitingFor_;
+    // never on the emit() fast path beyond that bookkeeping. invoking_ mirrors each thread's
+    // localInvocationStack() (nested emit() may hold several slots at once), so a thread U is
+    // recorded as "currently invoking `slot`" for as long as `slot` is anywhere on U's stack.
+    std::mutex                                                    waitGraphMutex_;
+    std::unordered_map<std::thread::id, std::vector<const Slot*>> invoking_;
+    std::unordered_map<std::thread::id, const Slot*>              waitingFor_;
 };
 
 }  // namespace mddlog::adapter

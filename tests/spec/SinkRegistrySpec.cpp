@@ -361,4 +361,89 @@ const speclab::Register slotsAreRecycled{"SinkRegistry: Repeated add()/remove() 
                                                  .Execute();
                                          }};
 
+const speclab::Register nestedEmissionAncestorRemovalDoesNotDeadlock{
+    "SinkRegistry: removing an ancestor frame's handle from a nested emit() call does not deadlock",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-nested-emission-ancestor-removal")
+            .Then("self-removal is recognized against every frame on the calling thread's stack, not only the "
+                  "innermost one - otherwise the outer frame would wait on its own quiescence forever",
+                  [] {
+                      speclab::core::Checks    checks;
+                      CountingRegistry         registry;
+                      int                      aCalls = 0, bCalls = 0;
+                      CountingRegistry::Handle handleA;
+
+                      // A's outermost invocation calls emit() again, nesting B's invocation inside it while
+                      // A is still on this thread's invocation stack. From there, B removes A - an ancestor
+                      // frame, not B's own - which the old innermost-only self-check treated as an ordinary
+                      // cross-removal and blocked waiting for A's quiescence, which only A's own (blocked)
+                      // thread could ever provide.
+                      handleA                             = registry.add([&] {
+                          ++aCalls;
+                          if (aCalls == 1)
+                              registry.emit();
+                      });
+                      [[maybe_unused]] const auto handleB = registry.add([&] {
+                          ++bCalls;
+                          registry.remove(handleA);
+                      });
+
+                      std::promise<void> done;
+                      auto               future = done.get_future();
+                      std::thread        worker([&] {
+                          registry.emit();
+                          done.set_value();
+                      });
+
+                      // No join() timeout exists, so a real regression here would hang CI forever instead
+                      // of failing; wait on a future with a bound and detach rather than block past it.
+                      constexpr auto bound     = std::chrono::seconds{5};
+                      const bool     completed = future.wait_for(bound) == std::future_status::ready;
+                      if (completed)
+                          worker.join();
+                      else
+                          worker.detach();
+
+                      checks.expect(completed, "the nested emission completes instead of the outer frame deadlocking on itself");
+                      checks.expect(aCalls >= 1 && bCalls >= 1, "both callbacks ran");
+                      checks.expect(registry.activeCount() == 1, "only B remains registered; A was removed from the nested callback");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register handleFromAnotherRegistryIsRejected{
+    "SinkRegistry: remove() ignores a handle issued by a different registry instance",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-cross-registry-handle-rejected")
+            .Then("the foreign call is a no-op and does not corrupt either registry's bookkeeping",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registryA;
+                      CountingRegistry      registryB;
+                      int                   calls = 0;
+
+                      const auto handleFromA = registryA.add([&] {
+                          ++calls;
+                      });
+
+                      // handleFromA was issued by registryA. Handing it to registryB's remove() must not
+                      // touch registryA's slot (clearing its callback, advancing its generation) or leave
+                      // registryA's own snapshot holding a now-stale entry.
+                      registryB.remove(handleFromA);
+
+                      checks.expect(registryA.activeCount() == 1, "registryA still reports its callback as registered");
+
+                      registryA.emit();
+                      checks.expect(calls == 1, "the callback registryB was wrongly handed still runs normally through its own registry");
+
+                      registryA.remove(handleFromA);
+                      checks.expect(registryA.activeCount() == 0, "removing through the OWNING registry still works");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 }  // namespace
