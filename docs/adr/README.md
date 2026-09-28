@@ -36,10 +36,10 @@ this project does not control and should not be sketched before there is somethi
 
 ## Relationship to MduX
 
-mddlog is a standalone library — `README.md` states "No dependencies except `import std`" — so it
-cannot depend on MduX's `mdux.governance` or `mdux.evidence` modules directly. Where these ADRs
-reuse a pattern MduX already worked through (trust-zone separation, no-heap verification, structured
-audit records, canonical serialization), they say so, state what the borrowed mechanism actually
+mddlog is a standalone library: its CMake targets do not link MduX, and its modules do not
+import `mdux.governance` or `mdux.evidence`. Where these ADRs reuse a pattern MduX already
+worked through (trust-zone separation, no-heap verification, structured audit records, canonical
+serialization), they say so, state what the borrowed mechanism actually
 checks, and adapt it to a type mddlog owns rather than importing MduX's. MduX describes itself as
 experimental: its ADRs and targeted checks are an architectural precedent, not validation
 transferable to mddlog.
