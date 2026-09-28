@@ -216,6 +216,7 @@ target_sources(mddlog-core
 target_sources(mddlog
     PUBLIC
     FILE_SET cxx_modules TYPE CXX_MODULES FILES
+        include/mddlog/adapter/SinkRegistry.cppm
         include/mddlog/adapter/LogRecord.cppm
         include/mddlog/sinks/Sink.cppm
         include/mddlog/sinks/AuditSink.cppm

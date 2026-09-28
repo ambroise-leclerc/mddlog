@@ -1,0 +1,364 @@
+/**
+ * @brief SinkRegistry (ADR-003 Decision 4, issue #67): handles, quiescent removal, self-removal,
+ *        mutual cross-removal without deadlock, slot recycling, and no post-destruction access.
+ */
+import std;
+import speclab;
+import mddlog.adapter.sinkregistry;
+
+namespace {
+
+using mddlog::adapter::SinkRegistry;
+
+using CountingRegistry = SinkRegistry<void()>;
+
+const speclab::Register singleAddReturnsOneHandle{"SinkRegistry: add() of a single callback returns one handle, unchanged in shape", "unit", [] {
+                                                      return speclab::Test("sink-registry-single-add-returns-handle")
+                                                          .Then("the handle is valid and the callback is invoked on emit()",
+                                                                [] {
+                                                                    speclab::core::Checks checks;
+                                                                    CountingRegistry      registry;
+                                                                    int                   calls = 0;
+
+                                                                    const auto handle = registry.add([&] {
+                                                                        ++calls;
+                                                                    });
+                                                                    checks.expect(handle.valid(), "add() returns a valid handle");
+                                                                    checks.expect(registry.activeCount() == 1, "one callback is registered");
+
+                                                                    registry.emit();
+                                                                    checks.expect(calls == 1, "the callback was invoked once");
+
+                                                                    registry.remove(handle);
+                                                                    registry.emit();
+                                                                    checks.expect(calls == 1, "no further invocation happens after removal");
+                                                                    checks.expect(registry.activeCount() == 0, "the registry reports no live callbacks");
+                                                                    checks.raise();
+                                                                })
+                                                          .Execute();
+                                                  }};
+
+const speclab::Register multiAddReturnsArrayOfHandles{
+    "SinkRegistry: add() of several callbacks returns one handle per callback, each independently removable",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-multi-add-returns-handle-array")
+            .Then("every handle is valid, distinct, and removing one leaves the others intact - fixing the "
+                  "size()-1 defect where only the last id of a multi-registration was recoverable",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registry;
+                      int                   a = 0, b = 0, c = 0;
+
+                      auto handles = registry.add(
+                          [&] {
+                              ++a;
+                          },
+                          [&] {
+                              ++b;
+                          },
+                          [&] {
+                              ++c;
+                          });
+                      static_assert(std::same_as<decltype(handles), std::array<CountingRegistry::Handle, 3>>);
+
+                      checks.expect(handles[0].valid() && handles[1].valid() && handles[2].valid(), "all three handles are valid");
+                      checks.expect(!(handles[0] == handles[1]) && !(handles[1] == handles[2]), "the three handles are distinct");
+                      checks.expect(registry.activeCount() == 3, "all three callbacks are registered");
+
+                      registry.emit();
+                      checks.expect(a == 1 && b == 1 && c == 1, "all three callbacks were invoked");
+
+                      // Removing the FIRST handle is exactly what the old fold-and-push_back API could not
+                      // do: it only ever returned the last id, making every earlier registration unremovable.
+                      registry.remove(handles[0]);
+                      registry.emit();
+                      checks.expect(a == 1 && b == 2 && c == 2, "only the removed callback stops receiving emissions");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register registrationRacesWithEmission{"SinkRegistry: Registration and removal race with emission without corrupting the snapshot", "unit", [] {
+                                                          return speclab::Test("sink-registry-registration-races-with-emission")
+                                                              .Then("many threads adding, removing and emitting concurrently complete cleanly",
+                                                                    [] {
+                                                                        speclab::core::Checks checks;
+                                                                        CountingRegistry      registry;
+                                                                        std::atomic<long>     totalInvocations{0};
+                                                                        std::atomic<bool>     stop{false};
+                                                                        constexpr int         kAdders   = 4;
+                                                                        constexpr int         kEmitters = 4;
+                                                                        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+                                                                        std::vector<std::thread> threads;
+                                                                        for (int i = 0; i < kAdders; ++i) {
+                                                                            threads.emplace_back([&] {
+                                                                                while (std::chrono::steady_clock::now() < deadline) {
+                                                                                    auto h = registry.add([&] {
+                                                                                        totalInvocations.fetch_add(1, std::memory_order_relaxed);
+                                                                                    });
+                                                                                    std::this_thread::yield();
+                                                                                    registry.remove(h);
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                        for (int i = 0; i < kEmitters; ++i) {
+                                                                            threads.emplace_back([&] {
+                                                                                while (!stop.load(std::memory_order_acquire))
+                                                                                    registry.emit();
+                                                                            });
+                                                                        }
+
+                                                                        std::this_thread::sleep_until(deadline);
+                                                                        stop.store(true, std::memory_order_release);
+                                                                        for (auto& t : threads)
+                                                                            t.join();
+
+                                                                        checks.expect(registry.activeCount() == 0,
+                                                                                      "every added callback was removed by its own adder thread");
+                                                                        checks.raise();
+                                                                    })
+                                                              .Execute();
+                                                      }};
+
+const speclab::Register removalWaitsForInFlightInvocation{
+    "SinkRegistry: External removal blocks until an already-engaged invocation of that callback returns",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-removal-waits-for-in-flight-invocation")
+            .Then("remove() does not return before the blocking callback does",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registry;
+                      std::latch            entered{1};
+                      std::latch            release{1};
+                      std::atomic<bool>     callbackReturned{false};
+                      std::atomic<bool>     removeReturned{false};
+
+                      const auto handle = registry.add([&] {
+                          entered.count_down();
+                          release.wait();
+                          callbackReturned.store(true, std::memory_order_release);
+                      });
+
+                      std::thread emitter([&] {
+                          registry.emit();
+                      });
+                      entered.wait();
+
+                      std::thread remover([&] {
+                          registry.remove(handle);
+                          removeReturned.store(true, std::memory_order_release);
+                      });
+
+                      // The callback is blocked on `release`; remove() must still be blocked too.
+                      std::this_thread::sleep_for(std::chrono::milliseconds{200});
+                      checks.expect(!removeReturned.load(std::memory_order_acquire), "remove() has not returned while its callback is still in flight");
+
+                      release.count_down();
+                      remover.join();
+                      emitter.join();
+
+                      checks.expect(callbackReturned.load(std::memory_order_acquire), "the callback ran to completion");
+                      checks.expect(removeReturned.load(std::memory_order_acquire), "remove() returned once the callback finished");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register selfRemovalIsDeferred{"SinkRegistry: A callback that removes its own handle returns immediately and is never invoked again",
+                                              "unit",
+                                              [] {
+                                                  return speclab::Test("sink-registry-self-removal-is-deferred")
+                                                      .Then("the self-removing invocation completes and no further invocation starts",
+                                                            [] {
+                                                                speclab::core::Checks    checks;
+                                                                CountingRegistry         registry;
+                                                                int                      calls = 0;
+                                                                CountingRegistry::Handle handle;
+
+                                                                handle = registry.add([&] {
+                                                                    ++calls;
+                                                                    registry.remove(handle);  // self-removal: must return immediately, not deadlock
+                                                                });
+
+                                                                registry.emit();
+                                                                checks.expect(calls == 1, "the self-removing callback ran exactly once");
+                                                                checks.expect(registry.activeCount() == 0,
+                                                                              "the handle is fully retired after the invocation returns");
+
+                                                                registry.emit();
+                                                                checks.expect(calls == 1, "no new invocation started after self-removal");
+                                                                checks.raise();
+                                                            })
+                                                      .Execute();
+                                              }};
+
+const speclab::Register crossRemovalOfIdleSink{
+    "SinkRegistry: A callback removing a different, currently-idle callback waits (trivially) and fully removes it",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-cross-removal-of-idle-sink")
+            .Then("the target stops receiving emissions and the remover completes normally",
+                  [] {
+                      speclab::core::Checks    checks;
+                      CountingRegistry         registry;
+                      int                      aCalls = 0, bCalls = 0;
+                      CountingRegistry::Handle handleB;
+
+                      handleB            = registry.add([&] {
+                          ++bCalls;
+                      });
+                      const auto handleA = registry.add([&] {
+                          ++aCalls;
+                          registry.remove(handleB);
+                      });
+
+                      registry.emit();
+                      checks.expect(aCalls == 1, "A ran");
+                      checks.expect(bCalls == 1, "B ran once before being removed by A in this same pass, or was already retired - either is valid");
+                      checks.expect(registry.activeCount() == 1, "only A remains registered");
+
+                      registry.emit();
+                      checks.expect(aCalls == 2, "A still runs");
+                      checks.expect(bCalls == 1, "B never runs again once removed");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+enum class WhichSink { A, B };
+using DiscriminatedRegistry = SinkRegistry<void(WhichSink)>;
+
+const speclab::Register mutualCrossRemovalAvoidsDeadlock{
+    "SinkRegistry: Two callbacks concurrently removing each other from inside their own invocations do not deadlock",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-mutual-cross-removal-avoids-deadlock")
+            .Then("both sides complete within a bounded time instead of waiting on each other forever",
+                  [] {
+                      speclab::core::Checks         checks;
+                      DiscriminatedRegistry         registry;
+                      std::latch                    bothEntered{2};
+                      DiscriminatedRegistry::Handle handleA, handleB;
+
+                      handleA = registry.add([&](WhichSink which) {
+                          if (which != WhichSink::A)
+                              return;
+                          bothEntered.count_down();
+                          bothEntered.wait();
+                          registry.remove(handleB);
+                      });
+                      handleB = registry.add([&](WhichSink which) {
+                          if (which != WhichSink::B)
+                              return;
+                          bothEntered.count_down();
+                          bothEntered.wait();
+                          registry.remove(handleA);
+                      });
+
+                      std::promise<void> doneA, doneB;
+                      auto               futureA = doneA.get_future();
+                      auto               futureB = doneB.get_future();
+
+                      std::thread threadA([&] {
+                          registry.emit(WhichSink::A);
+                          doneA.set_value();
+                      });
+                      std::thread threadB([&] {
+                          registry.emit(WhichSink::B);
+                          doneB.set_value();
+                      });
+
+                      // A join() has no timeout, so a real deadlock here would hang CI forever. Wait on a
+                      // future set at the end of each thread's work instead: within the bound, join it
+                      // normally; past it, detach rather than block, and fail the check explicitly.
+                      constexpr auto bound      = std::chrono::seconds{5};
+                      const bool     aCompleted = futureA.wait_for(bound) == std::future_status::ready;
+                      const bool     bCompleted = futureB.wait_for(bound) == std::future_status::ready;
+                      if (aCompleted)
+                          threadA.join();
+                      else
+                          threadA.detach();
+                      if (bCompleted)
+                          threadB.join();
+                      else
+                          threadB.detach();
+
+                      checks.expect(aCompleted && bCompleted, "mutual cross-removal completes within the time bound, not by hanging");
+                      checks.expect(registry.activeCount() == 0, "both handles finish fully retired");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register destroyedOwnerNotAccessedAfterRemoval{
+    "SinkRegistry: A callback's captured owner is never touched after remove() returns, even under concurrent emission",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-no-access-after-owner-destruction")
+            .Then("destroying the owner right after remove() returns is safe under a concurrent emitter",
+                  [] {
+                      speclab::core::Checks checks;
+
+                      struct Owner {
+                          std::atomic<int> calls{0};
+                          void             onEvent() {
+                              calls.fetch_add(1, std::memory_order_relaxed);
+                          }
+                      };
+
+                      CountingRegistry registry;
+                      auto             owner  = std::make_unique<Owner>();
+                      Owner*           raw    = owner.get();
+                      const auto       handle = registry.add([raw] {
+                          raw->onEvent();
+                      });
+
+                      std::atomic<bool> stop{false};
+                      std::thread       emitter([&] {
+                          while (!stop.load(std::memory_order_acquire))
+                              registry.emit();
+                      });
+
+                      // Give the emitter a chance to actually race with the removal below.
+                      std::this_thread::sleep_for(std::chrono::milliseconds{20});
+
+                      registry.remove(handle);  // must fully wait before returning
+                      owner.reset();            // if remove() did not truly wait, this is a use-after-free
+
+                      std::this_thread::sleep_for(std::chrono::milliseconds{20});
+                      stop.store(true, std::memory_order_release);
+                      emitter.join();
+
+                      checks.expect(true, "no crash and no sanitizer report: the owner was not reachable after remove() returned");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register slotsAreRecycled{"SinkRegistry: Repeated add()/remove() cycles recycle slots instead of growing the registry without bound",
+                                         "unit",
+                                         [] {
+                                             return speclab::Test("sink-registry-slots-are-recycled")
+                                                 .Then("the pool of distinct slot allocations stays small across many churn cycles",
+                                                       [] {
+                                                           speclab::core::Checks checks;
+                                                           CountingRegistry      registry;
+
+                                                           constexpr int kCycles = 500;
+                                                           for (int i = 0; i < kCycles; ++i) {
+                                                               const auto handle = registry.add([] { });
+                                                               registry.remove(handle);
+                                                           }
+
+                                                           checks.expect(registry.activeCount() == 0, "nothing remains registered");
+                                                           checks.expect(registry.poolSize() < static_cast<std::size_t>(kCycles),
+                                                                         "slot allocations are recycled through the free list, not one per cycle");
+                                                           checks.raise();
+                                                       })
+                                                 .Execute();
+                                         }};
+
+}  // namespace
