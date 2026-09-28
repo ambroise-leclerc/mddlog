@@ -98,7 +98,11 @@ Two paths re-enter the browser sink:
 - **Asynchronously, after a failed write.** The write-completion handler logs
   `log::error("Error during write …")` (`WebSocket.hpp:366-368`), which hands a new line to the
   browser sink of the same failing socket, which queues another write. Only the `started` flag,
-  cleared by `stop()` (`WebSocket.hpp:276-277`, `367-370`), ends that loop.
+  cleared by `stop()` (`WebSocket.hpp:276-277`, `367-370`), ends that loop. The handler is the
+  completion of `Net::AsyncWrite` (`WebSocket.hpp:358-373`): it runs after the dispatch that queued
+  the write has returned, on the network thread (in the test double, on a `std::async` thread,
+  `NetworkingMock.hpp:104-117`). It is therefore not nested inside any sink invocation. The handler
+  also logs *before* it calls the close handler and `stop()`.
 
 Today nothing else breaks either cycle; a transport that starts failing and logging its failures is
 the amplification case the review names.
@@ -114,10 +118,18 @@ string.
 
 Both identifiers are 16-bit and **reused**. `CallId` (`Messages.hpp:24`) wraps, skipping 0 and ids
 still pending (`WebLink.hpp:211-218`). `WebLinkId` is allocated from `idsCounter`, which wraps and
-skips ids still present in `webLinks` (`WebFront.hpp:237-238`, `348`). A `(webLinkId, callId)` pair
-therefore identifies one call only while it is outstanding, not across a process lifetime. A
-consumer that must join records beyond that window needs a further discriminator, such as the link's
-creation time or a host-issued session identity.
+skips ids still present in `webLinks` (`WebFront.hpp:237-238`, `348`).
+
+`CallId` also has **two independent allocators, one per call direction**:
+
+- For a C++→JS call, `WebLink::expectResult()` allocates the id (`WebLink.hpp:84-99`, `211-218`).
+- For a JS→C++ call, the browser allocates it, and WebFront only echoes it back
+  (`command->getCallId()`, `WebLink.hpp:136-143`).
+
+The same numeric id on the same link can therefore name two unrelated exchanges. A call is
+identified by `(webLinkId, direction, callId)`, and only while it is outstanding, not across a
+process lifetime. A consumer that must join records beyond that window needs a further
+discriminator, such as the link's creation time or a host-issued session identity.
 
 ### The consumption gap
 
@@ -252,13 +264,22 @@ For a sink that writes to a transport (the browser sink being the motivating cas
 - **Bounded**: it consumes from a bounded ring (ADR-001 Decision 4), not from the emitting thread. A
   slow or stalled browser must not block a producer, and saturation refuses with an observable
   counter rather than growing without bound.
-- **Non-reentrant**: logs emitted while dispatching to a sink must not re-enter that sink. A
-  thread-local "in dispatch" guard (or a dedicated consumer thread that never logs through the
-  registry) breaks both cycles documented in Context: the synchronous one through
-  `Frame::addBuffer` while an error frame is encoded, and the asynchronous one through the
-  write-error log.
-- **Fails quietly and locally**: a transport error detaches the sink and is reported through the
-  registry's own health counters, not by logging the failure through the path that just failed.
+- **Non-reentrant, for the synchronous cycle**: a log emitted *during* a sink invocation must not
+  re-enter that sink. A thread-local "in dispatch" guard, or a dedicated consumer thread that never
+  logs through the registry, breaks the synchronous cycle through `Frame::addBuffer`. In that cycle
+  the re-entering log is emitted on the dispatching thread, inside the invocation. The guard is
+  **not** a remedy for the asynchronous cycle. The write-completion handler runs after the
+  invocation has returned, usually on another thread, so no guard is active there. With a bounded
+  consumer, its log line is simply one more record queued for the same sink.
+- **Detached before any further emission, for a transport failure**: when a transport reports a
+  failure, the sink is retired through deferred self-removal (Decision 4) before any record — the
+  one describing that failure or any later one — can be dispatched to it. A retiring sink receives
+  no new invocation, so the failing transport cannot be handed its own failure line. Reporting goes
+  through the registry's own health counters, never through the path that just failed. In WebFront
+  terms, the write-completion path must retire the link's sink before `log::error` at
+  `WebSocket.hpp:368` runs, reversing today's order of log, then close handler, then `stop()`. The
+  `started` flag is not a substitute: it bounds the loop only after the socket stops, and records
+  already queued for the sink are unaffected by it.
 - **Disconnection is ordinary**: sink removal at `~WebLink` follows Decision 4, so a disconnect in
   flight is a wait, not a race. That holds only once a disconnect actually leads to `~WebLink`. At
   the baseline it does not (Context, defect 2), so the WebFront adoption must emit, or otherwise act
@@ -268,46 +289,62 @@ For a sink that writes to a transport (the browser sink being the motivating cas
 
 ### 6. Context is captured at the producer; formatting happens in the adapter; audit stays out
 
-Following ADR-001 Decision 1, the facade passes `WebLinkId`, `CallId` and a component identifier
-through as *fields*, captured when the call is made — not folded into a pre-formatted string as
-today. The adapter renders the final text, including both existing shapes (`[D] HH:MM:SS | file:line | text`
-and `[X] HH:MM:SS | text`), so Decision 1's test contract still holds while the identifiers survive
-to any other sink.
+Following ADR-001 Decision 1, the facade passes `WebLinkId`, `CallId`, the call direction and a
+component identifier through as *fields*, captured when the call is made — not folded into a
+pre-formatted string as today. The adapter renders the final text, including both existing shapes
+(`[D] HH:MM:SS | file:line | text` and `[X] HH:MM:SS | text`), so Decision 1's test contract still
+holds while the identifiers survive to any other sink.
 
 `AuditEvent` (ADR-002) is not reachable through this facade. A consumer that wants an audit lane opts
 into it explicitly, and it does not share the browser sink.
 
-**Worked example — one call's request, response and error, across two simultaneous connections.**
-The identifier that matters is the **pair**, not the `CallId`: `WebLinkId` is allocated per
-connection (`WebFront.hpp:237-238`, from the counter declared at line 348) while `CallId` restarts
-from `nextCallId{1}` inside each `WebLink` (`WebLink.hpp:52`), so call 1 on link 1 and call 1 on link 2
-are unrelated calls that today render as indistinguishable text. Because both counters wrap
-(Context), the pair identifies a call while it is outstanding, which is the window this example
+**Worked example — calls in both directions across two simultaneous connections.** The identifier
+that matters is the **triple** `(webLinkId, direction, callId)`, not the `CallId` alone. `WebLinkId`
+is allocated per connection (`WebFront.hpp:237-238`, from the counter declared at line 348). A
+C++→JS `CallId` restarts from `nextCallId{1}` inside each `WebLink` (`WebLink.hpp:52`), and a JS→C++
+`CallId` restarts from the browser's own `nextCallId = 1` (`src/WebFront.js:97`). So call 1 on
+link 1 and call 1 on link 2 are unrelated. On a single link, C++→JS call 1 and JS→C++ call 1 are
+unrelated too. Today all of these render as indistinguishable text. Because the counters wrap
+(Context), the triple identifies a call while it is outstanding, which is the window this example
 covers.
 
-Two browsers are connected as links 1 and 2. Each invokes a JS function; `expectResult()` allocates
-a `CallId` per link and returns a future (`WebLink.hpp:84-99`), `JsFunction` stamps it on the outgoing
-command (`include/JsFunction.hpp:41`), the reply arrives as `functionReturn` and settles through
-`completePending` (`WebLink.hpp:112`, `220-233`), and a failure arrives instead as an encoded
-exception or an error (`sendException` and `sendError`, called at lines 139 and 143 and defined at
-148-154 and 199-208) — or, if the browser disconnects mid-call, as `rejectPending` from the close
-handler (line 64):
+Two browsers are connected as links 1 and 2. In the C++→JS direction:
 
-| Event | component | webLinkId | callId |
-|---|---|---|---|
-| request sent to browser A | `jsFunction` | 1 | 1 |
-| request sent to browser B | `jsFunction` | 2 | 1 |
-| response settles for B | `jsFunction` | 2 | 1 |
-| error returned for A | `jsFunction` | 1 | 1 |
-| A disconnects, pending rejected | `weblink` | 1 | 1 |
+- `expectResult()` allocates a `CallId` on the link and returns a future (`WebLink.hpp:84-99`), and
+  `JsFunction` stamps it on the outgoing command (`include/JsFunction.hpp:41`).
+- The reply arrives as `functionReturn` and settles through `completePending`
+  (`WebLink.hpp:112`, `220-233`).
+- A JS-side failure arrives in that same `functionReturn` as an encoded exception, which
+  `settleResult` rethrows into the caller's future (`WebLink.hpp:159-181`).
+- If the browser disconnects while the call is still pending, `rejectPending` rejects it from the
+  close handler (line 64).
 
-Interleaved arbitrarily in one stream, those five lines are today five strings whose only relation is
-whatever the call site happened to interpolate. With the identifiers carried as fields, a reader
-filters on `(webLinkId, callId)` and gets one call's life without parsing text — and the last two
-rows, which belong to the same call but are emitted from different components, stay joined.
+In the JS→C++ direction, the browser's `CallId` is echoed back. An unknown function is answered by
+`sendError` (`WebFront.hpp:367`, defined at `WebLink.hpp:199-208`), and an `std::out_of_range` by
+`sendException` (`WebLink.hpp:139`, `148-154`).
+
+| Event | component | direction | webLinkId | callId |
+|---|---|---|---|---|
+| request sent to browser A | `jsFunction` | C++→JS | 1 | 1 |
+| request sent to browser B | `jsFunction` | C++→JS | 2 | 1 |
+| response settles for B | `jsFunction` | C++→JS | 2 | 1 |
+| A's reply carries a JS exception, rethrown into the future | `jsFunction` | C++→JS | 1 | 1 |
+| browser A calls an unknown C++ function, `sendError` answers | `cppFunction` | JS→C++ | 1 | 1 |
+| second request sent to browser B | `jsFunction` | C++→JS | 2 | 2 |
+| B disconnects, that pending call is rejected | `weblink` | C++→JS | 2 | 2 |
+
+Interleaved arbitrarily in one stream, those seven lines are today seven strings whose only relation
+is whatever the call site happened to interpolate. With the identifiers carried as fields, a reader
+filters on the triple and gets one exchange's life without parsing text:
+
+- Rows 1 and 4 form A's C++→JS call.
+- Row 5 shares `webLinkId` 1 and `callId` 1 with it but is a separate JS→C++ exchange, kept apart by
+  its direction.
+- Rows 6 and 7 belong to B's second call. They are emitted from different components but stay
+  joined.
 
 Capturing them at emission rather than at drain is what makes this work: by the time a bounded
-consumer drains the ring, link 1 may already be destroyed (`~WebLink`, line 74) — at the latest
+consumer drains the ring, link 2 may already be destroyed (`~WebLink`, line 74) — at the latest
 once the adoption retires links at disconnect (Decision 5) — so there is nothing left to ask.
 
 ## Alternatives Considered
@@ -380,9 +417,15 @@ following were corrected in place:
 Facts the draft did not record, now in Context and Decisions:
 
 - Every level starts disabled, and the enable array is unsynchronized.
-- Both correlation identifiers are 16-bit and reused after wrap.
+- Both correlation identifiers are 16-bit and reused after wrap, and `CallId` has one allocator per
+  call direction, so a call is identified by `(webLinkId, direction, callId)`. The worked example
+  in Decision 6 now follows exchanges in both directions. The draft had joined a C++→JS request
+  with a JS→C++ error reply, and had a call settled by its error that was later rejected at
+  disconnect.
 - A second, synchronous re-entrancy path through `Frame::addBuffer`, and the `started` flag that
-  alone bounds the asynchronous one.
+  alone bounds the asynchronous one. The write-completion handler runs outside any sink
+  invocation, so Decision 5 limits the thread-local guard to the synchronous path and requires
+  detachment before any further emission for a transport failure.
 - `log::error` under `pendingMutex` (`WebLink.hpp:226`).
 - Nothing emits `WebLinkEvent::Code::closed`, so links and their browser sinks outlive their
   connections.
