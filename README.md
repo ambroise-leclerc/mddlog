@@ -1,396 +1,111 @@
-# mddlog - Medical Device Logger
+# mddlog — C++23 logging for medical device software
 
-A modern C++23 modules logging experiment shaped by IEC 62304, ISO 13485, and ISO 14971 concerns; it is not certified or validated for medical-device use.
+**mddlog** is an experimental C++23 modules library for diagnostic logging and bounded, in-memory audit events in medical device software and other regulated embedded systems. It gives developers explicit admission results, per-producer event ordering, and a separately reviewable core. The repository also publishes the design decisions and scoped verification evidence behind those choices.
 
-⚠️ EXPERIMENTAL PROJECT WARNING
+[Architecture decisions](docs/adr/README.md) · [Governed-core evidence](docs/governed-evidence.md) · [Audit admission guide](docs/migration/audit-admission.md) · [Examples](examples/) · [Releases](https://github.com/ambroise-leclerc/mddlog/releases)
 
-This project is an experimental early evaluation of C++23 modules feasibility for medical device
-logging. It represents an attempt to leverage C++23 (and emerging C++26 safety evolutions) for
-medical device software development.
+> **Evaluation status:** mddlog is not certified or independently validated for use in a medical device. In-memory admission and hand-off are not durable audit storage. Manufacturers must assess the library in their own system, risk management, software lifecycle, and quality management processes.
 
-Current Status:
+## Why this project exists
 
-- C++23 modules support requires cutting-edge toolchains (GCC 16.1+, MSVC 17.14+, Clang 20+)
-- CMake 4.0-4.3 experimental support for `import std;`
-- The reference/CI-verified configurations are the four listed under [Tested
-  Configurations](#tested-configurations) below; other toolchain/version combinations may work
-  but have not been exercised in CI.
-- Medical device compliance framework (audit trail structure, risk-level fields) is conceptual: it
-  models the shape of the data IEC 62304/ISO 13485/ISO 14971 processes care about, but nothing here
-  has been certified or independently validated against those standards.
-- Exploring modern C++ safety features for medical device reliability
+A diagnostic message, an admitted audit event, and a durable record answer different questions. mddlog keeps those boundaries visible:
 
-Not recommended for production use. This project serves as a technical proof-of-concept for modern
-C++ module systems in a regulated-software-shaped domain, not as validated medical device software.
+| Path | Available now | Important limit |
+| --- | --- | --- |
+| Governed diagnostic core (`mddlog::core`) | Fixed-capacity `GovernedRecord` and single-producer/single-consumer `RingLog`; host-supplied time; explicit admission and truncation results | No sink, persistence, or whole-system timing guarantee |
+| Runtime audit core (`mddlog::core`) | `AuditEvent` and bounded `AuditRing`; exact identifiers, category/phase, optional requirement and risk references, stream identity, and assigned sequence | Admission means the event is in memory; a full ring refuses new events |
+| Public audit API (`mddlog::mddlog`) | `SimpleLogger::logAudit(AuditInput)` and `Log::logAudit(AuditInput)` return the ring admission result after `setAuditRing()` | A bound ring must outlive its logger binding; `Log::shutdown()` clears the binding |
+| Audit hand-off (`mddlog::mddlog`) | `AuditSinkAdapter` forwards events to an `AuditSink`, reports hand-off health, and acknowledges accepted events | Sink acceptance does not establish durable storage; downstream loss must be reported by the host |
+| Diagnostic adapter (`mddlog::mddlog`) | `SimpleLogger`, `LogRecord`, `ConsoleSink`, and the `Log` convenience facade | Its asynchronous queue allocates and is unbounded; it is not the governed path |
 
-## Core Design Principles
+The audit ring has **one producer and one consumer**. The host supplies a distinct stream identity for each producer instance and boot session, and owns its response to refusal, hand-off failure, and power loss. See the [admission and delivery contract](docs/migration/audit-admission.md).
 
-### Medical Device Compliance
-- **IEC 62304** (Medical device software lifecycle processes)
-- **ISO 13485** (Quality management systems for medical devices) 
-- **ISO 14971** (Risk management for medical devices)
+## Start with the bounded audit path
 
-### Technical Requirements
-- **Pure C++23 modules library** - No legacy headers, modern module system
-- **No dependencies** except `import std` (the test suite additionally depends on
-  [SpecLab](https://github.com/ambroise-leclerc/SpecLab), pinned and test-only - see
-  [Testing](#testing))
-- **Cross-platform**: MSVC 17.14+, GCC 16.1+, Clang 20+ - see [Tested Configurations](#tested-configurations)
-- **Thread-safe delivery paths**: `SimpleLogger` uses a mutex-protected, unbounded asynchronous
-  queue; the governed core provides a separate bounded SPSC ring. Neither is a general real-time
-  guarantee, and the adapter queue may grow without bound if sinks cannot keep up.
-- **Zero-macro design** using modern C++23 features
-
-## Architecture Overview
-
-### C++23 Infrastructure
-- **Modules-first design**: All components as `.cppm` modules
-- **Import std**: Leveraging standard library modules
-- **Thread safety**: Using `std::thread`, `std::mutex`, and atomic operations
-- **Source location**: Automatic debug information with `std::source_location`, captured at the
-  application's actual call site (forwarded explicitly through every Logger method - see
-  `include/mddlog/adapter/Logger.cppm`)
-
-### Key Features
-
-#### 1. Core Logging Infrastructure
-- **Structured logging** with `LogRecord` containing timestamp, severity, category, message, and metadata
-- **Multiple diagnostic severity levels**: Trace, Debug, Info, Warn, Error, Fatal
-- **Thread-safe operations** using `std::thread`, `std::mutex`, and atomic operations
-
-#### 2. Medical Device Compliance
-- **Audit admission**: `logAudit(AuditInput)` returns an explicit result from a configured,
-  bounded `AuditRing`. It is independent of diagnostic thresholds and sinks. The separate
-  `AuditSinkAdapter` reports hand-off failures and health; only in-memory admission is
-  guaranteed. See [migration guidance](docs/migration/audit-admission.md).
-- **Risk Management**: `AuditEvent` can carry a stable risk-control reference
-  *(structural support only)*.
-- **Lifecycle Logging**: Development, verification, and validation event tracking *(planned)*
-- **Regulatory Reporting**: Automated compliance report generation *(planned)*
-
-#### 3. Advanced Sink System
-- **FileSink** with log rotation and compression *(planned)*
-- **NetworkSink** for remote monitoring systems *(planned)*
-- **AuditSink** for in-memory audit hand-off *(implemented)*; durable and tamper-evident
-  storage *(planned, #11)*
-- **ConsoleSink** with colors and statistics *(implemented)*
-- **Configurable buffering** and batching strategies *(planned)*
-
-#### 4. Custom Formatters *(planned)*
-- **JsonFormatter** for structured data
-- **XmlFormatter** for medical device standards
-- **MedicalFormatter** with compliance-specific fields
-
-#### 5. Performance & Monitoring
-- **Asynchronous delivery** via a mutex-protected, unbounded queue and a dedicated worker thread
-  (not lock-free - see the note under [Technical Requirements](#technical-requirements))
-- **Allocation-free governed path** *(implemented)*: the fixed-capacity `GovernedRecord` and the
-  bounded SPSC `RingLog` in `mddlog::core` store records inline and refuse new writes when full;
-  see [Module Architecture](#module-architecture). `SimpleLogger` itself still allocates.
-- **Memory pool allocation** for the allocating `SimpleLogger` path *(planned)*
-- **Per-sink statistics**: records written/dropped, bytes written, flush count, write time
-  (`LogStatistics`, exposed via `Sink::getStatistics()`)
-- **Real-time constraints**: not currently guaranteed; see the unbounded-queue limitation above
-
-## Quick Start
-
-### Basic Usage
+This example admits one event into memory and checks the result. It does not create a persistent audit trail.
 
 ```cpp
-import std;
-import mddlog;
+import mddlog.core.auditring;
 
-using namespace mddlog;
+using namespace mddlog::core;
 
-int main() {
-    // Create logger with async processing
-    auto logger = std::make_unique<SimpleLogger>("MedicalDevice", true);
-    
-    // Add console sink with colors
-    auto consoleSink = createConsoleSink(true, true);
-    logger->addSink(consoleSink);
-    
-    // Set minimum log level
-    logger->setMinLevel(LogLevel::Info);
-    
-    // Basic logging
-    logger->info("Medical device system started");
-    logger->warn("Temperature sensor reading elevated");
-    logger->error("Failed to connect to monitoring system");
-    
-    return 0;
-}
-```
+AuditRing<64> audit{"device_789:boot_42:operator"};
+AuditInput input{
+    .category = AuditCategory::RiskControl,
+    .phase = AuditPhase::Requested,
+    .time = RawTime::unavailable(),
+    .action = "EMERGENCY_SHUTDOWN",
+    .actor = "operator_42",
+    .target = "pump_7",
+    .riskRef = "RISK_17",
+    .correlationId = "device_789:boot_42:input:41",
+    .sourceSequence = 41,
+    .detail = "Shutdown requested",
+};
 
-### Medical Compliance Logging
-
-```cpp
-// Medical compliance logging with user/device context
-logger->logMedical(
-    LogLevel::Info,
-    "Patient monitoring session started",
-    "patient_monitor",
-    "user123",           // User ID
-    "session_456",       // Session ID
-    "device_789"         // Device ID
-);
-
-// Audit admission into a host-owned ring; configure an AuditSinkAdapter separately.
-AuditRing<16> ring{"device_789:boot_12:ui_1"};
-logger->setAuditRing(ring);
-const auto result = logger->logAudit({.category      = AuditCategory::Access,
-                                      .phase         = AuditPhase::Executed,
-                                      .action        = "DATA_ACCESS",
-                                      .actor         = "user123",
-                                      .target        = "device_789",
-                                      .correlationId = "device_789:boot_12:input_1:41",
-                                      .detail        = "User accessed patient data"});
+auto result = audit.tryRecord(input);
 if (!result.wasAdmitted()) {
-    // Handle result.refusal() according to the host procedure.
+    // Apply the host's refusal policy; inspect result.refusal().
 }
-logger->clearAuditRing();
 ```
 
-> **Migrating from `LogLevel::INFO`-style names?** The enumerators are now CamelCase
-> (`LogLevel::Info`); see the [migration table](docs/migration/loglevel-rename.md).
-
-## Module Architecture
-
-Two CMake targets, with a one-way dependency: `mddlog-core` (alias `mddlog::core`) contains only
-governed modules (`mddlog.core.*`) and no sink or adapter module; `mddlog` (alias `mddlog::mddlog`)
-links `mddlog-core` and adds the adapter and sink modules. A consumer that only needs the governed
-core (no `SimpleLogger`, no sinks) can link `mddlog::core` alone - see ADR-001 Decision 6. The core
-now includes the fixed-capacity `mddlog.core.record` value type, its supporting string and result
-types, and the bounded SPSC `mddlog.core.ring`. `mddlog.adapter.ringdrain` copies governed records
-out of ring spans before acknowledgement and forwards them to existing sinks. The existing
-`SimpleLogger` still uses its allocating record and unbounded queue.
-
-Core-only clients can import `mddlog.core.record` and `mddlog.core.ring`, then link only
-`mddlog::core`. The same write/drain/acknowledge program is tested both as an in-tree target and
-against the installed package, with separate CTest results. See the
-[governed-core migration guide](docs/migration/governed-core.md) for imports, capacities,
-admission, host-supplied time and CMake examples.
-
-### Core Components
-
-```
-mddlog/
-├── core/
-│   ├── InlineString.cppm     # Fixed-capacity string storage (mddlog-core)
-│   ├── LogLevel.cppm         # Severity levels and utilities (mddlog-core)
-│   ├── WriteResult.cppm      # Admission and truncation result (mddlog-core)
-│   ├── Record.cppm           # Governed record and host-supplied time (mddlog-core)
-│   └── Ring.cppm             # Fixed-capacity SPSC queue (mddlog-core)
-├── adapter/
-│   ├── LogRecord.cppm        # Structured log record (allocating; mddlog)
-│   ├── RingDrain.cppm        # Governed ring-to-sink bridge (mddlog)
-│   └── Logger.cppm           # Main logger implementation (mddlog)
-├── sinks/
-│   ├── Sink.cppm             # Base sink interface (mddlog)
-│   └── ConsoleSink.cppm      # Console output sink (mddlog)
-├── Log.cppm                  # Static Log:: convenience wrapper around a global logger (mddlog)
-└── mddlog.cppm               # Main module with exports (mddlog)
-```
-
-### Log Record Structure
-
-The existing adapter `LogRecord` contains:
-
-- **Core Information**: Timestamp, level, message, category, thread ID
-- **Source Location**: File, line, function (automatic with `std::source_location`)
-- **Medical Context**: User ID, session ID, device ID, operation ID
-- **Metadata**: Custom key-value pairs
-- **Performance**: Processing time tracking
-
-Audit fields belong to the separate, bounded `AuditEvent`, admitted through
-`logAudit(AuditInput)` and consumed by `AuditSinkAdapter`. Diagnostic `LogRecord`
-does not contain an event type, risk level, or compliance standard.
-
-The separate governed `GovernedRecord` owns a bounded message and component, operation and
-correlation identifiers. It captures a host-supplied raw time and source location without reading a
-clock; its `assign()` result reports admission and message truncation. `RingLog<Capacity>` stores
-these records inline, refuses writes when full, and exposes one or two read-only spans until the
-consumer explicitly acknowledges them. Each ring has one producer and one consumer; separate rings
-have no global ordering. `RingSinkAdapter` is the separate adapter-zone path for one or more such
-rings, even when their compile-time capacities differ. It copies each drained record into an owning
-`LogRecord` before acknowledging and dispatching to sinks, including the message-truncation flag
-and an explicit unavailable-time state.
-Existing sinks do not preserve every governed field in their output; the console sink adds a
-`[truncated]` marker but remains a human-readable, non-round-trippable view.
-
-## Medical Device Compliance
-
-The governed boundary has separate dependency, source, allocation-symbol and exception-symbol
-checks. See [the evidence note](docs/governed-evidence.md) for how to run them, the covered
-toolchains, and what their results do and do not establish.
-
-### IEC 62304 Requirements
-
-MddLog addresses IEC 62304 requirements for medical device software:
-
-- **Software Lifecycle Processes**: Logging of development, verification, and validation activities
-- **Risk Management**: Integration with ISO 14971 risk management processes
-- **Configuration Management**: Change tracking and version control logging
-- **Problem Resolution**: Error tracking and resolution logging
-
-### ISO 13485 Requirements
-
-MddLog supports ISO 13485 quality management requirements:
-
-- **Document Control**: Audit trail for document changes
-- **Management Responsibility**: Executive action logging
-- **Resource Management**: Training and competency logging
-- **Product Realization**: Manufacturing and testing process logging
-- **Measurement and Improvement**: Quality metrics and corrective action logging
-
-### ISO 14971 Risk Management
-
-- **Hazard Identification**: Systematic hazard logging and tracking
-- **Risk Analysis**: Risk assessment documentation and monitoring
-- **Risk Control**: Risk mitigation measure logging
-- **Post-Market Surveillance**: Risk monitoring in deployed systems
-
-### Audit Trail Features
-
-- **Bounded audit admission and observable hand-off** *(implemented)*
-- **Cryptographic signatures and tamper evidence** *(planned, #11)*
-- **User authentication and authorization integration** *(planned)*
-- **Application-defined data access, configuration and emergency-action events**
-  *(record shape implemented; producer policy remains with the host)*
-
-## Building and Integration
-
-### CMake Integration
+Link a core-only CMake consumer with `mddlog::core`. For diagnostic logging and audit hand-off, link `mddlog::mddlog`. The full target depends on the core; the core does not import adapters or sinks.
 
 ```cmake
-# Add MddLog to your project
 add_subdirectory(mddlog)
-
-# Link to your target
-target_link_libraries(your_target PRIVATE mddlog::mddlog)
-
-# Set C++23 standard
-set_property(TARGET your_target PROPERTY CXX_STANDARD 23)
+target_link_libraries(your_target PRIVATE mddlog::core)
 ```
 
-### Compiler Requirements
+The public `logAudit(AuditInput)` API introduced in #58 uses the same admission contract; bind a host-owned ring with `setAuditRing()` and clear the binding before destroying the ring. After `Log::shutdown()` and a later initialization, bind it again. `LogLevel::Audit` and the old positional audit overloads have been removed. See the [audit API migration guide](docs/migration/audit-admission.md) for sink ownership and failure handling.
 
-These are admission floors checked by `CMakeLists.txt`, not a claim that every version above them
-is verified - see [Tested Configurations](#tested-configurations) for what CI actually exercises.
+For a diagnostic logger, see [basic_usage.cpp](examples/basic_usage.cpp). For draining governed records to sinks, see the [governed-core migration guide](docs/migration/governed-core.md).
 
-- **MSVC**: 17.14+ (Visual Studio 2022 version 17.10+)
-- **GCC**: 16.1+ (GCC 15 cannot build the SpecLab-based test suite; see `tests/CMakeLists.txt`)
-- **Clang**: 20.0+ (upstream Clang only - AppleClang is rejected on macOS)
-- **CMake**: 4.0-4.3 (4.4+ is rejected until its `import std` gate has been reviewed)
-- **Ninja** is required; other generators do not implement C++ modules for this toolchain matrix
+## Regulatory context and evidence
 
-### C++23 Features Used
+The following standards describe processes and responsibilities for medical device development. mddlog provides building blocks and review material; using it does not establish conformity with any standard or regulation.
 
-- **Modules**: `import std` and custom modules for faster compilation
-- **Source Location**: Automatic source tracking for debugging, captured at the caller's site
-- **Concepts**: Type constraints and requirements for type safety
-
-## Tested Configurations
-
-The four configurations below are exercised in CI (`.github/workflows/`) on every push, from the
-matching CMake preset in `CMakePresets.json`:
-
-| Target | Compiler / standard library | Tooling |
+| Reference | Relevant project material | What remains with the manufacturer |
 | --- | --- | --- |
-| Windows x64 | MSVC (from the installed VS developer environment), 19.40+ | CMake 4.1.1, Ninja, CTest |
-| Linux x86_64 / GCC | `gcc:16.1.0` container, libstdc++ | CMake 4.1.1, Ninja, CTest |
-| Linux x86_64 / Clang | Upstream Clang 21, libc++/libc++abi | CMake 4.3.1, Ninja, CTest |
-| macOS arm64 | Upstream LLVM/Clang 21.1.8 exactly, libc++ | CMake 4.3.1 exactly, Ninja, CTest, `macos-15` runner |
+| [IEC 62304:2006 + AMD1:2015](https://webstore.iec.ch/en/publication/22790), medical device software life cycle processes | [ADRs](docs/adr/README.md), versioned source, [tests](tests/), and [governed-boundary checks](docs/governed-evidence.md) | Software lifecycle activities, system verification and validation, configuration and problem resolution |
+| [ISO 14971:2019](https://www.iso.org/standard/72704.html), risk management for medical devices | Optional `riskRef` and `requirementRef` identifiers on `AuditEvent`; explicit refusal and hand-off results | Hazard analysis, risk controls, effectiveness checks, and risk management records |
+| [ISO 13485:2016](https://committee.iso.org/standard/59752.html), medical device quality management systems | Reviewable changes and documented design decisions | Quality management system, document control, and record retention |
 
-A dedicated `sanitizers.yml` workflow additionally runs the full test suite under
-AddressSanitizer + UndefinedBehaviorSanitizer on GCC 16.1 Debug. AppleClang, Intel macOS, and GCC
-on macOS are explicitly rejected by the top-level `CMakeLists.txt`, not merely untested.
+The [evidence note](docs/governed-evidence.md) states exactly what the module graph, source, allocation-symbol, and exception-symbol checks cover and where their conclusions stop. The [scenario evidence](docs/audit-scenario-validation.md) describes tested audit-field and action-transition cases. These are engineering checks, not a certification dossier.
 
-The Linux/GCC and Linux/Clang lanes (including the ASan/UBSan build, and the ccache
-module-integrity regression) have additionally been run and pass locally against `gcc 16.1.0` and
-upstream `clang 21.1.8`/`libc++-21-dev`. Windows/MSVC and macOS/Clang have not been exercised
-outside CI.
+### Delivery and roadmap
 
-## Testing
+- **Implemented:** bounded audit admission, per-stream sequence, explicit refusal, and in-memory sink hand-off with health reporting.
+- **Planned:** durable storage, tamper evidence, and recovery semantics ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); [epic #11](https://github.com/ambroise-leclerc/mddlog/issues/11)).
+- **Under review:** the broader audit event model and application integration ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md), [ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md)).
 
-Tests are written as [SpecLab](https://github.com/ambroise-leclerc/SpecLab) Given/When/Then
-specifications (`tests/spec/*.cpp`), pinned to an exact upstream commit and fetched only when
-`MDDLOG_BUILD_TESTS=ON` - SpecLab is never a dependency of the installed library. Each scenario is
-registered as its own CTest entry (`ctest -R "<scenario name>"` selects one) via
-`cmake/MddlogTestDiscovery.cmake`, which drives SpecLab's own `--list-tests` / `--run=<name>`
-contract.
+## Build and verify
+
+CMake is the source of truth for supported compilers and module files. The admitted toolchain floors are GCC 16.1, upstream Clang 20, or MSVC 19.40 (Visual Studio 2022 17.10), with CMake 4.0–4.3 and Ninja. An admitted version is not necessarily a tested configuration; `import std` support depends on the exact compiler, standard library, and CMake combination.
 
 ```bash
-cmake --preset ninja-gcc      # or ninja-clang / ninja-msvc / ninja-macos-clang
+cmake -S . -B build -G Ninja -DMDDLOG_BUILD_EXAMPLES=OFF -DMDDLOG_BUILD_TESTS=OFF
+cmake --build build --parallel
+```
+
+The CI configurations are:
+
+| Platform | Compiler and standard library | CMake |
+| --- | --- | --- |
+| Windows x64 | MSVC 19.40+ | 4.1.1 |
+| Linux x86_64 | GCC 16.1.0 / libstdc++ | 4.1.1 |
+| Linux x86_64 | upstream Clang 21 / libc++ | 4.3.1 |
+| macOS arm64 | upstream Clang 21.1.8 / libc++ | 4.3.1 |
+
+Use the matching preset in [CMakePresets.json](CMakePresets.json) to build examples and run CTest, for example:
+
+```bash
+cmake --preset ninja-gcc
 cmake --build --preset ninja-gcc
 ctest --preset ninja-gcc --output-on-failure
 ```
 
-Coverage includes: logger/sink filtering and routing; record fidelity (severity, message,
-category, medical/audit fields, producer thread id, caller source location); synchronous and
-asynchronous delivery with per-producer ordering; flush-as-barrier and destruction-drains-queue
-semantics; concurrent producers under a shared logger; sink failure isolation (a throwing sink
-does not block other sinks or crash the async worker, and the failure is recorded explicitly in
-that sink's statistics); and the audit-bypass policy described above. `SourceTreeCoreConsumer`
-tests a core-only source-tree target. `InstallTreeCoreConsumer` builds and runs the same program
-from the installed package using only `mddlog::core`; `InstallTreeConsumer` separately exercises
-the full installed `mddlog::mddlog` target.
+Tests fetch a pinned [SpecLab](https://github.com/ambroise-leclerc/SpecLab) revision only when enabled. `SourceTreeCoreConsumer` and `InstallTreeCoreConsumer` separately exercise the core-only target. CI also runs sanitizer and governed-boundary checks; consult [the evidence note](docs/governed-evidence.md) for their scope and limits. A successful configure step alone is not a build or test result.
 
-`RingLog` also has producer/consumer tests on separate threads: controlled saturation and reuse,
-plus several producer-owned rings drained by one consumer, checking order within each ring only.
-The separate GCC 16.1 ThreadSanitizer CI job builds the `import std` module stack and runs the
-RingLog scenarios without suppressions. A clean TSan run reports no race in those executions; it
-does not prove timing bounds or absence of allocation.
+## License and participation
 
-## Examples
-
-See the `examples/` directory for usage examples:
-
-- `basic_usage.cpp` - `SimpleLogger` with a console sink, medical/audit logging, and multi-threaded usage
-- `simple_usage.cpp` - The static `Log::` convenience wrapper
-
-## Building from Source
-
-Building requires Ninja and one of the toolchains listed under [Tested
-Configurations](#tested-configurations) - the top-level `CMakeLists.txt` rejects any other
-generator or an unsupported compiler/CMake combination with an explicit error rather than failing
-deep inside module scanning.
-
-```bash
-# Configure via the preset matching your platform/compiler (see CMakePresets.json)
-cmake --preset ninja-gcc      # Linux/GCC; also: ninja-clang, ninja-msvc, ninja-macos-clang
-
-# Build
-cmake --build --preset ninja-gcc
-
-# Run the examples
-./build-gcc/examples/basic_usage
-./build-gcc/examples/simple_usage
-
-# Run the test suite (see Testing above)
-ctest --preset ninja-gcc --output-on-failure
-```
-
-A plain `cmake -S . -B build -G Ninja ...` also works if you pass the equivalent cache variables
-by hand; the presets exist so CI and local builds cannot silently drift apart.
-
-## License
-
-This project is available under the [European Union Public Licence 1.2](LICENSE), or under separate
-commercial terms. See [LICENSING.md](LICENSING.md).
-
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
-
-[`AGENTS.md`](AGENTS.md) is the canonical, tool-neutral contributor guide; tool-specific assistant
-files such as `MISTRAL.md`, `VIBE.md` ou `CLAUDE.md` are intentionally ignored.
-
-## Medical Device Certification
-
-This library is designed to support medical device certification processes but is not itself certified. Users are responsible for validation and verification according to their specific regulatory requirements.
-
-## Support
-
-
-For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/ambroise-leclerc/mddlog).
+mddlog is offered under the [European Union Public Licence 1.2](LICENSE) or separate commercial terms; see [LICENSING.md](LICENSING.md). [CONTRIBUTING.md](CONTRIBUTING.md) explains the invitation-only contribution process and review rules. For questions or defects, use [GitHub Issues](https://github.com/ambroise-leclerc/mddlog/issues).
