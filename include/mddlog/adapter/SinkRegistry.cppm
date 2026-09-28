@@ -83,7 +83,7 @@ public:
         friend class SinkRegistry;
 
         Handle(std::shared_ptr<Slot> registeredSlot, std::uint32_t registeredGeneration, const SinkRegistry* owningRegistry) noexcept
-            : slot(std::move(registeredSlot)), generation(registeredGeneration), owner(owningRegistry) { }
+            : slot(std::move(registeredSlot)), generation(registeredGeneration), owner(owningRegistry) {}
 
         std::shared_ptr<Slot> slot;
         std::uint32_t         generation = 0;

@@ -363,7 +363,7 @@ const speclab::Register slotsAreRecycled{"SinkRegistry: Repeated add()/remove() 
 
                                                            constexpr int kCycles = 500;
                                                            for (int i = 0; i < kCycles; ++i) {
-                                                               const auto handle = registry.add([] { });
+                                                               const auto handle = registry.add([] {});
                                                                registry.remove(handle);
                                                            }
 
