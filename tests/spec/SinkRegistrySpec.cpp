@@ -649,4 +649,118 @@ const speclab::Register captureDestructorMayReenterRegistry{
             .Execute();
     }};
 
+/**
+ * @brief An RAII owner whose destructor removes the handle of the callback that captured it.
+ *
+ * `ownHandle` points at a `Handle` variable declared by the caller before the callback exists (the
+ * usual self-removal pattern: the handle can only be assigned after add() returns, but the
+ * callback needs to name it). By the time the destructor runs, that outer variable has long been
+ * assigned and is never touched again from anywhere else, so reading through the pointer here is
+ * safe.
+ */
+struct SelfHandleRemovingOwner {
+    CountingRegistry*         targetRegistry;
+    CountingRegistry::Handle* ownHandle;
+    std::atomic<bool>*        completed;
+
+    SelfHandleRemovingOwner(CountingRegistry* registry, CountingRegistry::Handle* handle, std::atomic<bool>* flag)
+        : targetRegistry(registry), ownHandle(handle), completed(flag) {}
+    SelfHandleRemovingOwner(const SelfHandleRemovingOwner&)            = delete;
+    SelfHandleRemovingOwner& operator=(const SelfHandleRemovingOwner&) = delete;
+    SelfHandleRemovingOwner(SelfHandleRemovingOwner&&)                 = delete;
+    SelfHandleRemovingOwner& operator=(SelfHandleRemovingOwner&&)      = delete;
+
+    // remove() can throw (e.g. bad_alloc internally); this fixture exists specifically to exercise
+    // a realistic reentrant destructor and isn't testing OOM behavior.
+    ~SelfHandleRemovingOwner() {  // NOLINT(bugprone-exception-escape)
+        // Removing the very handle whose callback owns this capture, from inside that callback's
+        // own destruction. retire() alone would see this generation as already retiring and
+        // return true, and this slot no longer appears on localInvocationStack() (emit() pops it
+        // before calling exit()) - without recognizing this thread as the one releasing this
+        // slot, remove() would wait on a "releasing" sentinel only this same, currently-blocked
+        // call could ever clear.
+        targetRegistry->remove(*ownHandle);
+        completed->store(true, std::memory_order_release);
+    }
+};
+
+const speclab::Register captureDestructorRemovingOwnHandleViaExternalRemove{
+    "SinkRegistry: a callback capture's destructor can remove its own handle when an external remove() runs finalize()",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-capture-destructor-removes-own-handle-external")
+            .Then("remove() recognizes the finalizing thread and does not wait on its own releasing sentinel",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registry;
+                      std::atomic<bool>     destructorCompleted{false};
+
+                      CountingRegistry::Handle handle;
+                      auto                     owner = std::make_shared<SelfHandleRemovingOwner>(&registry, &handle, &destructorCompleted);
+                      handle                         = registry.add([owner = std::move(owner)] {
+                          (void)owner;
+                      });
+
+                      registry.emit();
+
+                      std::promise<void> removeDone;
+                      auto               removeFuture = removeDone.get_future();
+                      std::thread        remover([&] {
+                          registry.remove(handle);
+                          removeDone.set_value();
+                      });
+
+                      joinWithinBoundOrAbort(remover, removeFuture, std::chrono::seconds{5}, "remove() whose capture's destructor removes its own handle");
+
+                      checks.expect(destructorCompleted.load(std::memory_order_acquire), "the capture's destructor ran to completion");
+                      checks.expect(registry.activeCount() == 0, "the registry ends with nothing registered");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register captureDestructorRemovingOwnHandleViaExitFinalize{
+    "SinkRegistry: a callback capture's destructor can remove its own handle when exit() runs finalize() after self-removal",
+    "unit",
+    [] {
+        return speclab::Test("sink-registry-capture-destructor-removes-own-handle-exit")
+            .Then("self-removal during invocation, then finalize() from exit(), does not deadlock on the capture's own destructor",
+                  [] {
+                      speclab::core::Checks checks;
+                      CountingRegistry      registry;
+                      std::atomic<bool>     destructorCompleted{false};
+                      int                   calls = 0;
+
+                      CountingRegistry::Handle handle;
+                      auto                     owner = std::make_shared<SelfHandleRemovingOwner>(&registry, &handle, &destructorCompleted);
+                      handle                         = registry.add([&registry, &handle, &calls, owner = std::move(owner)] {
+                          (void)owner;
+                          ++calls;
+                          // Ordinary self-removal from inside the callback's own invocation: deferred,
+                          // returns immediately. Once this invocation returns, emit()'s exit() sees the
+                          // slot quiescent and inactive and calls finalize() itself, which destroys this
+                          // very capture - the second, distinct reentrancy path under test.
+                          registry.remove(handle);
+                      });
+
+                      std::promise<void> emitDone;
+                      auto               emitFuture = emitDone.get_future();
+                      std::thread        emitter([&] {
+                          registry.emit();
+                          emitDone.set_value();
+                      });
+
+                      joinWithinBoundOrAbort(emitter,
+                                             emitFuture,
+                                             std::chrono::seconds{5},
+                                             "emit() whose self-removing callback's capture removes its own handle");
+
+                      checks.expect(calls == 1, "the callback ran exactly once");
+                      checks.expect(destructorCompleted.load(std::memory_order_acquire), "the capture's destructor ran to completion");
+                      checks.expect(registry.activeCount() == 0, "the registry ends with nothing registered");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 }  // namespace

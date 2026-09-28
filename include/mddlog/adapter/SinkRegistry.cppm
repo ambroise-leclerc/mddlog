@@ -127,7 +127,7 @@ public:
             return;
         Slot& slot = *handle.slot;
 
-        const bool isSelfRemoval = isCurrentlyInvokingOnThisThread(&slot);
+        const bool isSelfRemoval = isCurrentlyInvokingOnThisThread(&slot) || isCurrentlyReleasingOnThisThread(&slot);
 
         if (!retire(slot, handle.generation))
             return;  // already retired/reused under this generation: nothing to do
@@ -290,6 +290,27 @@ private:
         return std::find(stack.begin(), stack.end(), slot) != stack.end();
     }
 
+    /**
+     * @brief Slots this thread is currently destroying a callback for, inside finalize().
+     *
+     * A callback's capture can itself be an RAII handle whose destructor calls remove() on the
+     * very handle that owns it - not a self-removal from inside the callback's own invocation
+     * (localInvocationStack() no longer lists this slot by the time finalize() runs: emit() pops
+     * it before calling exit()), but a self-removal from inside the callback's *destruction*.
+     * Only this thread, finishing the destruction already in progress, can advance the slot past
+     * its releasing sentinel; waiting for that from inside the very call that is blocking it would
+     * be a self-deadlock. remove() treats a slot on this stack the same as an ordinary
+     * self-removal: return immediately and let the enclosing finalize() complete it.
+     */
+    [[nodiscard]] static std::vector<const Slot*>& localReleasingStack() noexcept {
+        thread_local std::vector<const Slot*> stack;
+        return stack;
+    }
+    [[nodiscard]] static bool isCurrentlyReleasingOnThisThread(const Slot* slot) noexcept {
+        const auto& stack = localReleasingStack();
+        return std::find(stack.begin(), stack.end(), slot) != stack.end();
+    }
+
     /** @brief Try to enter an invocation of @p slot at @p generation. False: skip, do not call. */
     [[nodiscard]] static bool enter(Slot& slot, std::uint32_t generation) noexcept {
         auto cur = slot.state.load(std::memory_order_acquire);
@@ -418,7 +439,16 @@ private:
             std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
         }
 
-        released = Callback{};  // destroys the callback's captures; no registry lock is held here
+        {
+            // A capture's destructor may call remove() on this very handle (e.g. an RAII
+            // subscription whose destructor unregisters itself). remove() checks this stack and
+            // returns immediately rather than waiting on the releasing sentinel only this thread,
+            // already inside that same destructor call, could ever clear.
+            auto& releasing = localReleasingStack();
+            releasing.push_back(&slot);
+            released = Callback{};  // destroys the callback's captures; no registry lock is held here
+            releasing.pop_back();
+        }
 
         {
             std::scoped_lock lock(publishMutex);
