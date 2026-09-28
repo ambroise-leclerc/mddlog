@@ -101,6 +101,7 @@ add_executable(mddlog_specs
     spec/RingLogConcurrencySpec.cpp
     spec/RingDrainSpec.cpp
     spec/SinkRegistrySpec.cpp
+    spec/TransportConsumerSpec.cpp
     spec/VersionSpec.cpp
 )
 
