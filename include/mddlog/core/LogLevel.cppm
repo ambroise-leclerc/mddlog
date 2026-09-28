@@ -12,7 +12,7 @@ export namespace mddlog::core {
  * @brief Enumeration of log severity levels
  *
  * Ordered from lowest to highest severity for filtering purposes.
- * Includes medical device specific levels for compliance.
+ * Audit relevance is represented by AuditEvent, independently of diagnostic severity.
  */
 enum class LogLevel : std::uint8_t {
     Trace = 0,  ///< Detailed trace information for debugging
@@ -20,8 +20,7 @@ enum class LogLevel : std::uint8_t {
     Info  = 2,  ///< General information messages
     Warn  = 3,  ///< Warning conditions that should be noted
     Error = 4,  ///< Error conditions that affect functionality
-    Fatal = 5,  ///< Fatal errors that may cause system failure
-    Audit = 6   ///< Audit trail entries for compliance (highest priority)
+    Fatal = 5   ///< Fatal errors that may cause system failure
 };
 
 /**
@@ -43,8 +42,6 @@ constexpr std::string_view toString(LogLevel level) noexcept {
             return "ERROR";
         case LogLevel::Fatal:
             return "FATAL";
-        case LogLevel::Audit:
-            return "AUDIT";
         default:
             return "UNKNOWN";
     }
@@ -53,9 +50,9 @@ constexpr std::string_view toString(LogLevel level) noexcept {
 /**
  * @brief Convert string to log level
  * @param str String representation of log level
- * @return Corresponding LogLevel, or LogLevel::Info if not found
+ * @return Corresponding diagnostic level, or nullopt for unknown strings including AUDIT
  */
-constexpr LogLevel fromString(std::string_view str) noexcept {
+constexpr std::optional<LogLevel> fromString(std::string_view str) noexcept {
     if (str == "TRACE")
         return LogLevel::Trace;
     if (str == "DEBUG")
@@ -68,9 +65,7 @@ constexpr LogLevel fromString(std::string_view str) noexcept {
         return LogLevel::Error;
     if (str == "FATAL")
         return LogLevel::Fatal;
-    if (str == "AUDIT")
-        return LogLevel::Audit;
-    return LogLevel::Info;  // Default fallback
+    return std::nullopt;
 }
 
 /**
@@ -79,7 +74,7 @@ constexpr LogLevel fromString(std::string_view str) noexcept {
  * @return True if the level requires compliance logging
  */
 constexpr bool isComplianceLevel(LogLevel level) noexcept {
-    return level >= LogLevel::Warn;  // Warn, Error, Fatal, Audit require compliance
+    return level >= LogLevel::Warn && level <= LogLevel::Fatal;  // Diagnostic classification only.
 }
 
 }  // namespace mddlog::core

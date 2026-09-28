@@ -6,6 +6,7 @@ export module mddlog.log;
 
 import std;
 import mddlog.core.loglevel;
+import mddlog.core.auditring;
 import mddlog.adapter.logrecord;
 import mddlog.adapter.logger;
 import mddlog.sinks.sink;
@@ -133,22 +134,20 @@ public:
         snapshot()->logMedical(level, message, category, userId, sessionId, deviceId, loc);
     }
 
-    /**
-     * @brief Log an audit event
-     * @param message Audit message
-     * @param eventType Type of audit event
-     * @param userId User who triggered the event
-     * @param deviceId Device identifier
-     * @param riskLevel Associated risk level
-     * @param loc Caller's source location (auto-filled)
-     */
-    static void logAudit(std::string_view            message,
-                         std::string_view            eventType,
-                         std::string_view            userId,
-                         std::string_view            deviceId,
-                         std::string_view            riskLevel = "",
-                         const std::source_location& loc       = std::source_location::current()) {
-        snapshot()->logAudit(message, eventType, userId, deviceId, riskLevel, loc);
+    /** @brief Bind a producer-owned audit ring to the global logger. */
+    template <std::size_t Capacity>
+    static void setAuditRing(core::AuditRing<Capacity>& ring) {
+        snapshot()->setAuditRing(ring);
+    }
+
+    /** @brief Remove the audit ring binding before destroying the ring. */
+    static void clearAuditRing() {
+        snapshot()->clearAuditRing();
+    }
+
+    /** @brief Admit a complete audit event to memory, returning a local refusal on failure. */
+    [[nodiscard]] static core::AuditWriteResult logAudit(const core::AuditInput& input) {
+        return snapshot()->logAudit(input);
     }
 
     /**
@@ -180,7 +179,8 @@ public:
      *
      * Resetting the shared static handle does not affect a call already in flight on another
      * thread: that call holds its own shared_ptr copy (see snapshot()), so the logger object
-     * itself stays alive until every such call has returned.
+     * itself stays alive until every such call has returned. Clear the borrowed audit ring
+     * binding on that object too, so retained handles cannot use it after shutdown returns.
      */
     static void shutdown() {
         std::shared_ptr<core::SimpleLogger> toShutdown;
@@ -190,6 +190,7 @@ public:
             globalLogger.reset();
         }
         if (toShutdown) {
+            toShutdown->clearAuditRing();
             toShutdown->flush();
         }
     }

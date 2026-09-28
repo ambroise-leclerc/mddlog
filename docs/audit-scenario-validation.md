@@ -14,15 +14,17 @@ is executable evidence for the bounded record and memory admission contract.
 | Device start, stop, or maintenance state transition | `Lifecycle` | Host-defined stable transition ID | Category is plausible; no runtime audit call site in this repository validates its vocabulary. |
 | Operator acknowledgement of an alarm | `Operator` | Host-defined acknowledgement ID, alarm target | Category is plausible; no runtime call site in this repository validates its vocabulary. A confirmation phase of `TriggerHalt` can remain `RiskControl`; category need not change between phases. |
 
-The existing `logAudit()` calls are still on the diagnostic path pending #58. Their
+At the time of #59, the existing `logAudit()` calls were still on the diagnostic path.
+The #58 migration removed those overloads. Their
 `message` maps to bounded `detail`, `eventType` to `action`, `userId` to `actor`, and
 `deviceId` to `target` only when the device is the object acted on. A device ID may also
 be part of the host-issued stream identity. `riskLevel` cannot automatically become a
 hazard reference. The old default `IEC_62304` is not a per-event requirement reference.
 Free text with spaces, non-ASCII bytes, or excess length cannot be copied into an
 identifier: choose a stable code and place the description in `detail`. The admission
-result identifies the refused field; only `detail` may shorten, with a flag. #58 must
-apply this mapping to the public logger APIs before those paths satisfy ADR-002.
+result identifies the refused field; only `detail` may shorten, with a flag. #58
+applied this mapping to the public logger APIs. ADR-002 acceptance remains a
+separate maintainer decision.
 
 The initial grammar is ASCII letters, digits, `_`, `.`, `:`, `/`, `-` for every
 identifier. `action`, `target`, and `streamId` are required. Exact limits in bytes are
@@ -69,8 +71,8 @@ tamper evidence remain in #11.
 
 Implementation evidence: #56 supplies the bounded record and ring; #57 supplies
 consumption and health. This issue supplies scenario and boundary tests plus the
-correlation capacity correction. #58 still owns migration of `logAudit()` and removal
-of `LogLevel::Audit`. ADR-002 acceptance remains a separate maintainer decision, and
+correlation capacity correction. #58 subsequently migrated `logAudit()` and removed
+`LogLevel::Audit`. ADR-002 acceptance remains a separate maintainer decision, and
 #9 can close only after its remaining implementation, validation, and review criteria
 are satisfied. The tests establish the behavior of the exercised implementation,
 not field suitability for deployments or a production validation claim.

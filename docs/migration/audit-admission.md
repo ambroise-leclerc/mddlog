@@ -1,10 +1,63 @@
-# Audit admission: initial #9 implementation
+# Audit admission and migration from logAudit()
 
-`mddlog.core.auditevent` and `mddlog.core.auditring` introduce a separate,
-fixed-capacity audit record and a single-producer/single-consumer memory lane. They do not
-yet change `SimpleLogger::logAudit()`, `Log::logAudit()`, or the diagnostic `LogLevel::Audit`.
-Those legacy paths still have their old sink behavior. Callers wanting the new admission
-contract must use `AuditRing` directly for now.
+`mddlog.core.auditevent` and `mddlog.core.auditring` provide a separate,
+fixed-capacity audit record and a single-producer/single-consumer memory lane.
+`SimpleLogger::logAudit(const AuditInput&)` and `Log::logAudit(const AuditInput&)` now
+return `AuditWriteResult` from that lane. The old positional-string overloads and
+`LogLevel::Audit` have been removed; old source calls fail to compile rather than
+silently entering diagnostic logging. `fromString("AUDIT")` returns `nullopt`, as do
+other unknown severity strings.
+
+## Configure the public API
+
+Create `AuditRing<Capacity>` with a host-issued identity unique to the producer
+instance and boot session. Bind it using `logger.setAuditRing(ring)` or
+`Log::setAuditRing(ring)`. The ring must outlive the binding, and no other producer
+may write to it. Calls through one logger are serialized at admission. Call
+`clearAuditRing()` before destroying the ring. Register the same ring with
+`AuditSinkAdapter::addRing()`, configure an `AuditSink`, and drain it from one consumer
+thread. The diagnostic console sink installed by `Log::initialize()` is unrelated.
+Do not bind the same ring to two loggers (including `Log` and a separate
+`SimpleLogger`): each logger serializes only its own calls, so two bindings would
+violate the ring's SPSC producer contract. This exclusivity is a host obligation,
+not checked at run time. `Log::shutdown()` clears the global logger's binding, even
+on a retained handle from `Log::getLogger()`; after a later `Log::initialize()` or
+automatic reinitialization, bind the ring again before calling `Log::logAudit()`.
+
+`logAudit(input)` returns `Unconfigured` with `AuditField::None` when no ring is bound.
+An invalid ring identity returns `InvalidStream`; a full ring returns `RingFull`.
+Admission ignores diagnostic `setEnabled`, `minLevel`, and diagnostic sink filters.
+Sink absence, disablement and failures are reported at hand-off by `AuditSinkAdapter`
+and its health snapshot, not by the synchronous admission result.
+
+Example admission (the host must separately configure and monitor an audit consumer):
+
+```cpp
+AuditRing<16> ring{"device_789:boot_12:ui_1"};
+logger.setAuditRing(ring);
+const AuditInput input{.category      = AuditCategory::Configuration,
+                       .phase         = AuditPhase::Executed,
+                       .action        = "CONFIG_CHANGE",
+                       .actor         = "admin456",
+                       .target        = "device_789",
+                       .correlationId = "device_789:boot_12:input_1:41",
+                       .sourceSequence = 41,
+                       .detail        = "System configuration changed"};
+const auto result = logger.logAudit(input);
+if (!result.wasAdmitted()) {
+    // Decide locally how the application responds to result.refusal().
+}
+logger.clearAuditRing();
+```
+
+The old positional `message` maps to `detail`, `eventType` to `action`, `userId` to
+`actor`, and `deviceId` to `target` only if the device is the acted-on object; it
+may instead contribute to the stream identity. `riskLevel` such as `MEDIUM` is a
+classification, not a hazard reference: populate `riskRef` only with a stable
+hazard or risk-control identifier. A per-event normative reference belongs in
+`requirementRef`. Callers must choose the actual category, phase, time and correlation;
+the old signature did not contain enough information to infer them. `Requested`
+does not imply `Confirmed` or `Executed`.
 
 ## Identifier contract
 
@@ -19,7 +72,7 @@ ASCII letters, digits, `_`, `.`, `:`, `/`, and `-`. No identifier is shortened.
 | `actor` | 64 | `userId` |
 | `target` | 96 | `deviceId`, when it is the object acted on |
 | `requirementRef` | 64 | explicit caller reference |
-| `riskRef` | 64 | `riskLevel` if it is a stable identifier |
+| `riskRef` | 64 | stable hazard or risk-control identifier; not a free-form risk level |
 | `correlationId` | 117 | source stream identity plus source sequence |
 | `streamId` | 96 | host-supplied identity of device, boot session, producer instance |
 | `detail` | 160 | `message`; UTF-8 boundary truncation is flagged |
@@ -33,7 +86,7 @@ boot sessions; mddlog cannot establish that uniqueness from string syntax alone.
 They need review against deployment call sites before ADR-002 can be accepted. Longer free text
 belongs in `detail`; an invalid event-field identifier is refused with
 `InvalidIdentifier` and the offending `AuditField`. An invalid `streamId` returns
-`InvalidStream` with `AuditField::None`, as do refusals unrelated to identifiers.
+`InvalidStream` with `AuditField::None`; other non-field refusals also use `None`.
 The old default `complianceStandard = "IEC_62304"` is not copied onto
 every event. A meaningful per-event standard reference belongs in `requirementRef`.
 
@@ -91,5 +144,4 @@ leaves an event queued is a dispatch failure, not a loss.
 
 Neither a true `accept()` result nor ring acknowledgement confirms durable storage.
 The third level of the delivery contract remains the work of #11. In-memory admission and
-hand-off do not survive loss of power. The legacy `logAudit()` API remains separate until
-#58 migrates it.
+hand-off do not survive loss of power.

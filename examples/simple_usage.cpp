@@ -39,7 +39,17 @@ int main() {  // NOLINT(bugprone-exception-escape): example code; an uncaught ex
                     "device_789"    // Device ID
     );
 
-    Log::logAudit("Configuration changed by administrator", "CONFIG_CHANGE", "admin456", "device_789", "MEDIUM");
+    AuditRing<1> auditRing{"device_789:boot_demo:simple"};
+    Log::setAuditRing(auditRing);
+    const auto audit = Log::logAudit({.category      = AuditCategory::Configuration,
+                                      .phase         = AuditPhase::Executed,
+                                      .action        = "CONFIG_CHANGE",
+                                      .actor         = "admin456",
+                                      .target        = "device_789",
+                                      .correlationId = "device_789:boot_demo:ui:1",
+                                      .detail        = "Configuration changed by administrator"});
+    if (!audit.wasAdmitted())
+        return 1;
 
     std::cout << "\n3. Multi-threaded logging test:\n";
 
@@ -69,6 +79,7 @@ int main() {  // NOLINT(bugprone-exception-escape): example code; an uncaught ex
 
     // Flush and cleanup
     Log::flush();
+    Log::clearAuditRing();
 
     std::cout << "\nSimple logging example completed!\n";
     return 0;

@@ -1,14 +1,6 @@
 /**
  * @brief Characterization tests for mddlog::LogLevel, pinned ahead of the enumerator rename
- *        (TRACE...AUDIT -> Trace...Audit). These scenarios record the library's current,
- *        observable behavior - numeric values, string conversions, color codes, the compliance
- *        threshold, level-based filtering, and ConsoleSink's rendering - so the rename can be
- *        verified as an identifier-only change: the same scenarios pass before and after, with
- *        only the LogLevel::* spellings in this file changing.
- *
- * Deliberately does not fix anything found along the way (e.g. ConsoleSink's stderr routing
- * condition actually covers AUDIT too, not just "ERROR and FATAL" as its doc comment says): a
- * characterization test records what the code does, not what it should do.
+ *        diagnostic severity conversions and presentation after removing Audit.
  */
 import std;
 import speclab;
@@ -29,7 +21,7 @@ using mddlog::SimpleLogger;
 using mddlog::spec::RecordingSink;
 using mddlog::toString;
 
-constexpr std::array allLevels{LogLevel::Trace, LogLevel::Debug, LogLevel::Info, LogLevel::Warn, LogLevel::Error, LogLevel::Fatal, LogLevel::Audit};
+constexpr std::array allLevels{LogLevel::Trace, LogLevel::Debug, LogLevel::Info, LogLevel::Warn, LogLevel::Error, LogLevel::Fatal};
 
 /// Redirects std::cout/std::cerr to in-memory buffers for the lifetime of the object, so a
 /// ConsoleSink's actual output can be inspected. Restoration is unconditional (destructor), so a
@@ -57,7 +49,7 @@ const speclab::Register numericValuesUnderlyingTypeAndOrdering{
     "unit",
     [] {
         return speclab::Test("loglevel-numeric-values-and-order")
-            .Then("TRACE..AUDIT are 0..6 via std::to_underlying, the underlying type is std::uint8_t, "
+            .Then("TRACE..FATAL are 0..5 via std::to_underlying, the underlying type is std::uint8_t, "
                   "and comparisons follow that numeric order - the basis every min-level filter relies on",
                   [] {
                       speclab::core::Checks checks;
@@ -68,13 +60,11 @@ const speclab::Register numericValuesUnderlyingTypeAndOrdering{
                       checks.expect(std::to_underlying(LogLevel::Warn) == 3, "WARN == 3");
                       checks.expect(std::to_underlying(LogLevel::Error) == 4, "ERROR == 4");
                       checks.expect(std::to_underlying(LogLevel::Fatal) == 5, "FATAL == 5");
-                      checks.expect(std::to_underlying(LogLevel::Audit) == 6, "AUDIT == 6");
                       checks.expect(LogLevel::Trace < LogLevel::Debug, "TRACE < DEBUG");
                       checks.expect(LogLevel::Debug < LogLevel::Info, "DEBUG < INFO");
                       checks.expect(LogLevel::Info < LogLevel::Warn, "INFO < WARN");
                       checks.expect(LogLevel::Warn < LogLevel::Error, "WARN < ERROR");
                       checks.expect(LogLevel::Error < LogLevel::Fatal, "ERROR < FATAL");
-                      checks.expect(LogLevel::Fatal < LogLevel::Audit, "FATAL < AUDIT");
                       checks.raise();
                   })
             .Execute();
@@ -94,7 +84,6 @@ const speclab::Register toStringProducesExactStrings{"toString() produces the ex
                                                                        checks.expect(toString(LogLevel::Warn) == "WARN", "WARN -> \"WARN\"");
                                                                        checks.expect(toString(LogLevel::Error) == "ERROR", "ERROR -> \"ERROR\"");
                                                                        checks.expect(toString(LogLevel::Fatal) == "FATAL", "FATAL -> \"FATAL\"");
-                                                                       checks.expect(toString(LogLevel::Audit) == "AUDIT", "AUDIT -> \"AUDIT\"");
                                                                        checks.expect(toString(static_cast<LogLevel>(99)  /* NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange): deliberately out of range - this scenario pins the fallback */) == "UNKNOWN",
                                                                                      "an out-of-range value -> \"UNKNOWN\"");
                                                                        checks.raise();
@@ -102,13 +91,12 @@ const speclab::Register toStringProducesExactStrings{"toString() produces the ex
                                                              .Execute();
                                                      }};
 
-const speclab::Register fromStringParsesEachLevelAndFallsBackToInfo{
-    "fromString() parses each canonical string, and falls back to INFO for an unrecognized one",
+const speclab::Register fromStringParsesEachLevelAndRejectsUnknown{
+    "fromString() parses diagnostic levels and rejects unknown strings",
     "unit",
     [] {
         return speclab::Test("loglevel-fromstring-and-fallback")
-            .Then("each canonical string parses to its level, and an unrecognized (or empty) string "
-                  "yields INFO",
+            .Then("each canonical string parses to its level, and unknown strings return nullopt",
                   [] {
                       speclab::core::Checks checks;
                       checks.expect(fromString("TRACE") == LogLevel::Trace, "\"TRACE\" -> TRACE");
@@ -117,9 +105,9 @@ const speclab::Register fromStringParsesEachLevelAndFallsBackToInfo{
                       checks.expect(fromString("WARN") == LogLevel::Warn, "\"WARN\" -> WARN");
                       checks.expect(fromString("ERROR") == LogLevel::Error, "\"ERROR\" -> ERROR");
                       checks.expect(fromString("FATAL") == LogLevel::Fatal, "\"FATAL\" -> FATAL");
-                      checks.expect(fromString("AUDIT") == LogLevel::Audit, "\"AUDIT\" -> AUDIT");
-                      checks.expect(fromString("not-a-level") == LogLevel::Info, "an unrecognized string falls back to INFO");
-                      checks.expect(fromString("") == LogLevel::Info, "an empty string falls back to INFO");
+                      checks.expect(!fromString("AUDIT").has_value(), "AUDIT cannot silently become a diagnostic severity");
+                      checks.expect(!fromString("not-a-level").has_value(), "an unrecognized string is rejected");
+                      checks.expect(!fromString("").has_value(), "an empty string is rejected");
                       checks.raise();
                   })
             .Execute();
@@ -146,7 +134,7 @@ const speclab::Register colorCodesForEachLevel{"getColorCode() returns a distinc
                                                [] {
                                                    return speclab::Test("loglevel-color-codes")
                                                        .Then("each level has its documented color, an out-of-range value resets instead of "
-                                                             "coloring, and the seven levels map to seven distinct sequences",
+                                                             "coloring, and the six levels map to six distinct sequences",
                                                              [] {
                                                                  speclab::core::Checks checks;
                                                                  checks.expect(getColorCode(LogLevel::Trace) == "\033[37m", "TRACE is white");
@@ -155,7 +143,6 @@ const speclab::Register colorCodesForEachLevel{"getColorCode() returns a distinc
                                                                  checks.expect(getColorCode(LogLevel::Warn) == "\033[33m", "WARN is yellow");
                                                                  checks.expect(getColorCode(LogLevel::Error) == "\033[31m", "ERROR is red");
                                                                  checks.expect(getColorCode(LogLevel::Fatal) == "\033[35m", "FATAL is magenta");
-                                                                 checks.expect(getColorCode(LogLevel::Audit) == "\033[1;34m", "AUDIT is bold blue");
                                                                  checks.expect(getColorCode(static_cast<LogLevel>(99)  /* NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange): deliberately out of range - this scenario pins the fallback */) == "\033[0m", "an out-of-range value resets rather than coloring");
                                                                  checks.expect(getResetColorCode() == "\033[0m",
                                                                                "getResetColorCode() matches the reset sequence");
@@ -165,9 +152,8 @@ const speclab::Register colorCodesForEachLevel{"getColorCode() returns a distinc
                                                                                                                 getColorCode(LogLevel::Info),
                                                                                                                 getColorCode(LogLevel::Warn),
                                                                                                                 getColorCode(LogLevel::Error),
-                                                                                                                getColorCode(LogLevel::Fatal),
-                                                                                                                getColorCode(LogLevel::Audit)};
-                                                                 checks.expect(distinctCodes.size() == 7, "all seven levels have distinct color codes");
+                                                                                                                getColorCode(LogLevel::Fatal)};
+                                                                 checks.expect(distinctCodes.size() == 6, "all six levels have distinct color codes");
                                                                  checks.raise();
                                                              })
                                                        .Execute();
@@ -175,7 +161,7 @@ const speclab::Register colorCodesForEachLevel{"getColorCode() returns a distinc
 
 const speclab::Register complianceThresholdAtWarn{"isComplianceLevel() is true from WARN upward and false below it", "unit", [] {
                                                       return speclab::Test("loglevel-compliance-threshold")
-                                                          .Then("TRACE, DEBUG and INFO are not compliance levels; WARN, ERROR, FATAL and AUDIT are",
+                                                          .Then("TRACE, DEBUG and INFO are not compliance levels; WARN, ERROR and FATAL are",
                                                                 [] {
                                                                     speclab::core::Checks checks;
                                                                     checks.expect(!isComplianceLevel(LogLevel::Trace), "TRACE is not a compliance level");
@@ -184,7 +170,6 @@ const speclab::Register complianceThresholdAtWarn{"isComplianceLevel() is true f
                                                                     checks.expect(isComplianceLevel(LogLevel::Warn), "WARN is a compliance level");
                                                                     checks.expect(isComplianceLevel(LogLevel::Error), "ERROR is a compliance level");
                                                                     checks.expect(isComplianceLevel(LogLevel::Fatal), "FATAL is a compliance level");
-                                                                    checks.expect(isComplianceLevel(LogLevel::Audit), "AUDIT is a compliance level");
                                                                     checks.raise();
                                                                 })
                                                           .Execute();
@@ -207,22 +192,20 @@ const speclab::Register sinkDeliversExactlyLevelsAtOrAboveThreshold{
                        s.logger.addSink(s.sink);
                        s.logger.setMinLevel(LogLevel::Trace);
                    })
-            .When("every level from TRACE to AUDIT is logged once, in order, through the generic log() "
-                  "(not logAudit(), whose bypass policy is covered separately in AuditPolicySpec.cpp)",
+            .When("every diagnostic level from TRACE to FATAL is logged once in order",
                   [](ThresholdState& s) {
                       for (auto level : allLevels) {
                           s.logger.log(level, toString(level));
                       }
                   })
-            .Then("exactly ERROR, FATAL and AUDIT were delivered, in that order",
+            .Then("exactly ERROR and FATAL were delivered, in that order",
                   [](ThresholdState& s) {
                       speclab::core::Checks checks;
                       const auto            records = s.sink->records();
-                      checks.expect(records.size() == 3, std::format("expected 3 records, got {}", records.size()));
-                      if (records.size() == 3) {
+                      checks.expect(records.size() == 2, std::format("expected 2 records, got {}", records.size()));
+                      if (records.size() == 2) {
                           checks.expect(records[0].level == LogLevel::Error, "1st delivered record is ERROR");
                           checks.expect(records[1].level == LogLevel::Fatal, "2nd delivered record is FATAL");
-                          checks.expect(records[2].level == LogLevel::Audit, "3rd delivered record is AUDIT");
                       }
                       checks.raise();
                   })
@@ -241,9 +224,7 @@ const speclab::Register consoleSinkRoutesAtOrAboveErrorToStderr{
                    "and is deliberately excluded here to isolate stdout/stderr routing",
                    [] {})
             .When("every level is written in turn, capturing stdout/stderr for each write", [] {})
-            .Then("TRACE, DEBUG, INFO and WARN went to stdout; ERROR, FATAL and AUDIT went to stderr - "
-                  "the sink's actual condition is level >= ERROR, so AUDIT (the highest level) routes "
-                  "to stderr too, even though the constructor's doc comment only mentions ERROR and FATAL",
+            .Then("TRACE, DEBUG, INFO and WARN go to stdout; ERROR and FATAL go to stderr",
                   [] {
                       speclab::core::Checks checks;
                       ConsoleSink           sink{false, true};
