@@ -81,14 +81,13 @@ const speclab::Register slowTransportDoesNotBlockProducer{
                       if (enteredFuture.wait_for(std::chrono::seconds{5}) != std::future_status::ready)
                           std::abort();
 
-                      const auto start = std::chrono::steady_clock::now();
                       for (int i = 0; i < 4; ++i)
                           checks.expect(ring.tryWrite(inputWith("concurrent")).admission() == Admission::Written, "concurrent record admitted");
                       checks.expect(ring.tryWrite(inputWith("full")).admission() == Admission::Refused, "saturation refuses immediately");
-                      const auto elapsed = std::chrono::steady_clock::now() - start;
+                      checks.expect(drainedFuture.wait_for(std::chrono::seconds{0}) == std::future_status::timeout,
+                                    "producer completes while transport is still blocked awaiting release");
                       release.set_value();
                       joinWithinBoundOrAbort(worker, drainedFuture, std::chrono::seconds{5}, "blocked transport drain");
-                      checks.expect(elapsed < std::chrono::milliseconds{100}, "producer completes while transport is blocked");
                       checks.expect(consumer.drainOnce() == 4, "concurrent producer records survive suppression");
                       checks.expect(writes.load(std::memory_order_relaxed) == 5, "all five external records are delivered");
                       checks.expect(consumer.healthSnapshot().reentrantRecords == 5, "only consumer-thread records are suppressed");
