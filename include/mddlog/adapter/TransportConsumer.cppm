@@ -8,18 +8,13 @@
  * pull model `RingSinkAdapter` (RingDrain.cppm) and `AuditSinkAdapter` (AuditDrain.cppm) already
  * use: drainOnce() is called repeatedly by one dedicated thread, never spawned by this adapter.
  *
- * That pull model is what breaks the synchronous re-entrancy cycle (`Frame::addBuffer` logging
- * mid-write) without a separate thread-local guard: a log emitted from inside a transport's
- * write() re-enters the *producer* path (RingLog::tryWrite() on the same ring), not the *consumer*
- * path (SinkRegistry::emit()). The new record lands after the write cursor this drainOnce() call
- * already snapshotted, so it is only visible to the next drainOnce() call - never re-entered
- * within the current one, on any thread.
- *
- * This depends on RingLog's own single-producer contract: a ring written to by a transport's
- * reentrant logging (running on the consumer thread, inside write()) must not also be written to
- * by another, independent producer thread - that would be two producers on one SPSC ring,
- * regardless of this adapter. A host whose transport writes log reentrantly gives the consumer
- * thread its own ring for that purpose, separate from the rings fed by its other producer threads.
+ * Producer threads register their rings with addRing(). The consumer thread registers its own
+ * logging rings with addConsumerRing(), before starting consumption. Records emitted into those
+ * consumer-owned rings during transport dispatch are acknowledged without delivery and counted
+ * in healthSnapshot(). This breaks the Frame::addBuffer feedback cycle across drainOnce() calls,
+ * rather than merely postponing it. Consumer-owned rings must never have another producer; this
+ * is the same SPSC restriction as RingLog itself. Logs emitted outside dispatch remain deliverable.
+ * Nested drainOnce() calls on the consumer thread return zero while a dispatch is in progress.
  *
  * Detachment on transport failure reuses SinkRegistry's (#67, ADR-003 Decision 4) deferred
  * self-removal: a synchronous throw from write() retires that transport's own handle from inside
@@ -46,6 +41,7 @@ struct TransportHealthSnapshot {
     std::uint64_t writeFailures    = 0;  ///< write() threw synchronously
     std::uint64_t reportedFailures = 0;  ///< reportFailure() called (asynchronous transport error)
     std::uint64_t detachments      = 0;  ///< writeFailures + reportedFailures
+    std::uint64_t reentrantRecords = 0;  ///< Consumer-thread records suppressed during transport dispatch
     std::uint64_t ringRefusals     = 0;  ///< Aggregate RingFull refusals across registered rings
     std::size_t   activeTransports = 0;  ///< Currently-registered, non-retired transports
 };
@@ -101,13 +97,15 @@ private:
  * consumer thread calls drainOnce(); addTransport()/reportFailure()/healthSnapshot() may then be
  * called from any thread. A transport that throws synchronously, or whose failure is reported
  * later through reportFailure(), is detached before any further record reaches it and receives no
- * invocation after that point.
+ * invocation after that point. Remove a normally disconnected transport with removeTransport().
  *
  * @code
  * TransportConsumer consumer;
  * consumer.addRing(ring);
  * auto handle = consumer.addTransport([](const core::LogRecord& record) { sendOverSocket(record); });
- * // ... on a write-completion failure discovered later, from any thread:
+ * // On ordinary disconnection:
+ * consumer.removeTransport(handle);
+ * // Alternatively, on a write-completion failure discovered from any thread:
  * consumer.reportFailure(handle);
  * // ... on the one dedicated consumer thread:
  * const auto dispatched = consumer.drainOnce();
@@ -129,12 +127,32 @@ public:
     /**
      * @brief Register a producer-owned ring that must outlive this adapter.
      *
-     * Not synchronized against drainOnce() or healthSnapshot(): call this only before the
+     * The sole producer must be an independent producer thread; for consumer-thread logging,
+     * use addConsumerRing(). Not synchronized against drainOnce() or healthSnapshot(): call before the
      * consumer thread starts and before any concurrent observer, as documented on the class.
      * @tparam Capacity This ring's compile-time capacity; registered rings may differ.
      */
     template <std::size_t Capacity>
     void addRing(core::RingLog<Capacity>& ring) {
+        registerRing(ring, false);
+    }
+
+    /**
+     * @brief Register a ring whose sole producer is the consumer thread.
+     *
+     * Call before consumption and concurrent observation start. Transport callbacks must log
+     * into these rings, never into rings owned by independent producer threads. Records written
+     * during dispatch are suppressed for every transport and counted without invoking a sink.
+     * Records written outside dispatch are delivered normally. The ring must outlive this adapter.
+     */
+    template <std::size_t Capacity>
+    void addConsumerRing(core::RingLog<Capacity>& ring) {
+        registerRing(ring, true);
+    }
+
+private:
+    template <std::size_t Capacity>
+    void registerRing(core::RingLog<Capacity>& ring, bool consumerOwned) {
         ringList.push_back({[&ring] {
                                 const auto                   view = ring.drain();
                                 std::vector<core::LogRecord> copied;
@@ -152,9 +170,17 @@ public:
                             },
                             [&ring] {
                                 return ring.refusalCount();
-                            }});
+                            },
+                            consumerOwned ? std::function<std::size_t()>{[&ring] {
+                                const auto view = ring.drain();
+                                if (!ring.acknowledge(view, view.size()))
+                                    throw std::logic_error("TransportConsumer requires one consumer per ring");
+                                return view.size();
+                            }}
+                                          : std::function<std::size_t()>{}});
     }
 
+public:
     /**
      * @brief Register one transport write callback and return its handle.
      *
@@ -175,7 +201,7 @@ public:
      * shared_ptr captured inside the Slot's own callback would be a reference cycle no shared_ptr
      * can collect - exactly the leak a cycle like that produces. selfRefs, a member of this
      * adapter rather than of the slot, holds the one strong owner, so the cycle never forms; the
-     * callback's weak_ptr only ever resolves while this TransportConsumer itself is alive.
+     * callback's weak_ptr only ever resolves while its registration is active or in flight.
      */
     [[nodiscard]] Handle addTransport(TransportWriteFn write) {
         auto                   self     = std::make_shared<SelfRef>();
@@ -192,7 +218,7 @@ public:
                 health.recordDelivered();
             } catch (...) {
                 health.recordWriteFailure();
-                registry.remove(mine);
+                removeTransport(mine);
             }
         });
         self->handle                  = handle;
@@ -201,6 +227,21 @@ public:
             selfRefs.push_back(std::move(self));
         }
         return handle;
+    }
+
+    /**
+     * @brief Detach a transport on ordinary disconnection, without recording a failure.
+     *
+     * Follows SinkRegistry's quiescent removal contract: outside the transport's own callback,
+     * this waits for its in-flight invocation to finish before returning. A stale or foreign
+     * handle is a no-op. Once removal completes, the self-handle lookup cell is released.
+     */
+    void removeTransport(const Handle& handle) {
+        registry.remove(handle);
+        std::scoped_lock lock(selfRefsMutex);
+        std::erase_if(selfRefs, [&handle](const auto& self) {
+            return self->handle == handle;
+        });
     }
 
     /**
@@ -215,7 +256,7 @@ public:
      */
     void reportFailure(const Handle& handle) {
         health.recordReportedFailure();
-        registry.remove(handle);
+        removeTransport(handle);
     }
 
     /**
@@ -229,14 +270,35 @@ public:
      *         fails to write one.
      */
     [[nodiscard]] std::size_t drainOnce() {
-        std::size_t dispatched = 0;
+        if (dispatching)
+            return 0;
+        dispatching = true;
+        struct DispatchReset {
+            explicit DispatchReset(bool& value) noexcept : flag(&value) {}
+            DispatchReset(const DispatchReset&)            = delete;
+            DispatchReset& operator=(const DispatchReset&) = delete;
+            DispatchReset(DispatchReset&&)                 = delete;
+            DispatchReset& operator=(DispatchReset&&)      = delete;
+            ~DispatchReset() {
+                *flag = false;
+            }
+            bool* flag;
+        } reset{dispatching};
+
+        // Snapshot every ring before invoking any transport: a callback may log into a
+        // consumer-owned ring appearing later in ringList, too.
+        std::vector<core::LogRecord> batch;
         for (const auto& source : ringList) {
             const auto copied = source.drain();
-            dispatched       += copied.size();
-            for (const auto& record : copied)
-                registry.emit(record);
+            batch.insert(batch.end(), copied.begin(), copied.end());
         }
-        return dispatched;
+        for (const auto& record : batch) {
+            registry.emit(record);
+            for (const auto& source : ringList)
+                if (source.suppress)
+                    reentrantRecords.fetch_add(source.suppress(), std::memory_order_relaxed);
+        }
+        return batch.size();
     }
 
     /**
@@ -253,6 +315,7 @@ public:
 
         auto snapshot             = health.snapshot();
         snapshot.ringRefusals     = refusals;
+        snapshot.reentrantRecords = reentrantRecords.load(std::memory_order_relaxed);
         snapshot.activeTransports = registry.activeCount();
         return snapshot;
     }
@@ -261,6 +324,7 @@ private:
     struct RingSource {
         std::function<std::vector<core::LogRecord>()> drain;
         std::function<std::uint64_t()>                refusalCount;
+        std::function<std::size_t()>                  suppress;
     };
 
     /**
@@ -293,6 +357,8 @@ private:
 
     std::vector<RingSource>               ringList;
     Registry                              registry;
+    bool                                  dispatching = false;
+    std::atomic<std::uint64_t>            reentrantRecords{0};
     TransportHealth                       health;
     std::mutex                            selfRefsMutex;
     std::vector<std::shared_ptr<SelfRef>> selfRefs;

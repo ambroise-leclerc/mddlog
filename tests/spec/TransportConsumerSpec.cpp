@@ -47,25 +47,52 @@ void joinWithinBoundOrAbort(std::thread& thread, std::future<void>& completion, 
 }
 
 const speclab::Register slowTransportDoesNotBlockProducer{
-    "TransportConsumer: a slow transport write never blocks a producer thread",
+    "TransportConsumer: a blocked transport never blocks a producer or discards its concurrent records",
     "unit",
     [] {
         return speclab::Test("transport-consumer-slow-transport-does-not-block-producer")
-            .Then("a bounded burst of tryWrite() calls completes quickly regardless of consumer speed",
+            .Then("a producer fills its ring while the transport waits, independently of reentrant suppression",
                   [] {
                       speclab::core::Checks checks;
                       RingLog<4>            ring;
+                      RingLog<4>            consumerRing;
                       TransportConsumer     consumer;
                       consumer.addRing(ring);
-                      std::ignore = consumer.addTransport([](const LogRecord&) {
-                          std::this_thread::sleep_for(std::chrono::milliseconds{200});
+                      consumer.addConsumerRing(consumerRing);
+                      std::promise<void>         entered;
+                      auto                       enteredFuture = entered.get_future();
+                      std::promise<void>         release;
+                      auto                       releaseFuture = release.get_future();
+                      std::atomic<std::uint64_t> writes{0};
+                      std::ignore = consumer.addTransport([&](const LogRecord&) {
+                          if (writes.fetch_add(1, std::memory_order_relaxed) == 0) {
+                              entered.set_value();
+                              releaseFuture.wait();
+                          }
+                          std::ignore = consumerRing.tryWrite(inputWith("nested"));
                       });
+                      checks.expect(ring.tryWrite(inputWith("first")).admission() == Admission::Written, "first record admitted");
+                      std::promise<void> drained;
+                      auto               drainedFuture = drained.get_future();
+                      std::thread        worker([&] {
+                          std::ignore = consumer.drainOnce();
+                          drained.set_value();
+                      });
+                      if (enteredFuture.wait_for(std::chrono::seconds{5}) != std::future_status::ready)
+                          std::abort();
 
                       const auto start = std::chrono::steady_clock::now();
                       for (int i = 0; i < 4; ++i)
-                          checks.expect(ring.tryWrite(inputWith("burst")).admission() == Admission::Written, "each burst write is admitted");
+                          checks.expect(ring.tryWrite(inputWith("concurrent")).admission() == Admission::Written, "concurrent record admitted");
+                      checks.expect(ring.tryWrite(inputWith("full")).admission() == Admission::Refused, "saturation refuses immediately");
                       const auto elapsed = std::chrono::steady_clock::now() - start;
-                      checks.expect(elapsed < std::chrono::milliseconds{100}, "producer bursts complete without waiting on the (undrained) slow transport");
+                      release.set_value();
+                      joinWithinBoundOrAbort(worker, drainedFuture, std::chrono::seconds{5}, "blocked transport drain");
+                      checks.expect(elapsed < std::chrono::milliseconds{100}, "producer completes while transport is blocked");
+                      checks.expect(consumer.drainOnce() == 4, "concurrent producer records survive suppression");
+                      checks.expect(writes.load(std::memory_order_relaxed) == 5, "all five external records are delivered");
+                      checks.expect(consumer.healthSnapshot().reentrantRecords == 5, "only consumer-thread records are suppressed");
+                      checks.expect(consumer.healthSnapshot().ringRefusals == 1, "saturation stays observable");
                       checks.raise();
                   })
             .Execute();
@@ -97,41 +124,39 @@ const speclab::Register saturationRefusesImmediatelyWithCounter{
     }};
 
 const speclab::Register reentrantLoggingDoesNotRecurse{
-    "TransportConsumer: a log emitted from within a transport write is not delivered within the same drainOnce()",
+    "TransportConsumer: unconditional reentrant logging terminates without feedback or recursive dispatch",
     "unit",
     [] {
         return speclab::Test("transport-consumer-reentrant-write-not-recursive")
-            .Then("the nested record is queued for the next drainOnce() instead of re-entering the transport",
+            .Then("one external record causes one write even when every write logs and drains again",
                   [] {
                       speclab::core::Checks checks;
-                      RingLog<4>            ring;
+                      RingLog<4>            producerRing;
+                      RingLog<4>            consumerRing;
                       TransportConsumer     consumer;
-                      consumer.addRing(ring);
+                      consumer.addRing(producerRing);
+                      consumer.addConsumerRing(consumerRing);
 
-                      std::vector<std::string> writes;
-                      std::size_t              invocationDepth = 0;
-                      std::size_t              maxDepth        = 0;
-                      std::ignore                              = consumer.addTransport([&](const LogRecord& record) {
-                          ++invocationDepth;
-                          maxDepth = std::max(maxDepth, invocationDepth);
-                          writes.push_back(record.message);
-                          if (record.message == "outer") {
-                              // The Frame::addBuffer cycle: logging synchronously while this very write is
-                              // in flight. This must land in the ring for a later drainOnce(), never re-enter
-                              // this transport within the current dispatch.
-                              checks.expect(ring.tryWrite(inputWith("nested")).admission() == Admission::Written,
-                                            "the reentrant log is admitted to the ring like any other producer write");
-                          }
-                          --invocationDepth;
+                      std::size_t writes = 0;
+                      std::ignore        = consumer.addTransport([&](const LogRecord&) {
+                          ++writes;
+                          checks.expect(consumerRing.tryWrite(inputWith("nested")).admission() == Admission::Written,
+                                        "the consumer thread can publish its nested record");
+                          checks.expect(consumer.drainOnce() == 0, "nested drain does not invoke a transport");
                       });
 
-                      checks.expect(ring.tryWrite(inputWith("outer")).admission() == Admission::Written, "outer record is admitted");
-                      checks.expect(consumer.drainOnce() == 1, "only the outer record is dispatched by this drainOnce()");
-                      checks.expect(maxDepth == 1, "the transport was never invoked recursively");
-                      checks.expect(writes == std::vector<std::string>{"outer"}, "the nested record was not delivered within the same call");
+                      checks.expect(producerRing.tryWrite(inputWith("outer")).admission() == Admission::Written, "outer record admitted");
+                      checks.expect(consumer.drainOnce() == 1, "outer record dispatched");
+                      for (int i = 0; i < 100; ++i)
+                          checks.expect(consumer.drainOnce() == 0, "no feedback survives to the next drain");
+                      checks.expect(writes == 1, "one input causes exactly one transport write");
+                      checks.expect(consumer.healthSnapshot().reentrantRecords == 1, "suppression is observable without a sink");
+                      checks.expect(consumerRing.drain().empty(), "nested record has been released");
 
-                      checks.expect(consumer.drainOnce() == 1, "the nested record is delivered on the next drainOnce()");
-                      checks.expect(writes == (std::vector<std::string>{"outer", "nested"}), "the nested record is delivered exactly once, afterward");
+                      checks.expect(consumerRing.tryWrite(inputWith("outside dispatch")).admission() == Admission::Written,
+                                    "consumer-thread logging outside dispatch is admitted");
+                      checks.expect(consumer.drainOnce() == 1, "consumer record outside dispatch is delivered");
+                      checks.expect(writes == 2, "transport resumes normally after the guard clears");
                       checks.raise();
                   })
             .Execute();
@@ -168,6 +193,49 @@ const speclab::Register synchronousFailureDetachesBeforeFurtherEmission{
                       checks.expect(consumer.drainOnce() == 1, "the ring still drains one record");
                       checks.expect(received == std::vector<std::string>{"first"},
                                     "the detached transport receives nothing further - not the failing record's own line, nor anything after it");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register ordinaryRemovalReclaimsRegistrations{
+    "TransportConsumer: ordinary disconnection retires a transport without recording a failure",
+    "unit",
+    [] {
+        return speclab::Test("transport-consumer-ordinary-removal")
+            .Then("repeated add/remove cycles leave no live transport or failure count",
+                  [] {
+                      speclab::core::Checks checks;
+                      RingLog<4>            ring;
+                      TransportConsumer     consumer;
+                      consumer.addRing(ring);
+
+                      std::uint64_t             writes = 0;
+                      TransportConsumer::Handle stale;
+                      for (int i = 0; i < 128; ++i) {
+                          const auto handle = consumer.addTransport([&](const LogRecord&) {
+                              ++writes;
+                          });
+                          if (i == 0)
+                              stale = handle;
+                          consumer.removeTransport(handle);
+                          checks.expect(consumer.healthSnapshot().activeTransports == 0, "each removed transport is inactive");
+                      }
+
+                      const auto current = consumer.addTransport([&](const LogRecord&) {
+                          ++writes;
+                      });
+                      consumer.removeTransport(stale);
+                      checks.expect(consumer.healthSnapshot().activeTransports == 1, "a stale handle cannot retire a later registration");
+                      checks.expect(ring.tryWrite(inputWith("live")).admission() == Admission::Written, "record admitted");
+                      checks.expect(consumer.drainOnce() == 1, "record dispatched");
+                      checks.expect(writes == 1, "only the current transport receives the record");
+
+                      consumer.removeTransport(current);
+                      const auto after = consumer.healthSnapshot();
+                      checks.expect(after.activeTransports == 0, "ordinary removal leaves no active transport");
+                      checks.expect(after.reportedFailures == 0 && after.writeFailures == 0 && after.detachments == 0,
+                                    "ordinary removal does not count as a failure");
                       checks.raise();
                   })
             .Execute();
