@@ -189,7 +189,7 @@ public:
      * callback is swallowed so the rest of the snapshot is still delivered.
      */
     void emit(Args... args) {
-        const auto snapshot = std::atomic_load_explicit(&published, std::memory_order_acquire);
+        const auto snapshot = loadPublished(published, std::memory_order_acquire);
         if (!snapshot)
             return;
 
@@ -228,7 +228,7 @@ public:
 
     /** @brief Number of callbacks currently registered (a snapshot, may change immediately). */
     [[nodiscard]] std::size_t activeCount() const {
-        const auto snapshot = std::atomic_load_explicit(&published, std::memory_order_acquire);
+        const auto snapshot = loadPublished(published, std::memory_order_acquire);
         return snapshot ? snapshot->size() : 0;
     }
 
@@ -428,7 +428,7 @@ private:
             // has no such escape hatch: slot.callback is guaranteed empty afterward.
             released.swap(slot.callback);
 
-            auto current = std::atomic_load_explicit(&published, std::memory_order_acquire);
+            auto current = loadPublished(published, std::memory_order_acquire);
             auto next    = std::make_shared<Snapshot>();
             if (current) {
                 next->reserve(current->size());
@@ -436,7 +436,7 @@ private:
                     if (entry.slot.get() != &slot)
                         next->push_back(entry);
             }
-            std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
+            storePublished(published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
         }
 
         {
@@ -480,14 +480,14 @@ private:
         slot->callback                 = std::move(callback);
         slot->state.store(pack(generation, true, 0), std::memory_order_release);
 
-        auto current = std::atomic_load_explicit(&published, std::memory_order_acquire);
+        auto current = loadPublished(published, std::memory_order_acquire);
         auto next    = std::make_shared<Snapshot>();
         if (current) {
             next->reserve(current->size() + 1);
             next->insert(next->end(), current->begin(), current->end());
         }
         next->push_back(SnapshotEntry{slot, generation});
-        std::atomic_store_explicit(&published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
+        storePublished(published, std::shared_ptr<const Snapshot>(std::move(next)), std::memory_order_release);
 
         return Handle(slot, generation, this);
     }
@@ -496,6 +496,42 @@ private:
     // requires a trivially copyable T and does not yet specialize shared_ptr, so this uses the
     // shared_ptr-specific atomic free functions instead. Every access to `published` - reads
     // included - must go through them; a plain load/store on a shared_ptr is not thread-safe.
+    // GCC 16.1's libstdc++ and MSVC's STL *do* have that specialization and deprecate these free
+    // functions in favor of it; keeping them anyway is intentional portability, not an oversight,
+    // so the two helpers below silence that one diagnostic on those toolchains rather than letting
+    // warnings-as-errors block a build whose real fix (migrating to std::atomic<shared_ptr<T>>)
+    // would drop libc++ 21 support.
+    [[nodiscard]] static std::shared_ptr<const Snapshot> loadPublished(const std::shared_ptr<const Snapshot>& target, std::memory_order order) noexcept {
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER) && !defined(__clang__)
+    #pragma warning(push)
+    #pragma warning(disable : 4996)
+#endif
+        return std::atomic_load_explicit(&target, order);
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic pop
+#elif defined(_MSC_VER) && !defined(__clang__)
+    #pragma warning(pop)
+#endif
+    }
+    static void storePublished(std::shared_ptr<const Snapshot>& target, std::shared_ptr<const Snapshot> value, std::memory_order order) noexcept {
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER) && !defined(__clang__)
+    #pragma warning(push)
+    #pragma warning(disable : 4996)
+#endif
+        std::atomic_store_explicit(&target, std::move(value), order);
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic pop
+#elif defined(_MSC_VER) && !defined(__clang__)
+    #pragma warning(pop)
+#endif
+    }
+
     mutable std::mutex                 publishMutex;
     std::shared_ptr<const Snapshot>    published;
     std::vector<std::shared_ptr<Slot>> pool;
