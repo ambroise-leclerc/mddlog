@@ -58,10 +58,10 @@ private:
     Context previous;
 };
 
-enum class WriteStatus : std::uint8_t { Written, Disabled, IdentifierTooLong, RingFull };
+enum class WriteStatus : std::uint8_t { Written, Filtered, IdentifierTooLong, RingFull };
 enum class ContextField : std::uint8_t { None, Component, OperationId, CorrelationId };
 struct WriteOutcome {
-    WriteStatus  status           = WriteStatus::Disabled;
+    WriteStatus  status           = WriteStatus::Filtered;
     ContextField field            = ContextField::None;
     bool         messageTruncated = false;
 };

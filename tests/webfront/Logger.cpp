@@ -13,9 +13,28 @@ struct SinkHandle::Registration {
 
 namespace {
 using mddlog::core::LogLevel;
-thread_local Context                                      context;
-thread_local std::function<bool(const DiagnosticRecord&)> recordWriter;
-thread_local WriteOutcome                                 outcome;
+struct ProducerState {
+    Context                                      context;
+    std::function<bool(const DiagnosticRecord&)> writer;
+    WriteOutcome                                 outcome;
+};
+
+ProducerState& producer() {
+    static thread_local ProducerState state;
+    return state;
+}
+
+std::string_view directionPrefix(CallDirection direction) {
+    switch (direction) {
+        case CallDirection::CppToJs:
+            return "cpp-js:";
+        case CallDirection::JsToCpp:
+            return "js-cpp:";
+        case CallDirection::None:
+            return "";
+    }
+    return "";
+}
 
 mddlog::adapter::TextLogger& logger() {
     static mddlog::adapter::TextLogger instance;
@@ -38,20 +57,23 @@ std::optional<LogLevel> diagnosticLevel(LogType level) {
 }
 
 WriteOutcome capture(LogType level, std::string_view text, const std::source_location& location) {
-    if (!is(level))
-        return outcome = {};
-    const std::string_view prefix = context.direction == CallDirection::CppToJs ? "cpp-js:" : context.direction == CallDirection::JsToCpp ? "js-cpp:" : "";
+    auto&      state  = producer();
+    const auto mapped = diagnosticLevel(level);
+    if (!mapped || !logger().is(*mapped))
+        return state.outcome = {};
+    const auto&            context = state.context;
+    const std::string_view prefix  = directionPrefix(context.direction);
     // Bound the allocation below before concatenating caller-controlled identifiers.
     if (context.component.size() > mddlog::core::componentCapacity)
-        return outcome = {WriteStatus::IdentifierTooLong, ContextField::Component};
+        return state.outcome = {.status = WriteStatus::IdentifierTooLong, .field = ContextField::Component};
     if (context.callId.size() > mddlog::core::operationIdCapacity - prefix.size())
-        return outcome = {WriteStatus::IdentifierTooLong, ContextField::OperationId};
+        return state.outcome = {.status = WriteStatus::IdentifierTooLong, .field = ContextField::OperationId};
     if (context.webLinkId.size() > mddlog::core::correlationIdCapacity)
-        return outcome = {WriteStatus::IdentifierTooLong, ContextField::CorrelationId};
+        return state.outcome = {.status = WriteStatus::IdentifierTooLong, .field = ContextField::CorrelationId};
     const std::string            operation = std::string(prefix) + std::string(context.callId);
     const auto                   time      = std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now());
     mddlog::core::GovernedRecord captured;
-    const auto                   result    = captured.assign({.level         = *diagnosticLevel(level),
+    const auto                   result    = captured.assign({.level         = *mapped,
                                                               .time          = mddlog::core::RawTime::available(time),
                                                               .location      = location,
                                                               .message       = text,
@@ -59,9 +81,17 @@ WriteOutcome capture(LogType level, std::string_view text, const std::source_loc
                                                               .operationId   = operation,
                                                               .correlationId = context.webLinkId});
     const bool                   truncated = result.truncated().message;
-    if (recordWriter && !recordWriter({level, time, location, text, captured.component(), captured.operationId(), captured.correlationId(), truncated}))
-        return outcome = {WriteStatus::RingFull};
-    return outcome = {WriteStatus::Written, ContextField::None, truncated};
+    if (state.writer
+        && !state.writer({.level            = level,
+                          .time             = time,
+                          .location         = location,
+                          .message          = text,
+                          .component        = captured.component(),
+                          .operationId      = captured.operationId(),
+                          .correlationId    = captured.correlationId(),
+                          .messageTruncated = truncated}))
+        return state.outcome = {.status = WriteStatus::RingFull};
+    return state.outcome = {.status = WriteStatus::Written, .messageTruncated = truncated};
 }
 
 std::string hexDump(std::span<const std::byte> bytes) {
@@ -89,22 +119,24 @@ std::string hexDump(std::span<const std::byte> bytes) {
 }
 }  // namespace
 
-ContextScope::ContextScope(Context value) noexcept : previous(context) {
-    context = value;
+ContextScope::ContextScope(Context value) noexcept : previous(producer().context) {
+    producer().context = value;
 }
 ContextScope::~ContextScope() {
-    context = previous;
+    producer().context = previous;
 }
 void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer) {
-    recordWriter = std::move(writer);
+    producer().writer = std::move(writer);
 }
 WriteOutcome lastWriteOutcome() noexcept {
-    return outcome;
+    return producer().outcome;
 }
 WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_location& location) {
     const auto result = capture(level, text, location);
-    if (result.status == WriteStatus::Written)
-        logger().write(*diagnosticLevel(level), text);
+    if (result.status == WriteStatus::Written) {
+        if (const auto mapped = diagnosticLevel(level))
+            logger().write(*mapped, text);
+    }
     return result;
 }
 

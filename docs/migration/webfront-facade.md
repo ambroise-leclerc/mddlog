@@ -130,7 +130,7 @@ through `lastWriteOutcome()` on the same thread. `infoHex()` attempts two record
 only one fits, the message remains admitted and the dump reports RingFull, without
 rollback. Legacy text is emitted when both attempts succeed. Disabled calls skip formatting and
 emission; their legacy wrapper does not replace the previous outcome. `tryWrite()`
-itself returns Disabled. RingFull also increments the ring's saturation counter.
+itself returns Filtered. RingFull also increments the ring's saturation counter.
 With no writer the legacy text output remains available. Binding a writer adds the
 structured lane; synchronous text callbacks still run, so browser transports must be
 registered on `TransportConsumer`, not as facade text callbacks. The facade's formatting,
