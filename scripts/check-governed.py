@@ -71,10 +71,11 @@ def check_graph(root, data):
     for source in sources:
         require(source.is_relative_to((root / "include/mddlog/core").resolve()), f"source outside governed tree: {source}")
     for source in data["extra_sources"]:
-        # MSVC/CMake injects the compiled standard-module object into SOURCES rather than the
-        # governed file set. Its target and basename are fixed; no application object is allowed.
+        # CMake injects compiled standard-module objects into SOURCES rather than the governed
+        # file set: .ixx.obj for MSVC and .cppm.o for Clang. Their target and basenames are fixed;
+        # no application object is allowed.
         standard_module_object = re.search(
-            r"/CMakeFiles/__cmake_cxx23\.dir/.*/std(?:\.compat)?\.ixx\.obj$", source.replace("\\", "/")
+            r"/CMakeFiles/__cmake_cxx23\.dir/.*/std(?:\.compat)?\.(?:ixx\.obj|cppm\.o)$", source.replace("\\", "/")
         )
         require((root / source).resolve() in sources or standard_module_object,
                 f"unreviewed extra source: {source}")

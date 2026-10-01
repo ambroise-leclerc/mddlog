@@ -55,6 +55,31 @@ def main():
             data["mddlog-core|LINK_OPTIONS"].append(instrumentation)
             run("graph", data=data)
 
+        # Standard-module objects injected by CMake are outside the governed file set.
+        # Exercise both toolchains on every host, including Windows path separators.
+        for source in (
+            "/build/CMakeFiles/__cmake_cxx23.dir/usr/lib/libc++/std.cppm.o",
+            "/build/CMakeFiles/__cmake_cxx23.dir/usr/lib/libc++/std.compat.cppm.o",
+            "/build/CMakeFiles/__cmake_cxx23.dir/Release/modules/std.ixx.obj",
+            "/build/CMakeFiles/__cmake_cxx23.dir/Release/modules/std.compat.ixx.obj",
+            r"C:\build\CMakeFiles\__cmake_cxx23.dir\modules\std.ixx.obj",
+            r"C:\build\CMakeFiles\__cmake_cxx23.dir\modules\std.compat.ixx.obj",
+        ):
+            data = copy.deepcopy(original)
+            data["extra_sources"].append(source)
+            run("graph", data=data)
+        for source in (
+            "/build/CMakeFiles/application.dir/modules/std.cppm.o",
+            "/build/CMakeFiles/__cmake_cxx23.dir/modules/application.cppm.o",
+            "/build/CMakeFiles/__cmake_cxx23.dir/modules/std.cppm",
+            "/build/CMakeFiles/__cmake_cxx23.dir/modules/std.cppm.obj",
+            "/build/CMakeFiles/__cmake_cxx23.dir/modules/std.ixx.o",
+            "/build/CMakeFiles/__cmake_cxx23.dir/modules/std.cppm.o.backup",
+        ):
+            data = copy.deepcopy(original)
+            data["extra_sources"].append(source)
+            run("graph", "unreviewed extra source", data=data)
+
         # Both P1689 versions are accepted, but an unknown revision remains fail-closed.
         source_object = Path(original["objects"][0])
         for version in (0, 2):
