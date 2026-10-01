@@ -75,3 +75,86 @@ the actual debug caller file/line even on LLVM, formatting guards, dump output f
 possible byte value, independent multi-registration removal and compile-time audit exclusion.
 Compilation, linking and test
 execution must each succeed; configuration alone is not verification.
+
+## Emission context (#70)
+
+The reference bridge now supplies a thread-local `ContextScope` and a thread-local
+`setRecordWriter()` binding. Set a scope explicitly at each request, reply, exception,
+close, and asynchronous completion entry point; scopes nest and restore the previous
+context. Context does not automatically migrate between threads. The scope borrows its
+strings until exit; the writer copies them into the ring during emission. No connection
+pointer reaches the drain. With no scope all three identifiers are empty. For connection
+logs outside an outstanding call, supply the component and link with `None` and an empty
+call id; operationId is empty. Use a direction and a nonempty call id for call logs.
+
+The encoding is byte-exact (no text parsing):
+
+| Envelope field | Value | Maximum bytes |
+|---|---|---|
+| `component` | component supplied by the host | 32 |
+| `correlationId` | decimal WebLinkId supplied by the host | 40 |
+| `operationId` | `cpp-js:` + decimal CallId, or `js-cpp:` + decimal CallId | 32 |
+
+Both prefixes consume seven bytes, leaving 25 bytes for a call id. The normal uint16
+identifiers fit. Values exceeding any capacity are refused in component, operation,
+correlation order, before the writer is called, even if the ring is full. The message
+capacity is 160 bytes; the ring truncates it at a UTF-8 boundary and owns its truncation
+flag. The writer's `DiagnosticRecord.message` borrows the original formatted message
+so that `RingLog::tryWrite()` performs that truncation itself. The other views refer to
+validated context and must also be copied before the writer returns. The snapshot
+includes emission time, level and location. Only diagnostic types enter this API.
+
+A host module-consuming TU binds each producer thread to its own ring, for example:
+
+```cpp
+log::setRecordWriter([&ring](const log::DiagnosticRecord& value) {
+    // Map all four WebFront levels explicitly, as Logger.cpp does.
+    auto result = ring.tryWrite({.level = mapDiagnosticLevel(value.level),
+        .time = mddlog::core::RawTime::available(value.time),
+        .location = value.location, .message = value.message,
+        .component = value.component, .operationId = value.operationId,
+        .correlationId = value.correlationId});
+    return result.admission() == mddlog::core::Admission::Written;
+});
+{
+    log::ContextScope scope({"jsFunction", "2", log::CallDirection::CppToJs, "1"});
+    const auto outcome = log::tryWrite(log::Info, "request sent");
+    // Handle IdentifierTooLong or RingFull locally; do not log refusals recursively.
+}
+log::setRecordWriter({}); // before destroying the producer's ring
+```
+
+`tryWrite()` returns `WriteOutcome`; existing void calls expose their latest outcome
+through `lastWriteOutcome()` on the same thread. `infoHex()` attempts two records
+(message, then dump), each with the same context; it requires two available slots. If
+only one fits, the message remains admitted and the dump reports RingFull, without
+rollback. Legacy text is emitted when both attempts succeed. Disabled calls skip formatting and
+emission; their legacy wrapper does not replace the previous outcome. `tryWrite()`
+itself returns Disabled. RingFull also increments the ring's saturation counter.
+With no writer the legacy text output remains available. Binding a writer adds the
+structured lane; synchronous text callbacks still run, so browser transports must be
+registered on `TransportConsumer`, not as facade text callbacks. The facade's formatting,
+clock read, callback binding and short identifier concatenation remain adapter operations
+and may allocate. The ring producer itself retains ADR-001's bounded contract.
+
+Register rings with #68's `TransportConsumer::addRing()` before its single consumer starts.
+Each ring has exactly one producer and one consumer; multiple producer threads need
+separate rings. Consumer-thread logging uses `addConsumerRing()` to suppress transport
+feedback. Alternatively `RingSinkAdapter` copies the same identifiers to diagnostic sinks;
+do not register one ring with both consumers. Every transport receives the captured fields
+in its owning `LogRecord`, even after the original connection has been destroyed.
+Source location and the legacy text/hex rendering remain compatible with #69.
+
+The triplet `(correlationId, direction, callId)` identifies a call only while outstanding.
+Both WebLinkId and CallId counters wrap and are reused; the two directions allocate CallId
+independently. For correlation beyond this window, the host must attach a process/session
+and link-generation discriminator in its external envelope, or encode a session-qualified
+link id within the 40-byte correlation capacity (refusing longer values). The component is
+not part of call identity: the second request for link 2 remains the same call when its
+component changes from `jsFunction` to `weblink` on disconnect. ADR-003 remains Proposed;
+this reference implementation does not change its review status or deploy WebFront adoption.
+
+`WebFrontContextSpec.cpp` reproduces all seven events of Decision 6, destroys borrowed
+connection strings before draining, compares delivery to two transports, and checks exact
+field capacities, identifier refusals, UTF-8 truncation, nested scopes, out-of-call context
+and observable ring saturation. The original WebFront suite and #69 regressions still run.

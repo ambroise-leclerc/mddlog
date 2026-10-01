@@ -35,6 +35,59 @@ void                     setLogLevel(LogType level);
 [[nodiscard]] SinkHandle addSink(std::function<void(std::string_view)> callback);
 void                     removeSink(const SinkHandle& handle);
 
+/** @brief Explicit connection/call context; views must outlive the scope, never the drain. */
+enum class CallDirection : std::uint8_t { None, CppToJs, JsToCpp };
+struct Context {
+    std::string_view component;
+    std::string_view webLinkId;
+    CallDirection    direction = CallDirection::None;
+    std::string_view callId;
+};
+
+/** @brief Thread-local, nestable context. Restore the previous scope on exit. */
+class ContextScope {
+public:
+    explicit ContextScope(Context value) noexcept;
+    ~ContextScope();
+    ContextScope(const ContextScope&)            = delete;
+    ContextScope& operator=(const ContextScope&) = delete;
+    ContextScope(ContextScope&&)                 = delete;
+    ContextScope& operator=(ContextScope&&)      = delete;
+
+private:
+    Context previous;
+};
+
+enum class WriteStatus : std::uint8_t { Written, Disabled, IdentifierTooLong, RingFull };
+enum class ContextField : std::uint8_t { None, Component, OperationId, CorrelationId };
+struct WriteOutcome {
+    WriteStatus  status           = WriteStatus::Disabled;
+    ContextField field            = ContextField::None;
+    bool         messageTruncated = false;
+};
+
+/** @brief Validated context and original message. Copy views synchronously into the producer's ring. */
+struct DiagnosticRecord {
+    LogType                                         level;
+    std::chrono::sys_time<std::chrono::nanoseconds> time;
+    std::source_location                            location;
+    std::string_view                                message;
+    std::string_view                                component;
+    std::string_view                                operationId;
+    std::string_view                                correlationId;
+    bool                                            messageTruncated;
+};
+/**
+ * @brief Bind this thread's sole ring writer; return false only for RingFull.
+ * @note Install/remove outside emission. The writer must copy views before returning.
+ *       No writer means only legacy text delivery. Setup and the facade may allocate.
+ */
+void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer);
+/** @brief Observe the last emission on this thread, including refusals from void legacy calls. */
+[[nodiscard]] WriteOutcome lastWriteOutcome() noexcept;
+/** @brief Emit already formatted diagnostic text, capturing context and an explicit location. */
+[[nodiscard]] WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_location& location = std::source_location::current());
+
 namespace detail {
 void write(LogType level, std::string_view text);
 void writeDebug(std::string_view text, const std::source_location& location);

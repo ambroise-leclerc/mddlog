@@ -2,6 +2,7 @@
 import std;
 import mddlog.core.loglevel;
 import mddlog.adapter.textlogger;
+import mddlog.core.record;
 
 #include "tooling/LoggerApi.hpp"
 
@@ -12,6 +13,9 @@ struct SinkHandle::Registration {
 
 namespace {
 using mddlog::core::LogLevel;
+thread_local Context                                      context;
+thread_local std::function<bool(const DiagnosticRecord&)> recordWriter;
+thread_local WriteOutcome                                 outcome;
 
 mddlog::adapter::TextLogger& logger() {
     static mddlog::adapter::TextLogger instance;
@@ -31,6 +35,33 @@ std::optional<LogLevel> diagnosticLevel(LogType level) {
         default:
             return std::nullopt;
     }
+}
+
+WriteOutcome capture(LogType level, std::string_view text, const std::source_location& location) {
+    if (!is(level))
+        return outcome = {};
+    const std::string_view prefix = context.direction == CallDirection::CppToJs ? "cpp-js:" : context.direction == CallDirection::JsToCpp ? "js-cpp:" : "";
+    // Bound the allocation below before concatenating caller-controlled identifiers.
+    if (context.component.size() > mddlog::core::componentCapacity)
+        return outcome = {WriteStatus::IdentifierTooLong, ContextField::Component};
+    if (context.callId.size() > mddlog::core::operationIdCapacity - prefix.size())
+        return outcome = {WriteStatus::IdentifierTooLong, ContextField::OperationId};
+    if (context.webLinkId.size() > mddlog::core::correlationIdCapacity)
+        return outcome = {WriteStatus::IdentifierTooLong, ContextField::CorrelationId};
+    const std::string            operation = std::string(prefix) + std::string(context.callId);
+    const auto                   time      = std::chrono::time_point_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now());
+    mddlog::core::GovernedRecord captured;
+    const auto                   result    = captured.assign({.level         = *diagnosticLevel(level),
+                                                              .time          = mddlog::core::RawTime::available(time),
+                                                              .location      = location,
+                                                              .message       = text,
+                                                              .component     = context.component,
+                                                              .operationId   = operation,
+                                                              .correlationId = context.webLinkId});
+    const bool                   truncated = result.truncated().message;
+    if (recordWriter && !recordWriter({level, time, location, text, captured.component(), captured.operationId(), captured.correlationId(), truncated}))
+        return outcome = {WriteStatus::RingFull};
+    return outcome = {WriteStatus::Written, ContextField::None, truncated};
 }
 
 std::string hexDump(std::span<const std::byte> bytes) {
@@ -57,6 +88,25 @@ std::string hexDump(std::span<const std::byte> bytes) {
     return result;
 }
 }  // namespace
+
+ContextScope::ContextScope(Context value) noexcept : previous(context) {
+    context = value;
+}
+ContextScope::~ContextScope() {
+    context = previous;
+}
+void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer) {
+    recordWriter = std::move(writer);
+}
+WriteOutcome lastWriteOutcome() noexcept {
+    return outcome;
+}
+WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_location& location) {
+    const auto result = capture(level, text, location);
+    if (result.status == WriteStatus::Written)
+        logger().write(*diagnosticLevel(level), text);
+    return result;
+}
 
 void set(LogType level, bool enabled) {
     if (level == Disabled)
@@ -89,16 +139,21 @@ void removeSink(const SinkHandle& handle) {
 
 namespace detail {
 void write(LogType level, std::string_view text) {
-    if (const auto mapped = diagnosticLevel(level))
-        logger().write(*mapped, text);
+    (void)tryWrite(level, text);
 }
 
 void writeDebug(std::string_view text, const std::source_location& location) {
-    logger().write(LogLevel::Debug, text, location);
+    if (capture(Debug, text, location).status == WriteStatus::Written)
+        logger().write(LogLevel::Debug, text, location);
 }
 
 void writeHex(std::string_view text, std::span<const std::byte> bytes) {
-    logger().writeDump(LogLevel::Info, text, hexDump(bytes));
+    const auto location = std::source_location::current();
+    if (capture(Info, text, location).status != WriteStatus::Written)
+        return;
+    const auto dump = hexDump(bytes);
+    if (capture(Info, dump, location).status == WriteStatus::Written)
+        logger().writeDump(LogLevel::Info, text, dump);
 }
 }  // namespace detail
 }  // namespace webfront::log
