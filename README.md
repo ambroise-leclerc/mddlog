@@ -60,6 +60,10 @@ The public `logAudit(AuditInput)` API introduced in #58 uses the same admission 
 
 For a diagnostic logger, see [basic_usage.cpp](examples/basic_usage.cpp). For draining governed records to sinks, see the [governed-core migration guide](docs/migration/governed-core.md).
 
+For independently enabled diagnostic groups and synchronous text callbacks, use
+`mddlog.adapter.textlogger`. The [WebFront facade guide](docs/migration/webfront-facade.md)
+describes its rendering contract and the tested reference bridge for WebFront adoption.
+
 ## Regulatory context and evidence
 
 The following standards describe processes and responsibilities for medical device development. mddlog provides building blocks and review material; using it does not establish conformity with any standard or regulation.
