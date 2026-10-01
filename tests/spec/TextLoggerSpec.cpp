@@ -124,4 +124,63 @@ const speclab::Register facadeRendering{
                   })
             .Execute();
     }};
+const speclab::Register facadeAsciiDump{
+    "WebFront facade: hex dump ASCII column is portable for every byte value",
+    "unit",
+    // Cover every byte, including the printable boundaries, DEL and the high-bit range.
+    [] {
+        return speclab::Test("webfront-facade-hex-portable-ascii")
+            .Then("only printable ASCII survives, including at the DEL and high-byte boundaries",
+                  [] {
+                      speclab::core::Checks checks;
+                      namespace log = webfront::log;
+                      std::array<std::byte, 256> bytes{};
+                      for (std::size_t index = 0; index < bytes.size(); ++index)
+                          bytes.at(index) = static_cast<std::byte>(index);
+
+                      std::vector<std::string> lines;
+                      log::setLogLevel(log::Info);
+                      const auto handle = log::addSinks([&](std::string_view line) {
+                          lines.emplace_back(line);
+                      });
+                      log::infoHex("all bytes", bytes);
+                      log::removeSinks(handle);
+                      log::setLogLevel(log::Disabled);
+
+                      checks.expect(lines.size() == 2 && lines.at(0).ends_with(" | all bytes"), "one message and one dump write");
+                      const auto& dump = lines.at(1);
+                      checks.expect(std::ranges::all_of(dump,
+                                                        [](unsigned char value) {
+                                                            return value < 128;
+                                                        }),
+                                    "dump contains only ASCII bytes");
+                      const std::array<std::string_view, 16> expectedAscii{"................",
+                                                                           "................",
+                                                                           " !\"#$%&'()*+,-./",
+                                                                           "0123456789:;<=>?",
+                                                                           "@ABCDEFGHIJKLMNO",
+                                                                           "PQRSTUVWXYZ[\\]^_",
+                                                                           "`abcdefghijklmno",
+                                                                           "pqrstuvwxyz{|}~.",
+                                                                           "................",
+                                                                           "................",
+                                                                           "................",
+                                                                           "................",
+                                                                           "................",
+                                                                           "................",
+                                                                           "................",
+                                                                           "................"};
+                      checks.expect(dump.size() == (expectedAscii.size() * 75) + expectedAscii.size() - 1,
+                                    "exactly sixteen full dump rows with fifteen newline separators");
+                      for (std::size_t index = 0; index < expectedAscii.size(); ++index) {
+                          const auto row = std::string_view(dump).substr(index * 76, 75);
+                          checks.expect(row.starts_with(std::format("{:08x}", index * 16)) && row.ends_with(expectedAscii.at(index)),
+                                        "row preserves layout and renders the exact printable ASCII subset");
+                          if (index + 1 < expectedAscii.size())
+                              checks.expect(dump.at((index * 76) + 75) == '\n', "each pair of rows has one newline separator");
+                      }
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 }  // namespace

@@ -5,6 +5,9 @@
 operate independently, so Warn can be disabled while Error remains enabled. Trace shares
 Debug's mask and renders as `D`; Fatal shares Error's mask and renders as `E`. Invalid
 severity values are disabled. `disableAll()` masks every group.
+Atomicity applies to each group separately. `disableAll()` and the facade's `setLogLevel()`
+update groups in sequence, with no atomic transition across groups. Concurrent `is()` or
+write calls may therefore observe a partially applied change.
 
 `write(level, text)` renders `[X] HH:MM:SS | text`. Passing a `source_location` adds
 `file:line |` between the time and message, with the basename padded to 16 columns and
@@ -35,7 +38,9 @@ The header retains `webfront::log::debug`, `info`, `warn`, `error`, `infoHex`, `
 `setLogLevel`, `addSinks`, and `removeSinks`. Mapping is an explicit switch, never a numeric
 cast. `Disabled` masks all groups. Only `debug` captures the call site's source location.
 Disabled calls skip formatting. `infoHex` accepts contiguous numeric/byte buffers and retains
-the original dump spacing, offsets, ASCII column and separate second write.
+the original dump spacing, offsets and separate second write. The ASCII column prints only
+bytes `0x20` through `0x7E`; all others, including DEL (`0x7F`) and `0x80` through `0xFF`,
+render as `.`, independently of whether plain `char` is signed on the platform.
 
 One callback returns one opaque handle. Multiple callbacks return an array of handles:
 
@@ -66,6 +71,7 @@ ctest --test-dir build-clang -R 'webfront|WebFront|TextLogger' --output-on-failu
 
 `webfront.baseline.LoggerTests` runs the original Catch2 suite. `TextLoggerSpec.cpp`
 additionally checks initial disablement, independent masks, all six severity mappings,
-the actual debug caller file/line even on LLVM, formatting guards, dump output, independent
-multi-registration removal and compile-time audit exclusion. Compilation, linking and test
+the actual debug caller file/line even on LLVM, formatting guards, dump output for every
+possible byte value, independent multi-registration removal and compile-time audit exclusion.
+Compilation, linking and test
 execution must each succeed; configuration alone is not verification.

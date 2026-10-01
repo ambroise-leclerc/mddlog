@@ -24,8 +24,13 @@ private:
     friend void                   removeSink(const SinkHandle& handle);
 };
 
-void                     set(LogType level, bool enabled);
-[[nodiscard]] bool       is(LogType level);
+void               set(LogType level, bool enabled);
+[[nodiscard]] bool is(LogType level);
+/**
+ * @brief Update the four independent severity groups in sequence.
+ * @note Concurrent is()/write calls may observe a partially applied level change;
+ *       there is no atomic update across groups.
+ */
 void                     setLogLevel(LogType level);
 [[nodiscard]] SinkHandle addSink(std::function<void(std::string_view)> callback);
 void                     removeSink(const SinkHandle& handle);

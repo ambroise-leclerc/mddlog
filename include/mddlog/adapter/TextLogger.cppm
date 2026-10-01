@@ -11,6 +11,8 @@ export namespace mddlog::adapter {
  * @brief Diagnostic-only text delivery through the quiescent callback registry.
  *
  * All groups start disabled. Trace shares Debug's mask and display; Fatal shares Error's.
+ * Each group is independently atomic. disableAll() updates the groups in sequence;
+ * concurrent queries or writes may observe a partially applied multi-group change.
  * Formatting and delivery allocate and run synchronously in the adapter zone. This is not
  * a governed producer or a transport queue. No audit module or audit admission is reachable.
  */

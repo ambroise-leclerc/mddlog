@@ -34,10 +34,11 @@ std::optional<LogLevel> diagnosticLevel(LogType level) {
 }
 
 std::string hexDump(std::span<const std::byte> bytes) {
-    constexpr std::size_t rowWidth       = 16;
-    constexpr std::size_t groupWidth     = 8;
-    constexpr int         printableStart = 32;
-    std::string           result;
+    constexpr std::size_t  rowWidth       = 16;
+    constexpr std::size_t  groupWidth     = 8;
+    constexpr unsigned int printableStart = 32;
+    constexpr unsigned int printableEnd   = 127;
+    std::string            result;
     for (std::size_t address = 0; address < bytes.size(); address += rowWidth) {
         result += std::format("{:08x}", address);
         for (std::size_t index = address; index < address + rowWidth; ++index) {
@@ -47,8 +48,8 @@ std::string hexDump(std::span<const std::byte> bytes) {
         }
         result += ' ';
         for (std::size_t index = address; index < std::min(address + rowWidth, bytes.size()); ++index) {
-            const auto character = static_cast<char>(bytes[index]);
-            result              += character < printableStart ? '.' : character;
+            const auto value = std::to_integer<unsigned int>(bytes[index]);
+            result          += value >= printableStart && value < printableEnd ? static_cast<char>(value) : '.';
         }
         if (address + rowWidth < bytes.size())
             result += '\n';
