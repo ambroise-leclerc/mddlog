@@ -5,6 +5,17 @@ find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 set(governed_manifest "${CMAKE_CURRENT_BINARY_DIR}/governed-$<CONFIG>.txt")
 set(governed_content "sources=$<JOIN:$<TARGET_PROPERTY:mddlog-core,CXX_MODULE_SET_cxx_modules>,;>\n")
 string(APPEND governed_content "extra_sources=$<JOIN:$<TARGET_PROPERTY:mddlog-core,SOURCES>,;>\n")
+# Clang/MSVC inject these exact compiled standard-module objects into the core's SOURCES.
+# GCC's imported interface target supplies module sources instead and has no target objects.
+set(governed_standard_objects "")
+if(TARGET __CMAKE::CXX23)
+    get_target_property(governed_standard_type __CMAKE::CXX23 TYPE)
+    if(governed_standard_type STREQUAL "STATIC_LIBRARY" OR
+       governed_standard_type STREQUAL "OBJECT_LIBRARY")
+        set(governed_standard_objects "$<JOIN:$<TARGET_OBJECTS:__CMAKE::CXX23>,;>")
+    endif()
+endif()
+string(APPEND governed_content "standard_objects=${governed_standard_objects}\n")
 string(APPEND governed_content "objects=$<JOIN:$<TARGET_OBJECTS:mddlog-core>,;>\n")
 foreach(target IN ITEMS mddlog-core mddlog_options mddlog_warnings Threads::Threads)
     foreach(property IN ITEMS LINK_LIBRARIES INTERFACE_LINK_LIBRARIES

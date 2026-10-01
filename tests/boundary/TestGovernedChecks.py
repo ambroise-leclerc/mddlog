@@ -56,7 +56,8 @@ def main():
             run("graph", data=data)
 
         # Standard-module objects injected by CMake are outside the governed file set.
-        # Exercise both toolchains on every host, including Windows path separators.
+        # Exercise generated allowlists for both toolchains on every host, including Windows
+        # path separators. The same plausible path must fail when absent from the allowlist.
         for source in (
             "/build/CMakeFiles/__cmake_cxx23.dir/usr/lib/libc++/std.cppm.o",
             "/build/CMakeFiles/__cmake_cxx23.dir/usr/lib/libc++/std.compat.cppm.o",
@@ -67,6 +68,8 @@ def main():
         ):
             data = copy.deepcopy(original)
             data["extra_sources"].append(source)
+            run("graph", "unreviewed extra source", data=data)
+            data["standard_objects"].append(source)
             run("graph", data=data)
         for source in (
             "/build/CMakeFiles/application.dir/modules/std.cppm.o",
@@ -79,6 +82,14 @@ def main():
             data = copy.deepcopy(original)
             data["extra_sources"].append(source)
             run("graph", "unreviewed extra source", data=data)
+
+        data = copy.deepcopy(original)
+        del data["standard_objects"]
+        run("graph", "missing graph evidence: standard_objects", data=data)
+        data = copy.deepcopy(original)
+        data["standard_objects"] = []
+        data["extra_sources"] = []
+        run("graph", data=data)
 
         # Both P1689 versions are accepted, but an unknown revision remains fail-closed.
         source_object = Path(original["objects"][0])

@@ -33,9 +33,12 @@ Arbitrary global compiler/linker flags and changes to the toolchain remain build
 review; this check is not a sandbox against a malicious build configuration.
 The checker accepts P1689 versions 0 (CMake's GCC scanner) and 1 (Clang), rejecting unknown
 versions. GCC may omit the optional `source-path`; in that case the compiled object's path must
-identify exactly one source in the governed module file set. MSVC/CMake places the compiled
-`std.ixx.obj` from its standard-module target in the core's `SOURCES` property; this exact
-toolchain object is allowed, while any other extra source fails. CMake also copies the reviewed
+identify exactly one source in the governed module file set. Clang/MSVC CMake places compiled
+standard-module objects in the core's `SOURCES` property. The generated manifest records the
+exact `$<TARGET_OBJECTS:__CMAKE::CXX23>` allowlist; only those toolchain objects or registered
+governed sources are allowed. A matching basename or target-directory spelling alone does not
+grant an exception. GCC's imported interface standard-module target has no target objects and
+produces an empty allowlist. Missing allowlist evidence fails. CMake also copies the reviewed
 sanitizer option from `mddlog_options` to `mddlog-core`'s evaluated `LINK_OPTIONS`.
 
 Module interface objects often contain only module initializers. `CoreInstantiation.cpp` therefore
