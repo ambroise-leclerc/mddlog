@@ -141,10 +141,10 @@ void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer) {
 WriteOutcome lastWriteOutcome() noexcept {
     return producer().outcome;
 }
-/** @brief Capture an explicit diagnostic emission and render text after admission. */
+/** @brief Capture an explicit diagnostic emission and deliver legacy text independently of refusal. */
 WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_location& location) {
     const auto result = capture(level, text, location);
-    if (result.status == WriteStatus::Written) {
+    if (result.status != WriteStatus::Filtered) {
         if (const auto mapped = diagnosticLevel(level))
             logger().write(*mapped, text);
     }
@@ -193,18 +193,22 @@ void write(LogType level, std::string_view text) {
 
 /** @brief Capture and render a debug diagnostic with the original caller location. */
 void writeDebug(std::string_view text, const std::source_location& location) {
-    if (capture(Debug, text, location).status == WriteStatus::Written)
+    if (capture(Debug, text, location).status != WriteStatus::Filtered)
         logger().write(LogLevel::Debug, text, location);
 }
 
-/** @brief Attempt admission of the message and dump separately before legacy text delivery. */
-void writeHex(std::string_view text, std::span<const std::byte> bytes) {
-    const auto location = std::source_location::current();
-    if (capture(Info, text, location).status != WriteStatus::Written)
-        return;
-    const auto dump = hexDump(bytes);
-    if (capture(Info, dump, location).status == WriteStatus::Written)
-        logger().writeDump(LogLevel::Info, text, dump);
+/** @brief Capture both hex records at the caller's location and preserve independent text delivery. */
+HexWriteOutcome writeHex(std::string_view text, std::span<const std::byte> bytes, const std::source_location& location) {
+    const auto messageResult = capture(Info, text, location);
+    if (messageResult.status == WriteStatus::Filtered)
+        return {};
+    const auto dump           = hexDump(bytes);
+    const auto dumpResult     = capture(Info, dump, location);
+    auto       combined       = messageResult.status == WriteStatus::Written ? dumpResult : messageResult;
+    combined.messageTruncated = messageResult.messageTruncated || dumpResult.messageTruncated;
+    producer().outcome        = combined;
+    logger().writeDump(LogLevel::Info, text, dump);
+    return {.message = messageResult, .dump = dumpResult};
 }
 }  // namespace detail
 }  // namespace webfront::log

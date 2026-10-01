@@ -74,6 +74,12 @@ struct WriteOutcome {
     bool         messageTruncated = false;
 };
 
+/** @brief Separate admission and truncation results for a hex message and its dump. */
+struct HexWriteOutcome {
+    WriteOutcome message;
+    WriteOutcome dump;
+};
+
 /** @brief Validated context and original message. Copy views synchronously into the producer's ring. */
 struct DiagnosticRecord {
     std::uint8_t                                    level;
@@ -99,9 +105,9 @@ void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer);
 [[nodiscard]] WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_location& location = std::source_location::current());
 
 namespace detail {
-void write(LogType level, std::string_view text);
-void writeDebug(std::string_view text, const std::source_location& location);
-void writeHex(std::string_view text, std::span<const std::byte> bytes);
+void            write(LogType level, std::string_view text);
+void            writeDebug(std::string_view text, const std::source_location& location);
+HexWriteOutcome writeHex(std::string_view text, std::span<const std::byte> bytes, const std::source_location& location);
 }  // namespace detail
 
 template <typename... Ts>
@@ -134,13 +140,18 @@ void error(std::string_view fmt, Ts&&... args) {
         detail::write(Error, std::vformat(fmt, std::make_format_args(args...)));
 }
 
-/** @brief Preserve the second hex-dump write for contiguous numeric or byte buffers. */
+/**
+ * @brief Emit the complete legacy hex dump and return each structured record's outcome.
+ * @note Both records capture the caller's location. The structured dump can be truncated;
+ *       inspect dump.messageTruncated. Ignoring the result preserves existing call syntax.
+ */
 template <std::ranges::contiguous_range Container>
     requires std::ranges::sized_range<Container>
              && (std::is_arithmetic_v<std::ranges::range_value_t<Container>> || std::same_as<std::ranges::range_value_t<Container>, std::byte>)
-void infoHex(std::string_view text, const Container& container) {
-    if (is(Info))
-        detail::writeHex(text, std::as_bytes(std::span(std::ranges::data(container), std::ranges::size(container))));
+HexWriteOutcome infoHex(std::string_view text, const Container& container, const std::source_location& location = std::source_location::current()) {
+    if (!is(Info))
+        return {};
+    return detail::writeHex(text, std::as_bytes(std::span(std::ranges::data(container), std::ranges::size(container))), location);
 }
 
 template <typename... Callbacks>

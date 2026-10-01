@@ -125,14 +125,26 @@ log::setRecordWriter({}); // before destroying the producer's ring
 ```
 
 `tryWrite()` returns `WriteOutcome`; existing void calls expose their latest outcome
-through `lastWriteOutcome()` on the same thread. `infoHex()` attempts two records
-(message, then dump), each with the same context; it requires two available slots. If
-only one fits, the message remains admitted and the dump reports RingFull, without
-rollback. Legacy text is emitted when both attempts succeed. Disabled calls skip formatting and
-emission; their legacy wrapper does not replace the previous outcome. `tryWrite()`
-itself returns Filtered. RingFull also increments the ring's saturation counter.
-A throwing writer propagates its exception, leaves the previous `lastWriteOutcome()`
-unchanged and prevents legacy text delivery for that attempt. The host must guarantee
+through `lastWriteOutcome()` on the same thread. Enabled legacy text delivery is independent
+of structured refusal: a full ring or an overlong identifier does not suppress console/file
+callbacks. Disabled calls skip formatting and emission; their legacy wrapper does not replace
+the previous outcome. `tryWrite()` itself returns Filtered. RingFull also increments the
+ring's saturation counter.
+
+`infoHex(text, bytes, location)` defaults the location at the caller and forwards it to both
+structured records (message, then dump). It returns `HexWriteOutcome`, with separate `message`
+and `dump` outcomes. Existing callers may ignore the return value. Two available ring slots
+are required for complete structured admission. If only one fits, the message remains admitted
+and `result.dump.status` is RingFull, without rollback; legacy callbacks still receive both
+complete text writes. The dump remains one 160-byte governed message, so larger dumps are
+shortened with `result.dump.messageTruncated` and the ring record's truncation flag set.
+`lastWriteOutcome()` summarizes the first refusal, or the dump result when the message was
+admitted, and ORs the truncation flags of admitted records. Check the two returned outcomes
+when partial admission matters. Neither identifiers nor missing dump bytes are reconstructed
+from legacy text by the consumer.
+
+A throwing writer propagates its exception, leaves `lastWriteOutcome()` at the last
+completed capture and prevents legacy text delivery for that attempt. The host must guarantee
 writer removal before ring destruction on exceptional exits as well as normal teardown
 (for example with a host-owned scope guard). `ContextScope` restores context during
 unwinding but does not manage the independent writer binding.
@@ -161,5 +173,6 @@ this reference implementation does not change its review status or deploy WebFro
 
 `WebFrontContextSpec.cpp` reproduces all seven events of Decision 6, destroys borrowed
 connection strings before draining, compares delivery to two transports, and checks exact
-field capacities, identifier refusals, UTF-8 truncation, nested scopes, out-of-call context
-and observable ring saturation. The original WebFront suite and #69 regressions still run.
+field capacities, identifier refusals, UTF-8 truncation, nested scopes, out-of-call context,
+observable ring saturation, hex caller locations, explicit dump truncation and independent
+legacy text delivery on structured refusal. The original WebFront suite and #69 regressions still run.

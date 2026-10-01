@@ -233,4 +233,107 @@ const speclab::Register legacyCapture{
                   })
             .Execute();
     }};
+const speclab::Register hexLocationAndTruncation{
+    "WebFront hex: caller location and explicit structured truncation preserve the complete text dump",
+    "unit",
+    [] {
+        return speclab::Test("webfront-hex-caller-and-truncation")
+            .Then("both records belong to the caller and truncation is observable",
+                  [] {
+                      speclab::core::Checks checks;
+                      RingLog<2>            ring;
+                      bind(ring);
+                      log::setLogLevel(log::Info);
+                      std::vector<std::string>      lines;
+                      const auto                    handle = log::addSink([&lines](std::string_view line) {
+                          lines.emplace_back(line);
+                      });
+                      std::array<unsigned char, 64> bytes{};
+                      bytes.fill('A');
+                      const auto callerLine = std::source_location::current().line() + 1;
+                      const auto result     = log::infoHex("large dump", bytes);
+                      checks.expect(result.message.status == log::WriteStatus::Written && result.dump.status == log::WriteStatus::Written,
+                                    "both structured records admitted");
+                      checks.expect(!result.message.messageTruncated && result.dump.messageTruncated && log::lastWriteOutcome().messageTruncated,
+                                    "dump truncation returned directly and retained in the summary");
+                      const auto view = ring.drain();
+                      checks.expect(view.size() == 2, "message and dump captured separately");
+                      for (const auto& record : view.first()) {
+                          checks.expect(record.location().line() == callerLine
+                                            && std::string_view(record.location().file_name()).ends_with("WebFrontContextSpec.cpp"),
+                                        "both records carry the infoHex caller location");
+                      }
+                      checks.expect(lines.size() == 2 && lines.back().find("00000030") != std::string::npos && lines.back().ends_with(std::string(16, 'A')),
+                                    "legacy dump contains all four rows and their ASCII columns");
+                      const auto& dump = view.first().back();
+                      checks.expect(dump.truncated().message && dump.message().size() == messageCapacity, "owned ring dump retains its truncation flag");
+                      if (lines.size() == 2)
+                          checks.expect(dump.message() == std::string_view(lines.back()).substr(0, messageCapacity),
+                                        "ring retains the bounded prefix of the full dump");
+                      checks.expect(ring.acknowledge(view, view.size()), "release the large dump snapshot");
+                      const auto messageTruncation = log::infoHex(std::string(161, 'm'), std::array<unsigned char, 1>{'A'});
+                      checks.expect(messageTruncation.message.messageTruncated && !messageTruncation.dump.messageTruncated
+                                        && log::lastWriteOutcome().messageTruncated,
+                                    "a short dump cannot erase the preceding message's truncation flag");
+                      log::removeSink(handle);
+                      log::setRecordWriter({});
+                      log::setLogLevel(log::Disabled);
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register independentTextDelivery{
+    "WebFront channels: structured refusals preserve legacy diagnostics and expose partial hex admission",
+    "unit",
+    [] {
+        return speclab::Test("webfront-independent-text-delivery")
+            .Then("one free slot or a full ring never suppresses enabled text sinks",
+                  [] {
+                      speclab::core::Checks checks;
+                      RingLog<1>            ring;
+                      bind(ring);
+                      log::setLogLevel(log::Debug);
+                      std::vector<std::string>           lines;
+                      const auto                         handle = log::addSink([&lines](std::string_view line) {
+                          lines.emplace_back(line);
+                      });
+                      const std::array<unsigned char, 1> bytes{'A'};
+                      const auto                         partial = log::infoHex("partial", bytes);
+                      checks.expect(partial.message.status == log::WriteStatus::Written && partial.dump.status == log::WriteStatus::RingFull,
+                                    "the message fits but the dump reports refusal");
+                      checks.expect(lines.size() == 2 && lines.front().ends_with(" | partial") && lines.back().ends_with(" A"),
+                                    "both complete legacy writes survive partial admission");
+                      checks.expect(log::lastWriteOutcome().status == log::WriteStatus::RingFull, "summary exposes partial admission");
+                      const auto view = ring.drain();
+                      checks.expect(view.size() == 1 && view.first().front().message() == "partial", "only the admitted message is retained");
+                      checks.expect(log::tryWrite(log::Info, "full info").status == log::WriteStatus::RingFull, "tryWrite reports saturation");
+                      log::debug("full debug");
+                      const auto full = log::infoHex("full hex", bytes);
+                      checks.expect(full.message.status == log::WriteStatus::RingFull && full.dump.status == log::WriteStatus::RingFull,
+                                    "both full-ring refusals are returned");
+                      checks.expect(lines.size() == 6 && lines[2].ends_with(" | full info") && lines[3].ends_with(" | full debug")
+                                        && lines[4].ends_with(" | full hex") && lines[5].ends_with(" A"),
+                                    "all enabled legacy APIs still deliver text");
+                      checks.expect(ring.refusalCount() == 5, "each refused structured record increments saturation telemetry");
+                      {
+                          const std::string tooLong(33, 'c');
+                          log::ContextScope scope({.component = tooLong});
+                          checks.expect(log::tryWrite(log::Info, "invalid context").status == log::WriteStatus::IdentifierTooLong,
+                                        "identifier refusal is independent of text delivery");
+                      }
+                      checks.expect(lines.size() == 7 && lines.back().ends_with(" | invalid context"), "context refusal preserves legacy text too");
+                      log::setLogLevel(log::Disabled);
+                      const auto filtered = log::infoHex("disabled", bytes);
+                      checks.expect(filtered.message.status == log::WriteStatus::Filtered && filtered.dump.status == log::WriteStatus::Filtered
+                                        && lines.size() == 7,
+                                    "disabled calls deliver neither channel");
+                      checks.expect(log::lastWriteOutcome().status == log::WriteStatus::IdentifierTooLong,
+                                    "disabled legacy calls preserve the previous outcome");
+                      log::removeSink(handle);
+                      log::setRecordWriter({});
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 }  // namespace
