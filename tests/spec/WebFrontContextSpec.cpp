@@ -13,7 +13,7 @@ namespace {
 namespace log = webfront::log;
 using namespace mddlog::core;
 
-// The host TU maps the module-free snapshot into its sole producer's ring.
+/** @brief Bind the module-free emission snapshot to the host thread's sole producer ring. */
 template <std::size_t Capacity>
 void bind(RingLog<Capacity>& ring) {
     log::setRecordWriter([&ring](const log::DiagnosticRecord& record) {
@@ -160,13 +160,18 @@ const speclab::Register boundaries{
                   })
             .Execute();
     }};
+/** @brief Retain diagnostic sink records to inspect their captured fields after draining. */
 class ContextSink : public mddlog::sinks::Sink {
 public:
+    /** @brief Accept every diagnostic severity for context inspection. */
     ContextSink() : Sink(LogLevel::Trace) {}
+    /** @brief Copy all fields before the adapter releases its transient record. */
     void write(const LogRecord& record) override {
         records.push_back(record);
     }
-    void             flush() override {}
+    /** @brief Complete immediately because this test sink has no buffered transport. */
+    void flush() override {}
+    /** @brief Identify the recording context sink. */
     std::string_view getName() const noexcept override {
         return "context";
     }

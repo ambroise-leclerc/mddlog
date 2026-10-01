@@ -14,10 +14,12 @@ inline const auto        clogSink = [](std::string_view text) {
 /** @brief Opaque callback registration; contains no module types in the header. */
 class SinkHandle {
 public:
+    /** @brief Create an empty registration handle. */
     SinkHandle() = default;
 
 private:
     struct Registration;
+    /** @brief Wrap one independent callback registration. */
     explicit SinkHandle(std::shared_ptr<Registration> registration) : value(std::move(registration)) {}
     std::shared_ptr<Registration> value;
     friend SinkHandle             addSink(std::function<void(std::string_view)> callback);
@@ -37,6 +39,7 @@ void                     removeSink(const SinkHandle& handle);
 
 /** @brief Explicit connection/call context; views must outlive the scope, never the drain. */
 enum class CallDirection : std::uint8_t { None, CppToJs, JsToCpp };
+/** @brief Borrowed connection and call fields supplied by the emission scope. */
 struct Context {
     std::string_view component;
     std::string_view webLinkId;
@@ -47,7 +50,9 @@ struct Context {
 /** @brief Thread-local, nestable context. Restore the previous scope on exit. */
 class ContextScope {
 public:
+    /** @brief Install this thread's context while remembering the enclosing scope. */
     explicit ContextScope(Context value) noexcept;
+    /** @brief Restore the enclosing context on normal or exceptional exit. */
     ~ContextScope();
     ContextScope(const ContextScope&)            = delete;
     ContextScope& operator=(const ContextScope&) = delete;
@@ -58,8 +63,11 @@ private:
     Context previous;
 };
 
+/** @brief Admission or filtering result for a diagnostic emission. */
 enum class WriteStatus : std::uint8_t { Written, Filtered, IdentifierTooLong, RingFull };
+/** @brief Identifier responsible for an IdentifierTooLong refusal. */
 enum class ContextField : std::uint8_t { None, Component, OperationId, CorrelationId };
+/** @brief Observable diagnostic result with message truncation for admitted records. */
 struct WriteOutcome {
     WriteStatus  status           = WriteStatus::Filtered;
     ContextField field            = ContextField::None;
@@ -68,7 +76,7 @@ struct WriteOutcome {
 
 /** @brief Validated context and original message. Copy views synchronously into the producer's ring. */
 struct DiagnosticRecord {
-    LogType                                         level;
+    std::uint8_t                                    level;
     std::chrono::sys_time<std::chrono::nanoseconds> time;
     std::source_location                            location;
     std::string_view                                message;
@@ -81,6 +89,8 @@ struct DiagnosticRecord {
  * @brief Bind this thread's sole ring writer; return false only for RingFull.
  * @note Install/remove outside emission. The writer must copy views before returning.
  *       No writer means only legacy text delivery. Setup and the facade may allocate.
+ *       Writer exceptions propagate without updating lastWriteOutcome() or delivering text.
+ *       The host must remove its binding before ring destruction, including exceptional exits.
  */
 void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer);
 /** @brief Observe the last emission on this thread, including refusals from void legacy calls. */

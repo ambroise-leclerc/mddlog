@@ -131,6 +131,11 @@ only one fits, the message remains admitted and the dump reports RingFull, witho
 rollback. Legacy text is emitted when both attempts succeed. Disabled calls skip formatting and
 emission; their legacy wrapper does not replace the previous outcome. `tryWrite()`
 itself returns Filtered. RingFull also increments the ring's saturation counter.
+A throwing writer propagates its exception, leaves the previous `lastWriteOutcome()`
+unchanged and prevents legacy text delivery for that attempt. The host must guarantee
+writer removal before ring destruction on exceptional exits as well as normal teardown
+(for example with a host-owned scope guard). `ContextScope` restores context during
+unwinding but does not manage the independent writer binding.
 With no writer the legacy text output remains available. Binding a writer adds the
 structured lane; synchronous text callbacks still run, so browser transports must be
 registered on `TransportConsumer`, not as facade text callbacks. The facade's formatting,

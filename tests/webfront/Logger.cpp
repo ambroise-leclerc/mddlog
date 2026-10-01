@@ -19,11 +19,13 @@ struct ProducerState {
     WriteOutcome                                 outcome;
 };
 
+/** @brief Access the calling thread's context, writer and most recent outcome. */
 ProducerState& producer() {
     static thread_local ProducerState state;
     return state;
 }
 
+/** @brief Encode the call direction independently of the component and message. */
 std::string_view directionPrefix(CallDirection direction) {
     switch (direction) {
         case CallDirection::CppToJs:
@@ -36,11 +38,13 @@ std::string_view directionPrefix(CallDirection direction) {
     return "";
 }
 
+/** @brief Access the shared synchronous diagnostic text adapter. */
 mddlog::adapter::TextLogger& logger() {
     static mddlog::adapter::TextLogger instance;
     return instance;
 }
 
+/** @brief Map supported WebFront diagnostic levels explicitly. */
 std::optional<LogLevel> diagnosticLevel(LogType level) {
     switch (level) {
         case Error:
@@ -56,6 +60,7 @@ std::optional<LogLevel> diagnosticLevel(LogType level) {
     }
 }
 
+/** @brief Validate emission context and synchronously submit its snapshot to the ring writer. */
 WriteOutcome capture(LogType level, std::string_view text, const std::source_location& location) {
     auto&      state  = producer();
     const auto mapped = diagnosticLevel(level);
@@ -94,6 +99,7 @@ WriteOutcome capture(LogType level, std::string_view text, const std::source_loc
     return state.outcome = {.status = WriteStatus::Written, .messageTruncated = truncated};
 }
 
+/** @brief Render the legacy dump with a platform-independent ASCII column. */
 std::string hexDump(std::span<const std::byte> bytes) {
     constexpr std::size_t  rowWidth       = 16;
     constexpr std::size_t  groupWidth     = 8;
@@ -119,18 +125,23 @@ std::string hexDump(std::span<const std::byte> bytes) {
 }
 }  // namespace
 
+/** @brief Install a nested context for the calling thread. */
 ContextScope::ContextScope(Context value) noexcept : previous(producer().context) {
     producer().context = value;
 }
+/** @brief Restore the preceding context when the scope exits. */
 ContextScope::~ContextScope() {
     producer().context = previous;
 }
+/** @brief Bind or clear the calling thread's synchronous ring writer. */
 void setRecordWriter(std::function<bool(const DiagnosticRecord&)> writer) {
     producer().writer = std::move(writer);
 }
+/** @brief Read the calling thread's most recent completed emission outcome. */
 WriteOutcome lastWriteOutcome() noexcept {
     return producer().outcome;
 }
+/** @brief Capture an explicit diagnostic emission and render text after admission. */
 WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_location& location) {
     const auto result = capture(level, text, location);
     if (result.status == WriteStatus::Written) {
@@ -140,6 +151,7 @@ WriteOutcome tryWrite(LogType level, std::string_view text, const std::source_lo
     return result;
 }
 
+/** @brief Update one diagnostic group or disable all groups. */
 void set(LogType level, bool enabled) {
     if (level == Disabled)
         logger().disableAll();
@@ -147,11 +159,13 @@ void set(LogType level, bool enabled) {
         logger().set(*mapped, enabled);
 }
 
+/** @brief Query the enabled state of one supported diagnostic group. */
 bool is(LogType level) {
     const auto mapped = diagnosticLevel(level);
     return mapped && logger().is(*mapped);
 }
 
+/** @brief Apply the WebFront severity threshold to the independent diagnostic groups. */
 void setLogLevel(LogType level) {
     // WebFront's order is inverse to mddlog's; no enum cast crosses this boundary.
     set(Error, level >= Error);
@@ -160,25 +174,30 @@ void setLogLevel(LogType level) {
     set(Debug, level >= Debug);
 }
 
+/** @brief Register a synchronous text callback with an independent handle. */
 SinkHandle addSink(std::function<void(std::string_view)> callback) {
     return SinkHandle(std::make_shared<SinkHandle::Registration>(logger().addSink(std::move(callback))));
 }
 
+/** @brief Remove a text callback using the registry's quiescence contract. */
 void removeSink(const SinkHandle& handle) {
     if (handle.value)
         logger().removeSink(handle.value->handle);
 }
 
 namespace detail {
+/** @brief Route a formatted legacy diagnostic through context capture. */
 void write(LogType level, std::string_view text) {
     (void)tryWrite(level, text);
 }
 
+/** @brief Capture and render a debug diagnostic with the original caller location. */
 void writeDebug(std::string_view text, const std::source_location& location) {
     if (capture(Debug, text, location).status == WriteStatus::Written)
         logger().write(LogLevel::Debug, text, location);
 }
 
+/** @brief Attempt admission of the message and dump separately before legacy text delivery. */
 void writeHex(std::string_view text, std::span<const std::byte> bytes) {
     const auto location = std::source_location::current();
     if (capture(Info, text, location).status != WriteStatus::Written)
