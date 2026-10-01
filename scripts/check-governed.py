@@ -70,13 +70,12 @@ def check_graph(root, data):
     require(sources, "empty governed source set")
     for source in sources:
         require(source.is_relative_to((root / "include/mddlog/core").resolve()), f"source outside governed tree: {source}")
+    require("standard_objects" in data, "missing graph evidence: standard_objects")
+    standard_objects = {(root / value.replace("\\", "/")).resolve() for value in data["standard_objects"]}
     for source in data["extra_sources"]:
-        # MSVC/CMake injects the compiled standard-module object into SOURCES rather than the
-        # governed file set. Its target and basename are fixed; no application object is allowed.
-        standard_module_object = re.search(
-            r"/CMakeFiles/__cmake_cxx23\.dir/.*/std(?:\.compat)?\.ixx\.obj$", source.replace("\\", "/")
-        )
-        require((root / source).resolve() in sources or standard_module_object,
+        # Trust only the exact outputs of CMake's standard-module target, not a path pattern.
+        path = (root / source.replace("\\", "/")).resolve()
+        require(path in sources or path in standard_objects,
                 f"unreviewed extra source: {source}")
     objects = data["objects"]
     require(len(objects) == len(sources), "governed object/source inventory mismatch")
