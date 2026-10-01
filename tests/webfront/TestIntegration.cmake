@@ -14,11 +14,12 @@ if(CONFIG)
     list(APPEND config_args --config "${CONFIG}")
 endif()
 
-# Preserve successful build trees for incremental reruns; each kind has its own prefix/build.
+# Each installed run must test only the files installed by the current rules.
 set(dependency_args)
 if(KIND STREQUAL "source")
     list(APPEND dependency_args "-DWEBFRONT_MDDLOG_SOURCE_DIR=${SOURCE_DIR}")
 else()
+    file(REMOVE_RECURSE "${scratch}/prefix")
     message(STATUS "WebFront ${KIND}: installing mddlog")
     execute_process(COMMAND "${CMAKE_COMMAND}" --install "${BUILD_DIR}"
         --prefix "${scratch}/prefix" ${config_args} RESULT_VARIABLE result)
@@ -41,6 +42,19 @@ foreach(pair IN ITEMS "AR|CMAKE_AR" "RANLIB|CMAKE_RANLIB"
     endif()
 endforeach()
 
+# Preserve incremental builds only while the configuration inputs remain identical.
+# Removed optional arguments must also invalidate the cache (e.g. cleared flags/runtime).
+string(SHA256 toolchain_signature
+    "${CMAKE_VERSION}|${GENERATOR}|${WEBFRONT_SOURCE_DIR}|${toolchain_args}|${dependency_args}")
+set(signature_file "${scratch}/toolchain.sha256")
+set(previous_signature "")
+if(EXISTS "${signature_file}")
+    file(READ "${signature_file}" previous_signature)
+endif()
+if(NOT previous_signature STREQUAL toolchain_signature)
+    file(REMOVE_RECURSE "${scratch}/build")
+endif()
+
 message(STATUS "WebFront ${KIND}: configuration")
 execute_process(COMMAND "${CMAKE_COMMAND}" -S "${WEBFRONT_SOURCE_DIR}" -B "${scratch}/build"
     -G "${GENERATOR}" ${toolchain_args} ${dependency_args}
@@ -50,6 +64,8 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -S "${WEBFRONT_SOURCE_DIR}" -B "${scr
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "WebFront ${KIND}: configuration failed (${result})")
 endif()
+
+file(WRITE "${signature_file}" "${toolchain_signature}")
 
 message(STATUS "WebFront ${KIND}: compilation and static adapter linkage")
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${scratch}/build"

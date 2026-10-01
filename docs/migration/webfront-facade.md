@@ -203,19 +203,27 @@ needed when CMake recompiles installed module interfaces. The enabled POSIX path
 `Threads::Threads`, avoiding a late directory-wide `-pthread` that would disagree with
 Clang's std BMI. Toolchains needing explicit thread flags must initialize them consistently.
 
-Two CTest tests configure the **actual WebFront project**, compile and link the adapter,
+With `MDDLOG_BUILD_TESTS=ON`, enable `MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS`
+(default `OFF`) to fetch the pinned integration revision and register two CTest tests.
+Leaving it off avoids this additional network/cache dependency; the historical test
+suite still needs its existing SpecLab, Catch2 and WebFront baseline dependencies.
+The two tests configure the **actual WebFront project**, compile and link the adapter,
 compile/link its header consumers, and run the full CEF-off suite:
 
 ```bash
+cmake --preset ninja-clang -DMDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS=ON
+cmake --build --preset ninja-clang
 ctest --test-dir build-clang -R '^webfront.integration.' --output-on-failure
 ```
 
 `webfront.integration.source` builds against this mddlog source tree.
-`webfront.integration.installed` first installs the current build to a scratch prefix,
-then uses its package. Each reports configuration, adapter compilation/static linkage,
-consumer compilation/executable linkage and execution as separate stages. Both run the
+`webfront.integration.installed` first removes its scratch prefix and installs the current
+build, then uses its package. Both tests clear their consumer build directory when the
+forwarded toolchain/configuration inputs change, including when an optional input is
+removed. Unchanged inputs retain incremental builds. Each reports configuration, adapter
+compilation/static linkage, consumer compilation/executable linkage and execution as separate stages. Both run the
 unchanged original `LoggerTests.cpp` and the WebFront-owned facade regressions. They
-register on all existing supported mddlog CI legs, with the compiler, std manifest,
+are explicitly enabled on the four supported release CI legs, with the compiler, std manifest,
 archive tools, sysroot, flags, configuration and MSVC runtime forwarded. The historical
 #66/#69 reference tests remain registered independently. No new mddlog module or installed
 facade header is introduced.

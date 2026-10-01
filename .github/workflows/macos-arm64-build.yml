@@ -44,7 +44,7 @@ jobs:
         echo "$llvm_root/bin" >> "$GITHUB_PATH"
 
     - name: Configure
-      run: cmake --preset ninja-macos-clang
+      run: cmake --preset ninja-macos-clang -DMDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS=ON
 
     - name: Build
       run: cmake --build --preset ninja-macos-clang --parallel 4

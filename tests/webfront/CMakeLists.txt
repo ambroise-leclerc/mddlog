@@ -32,26 +32,28 @@ target_link_libraries(mddlog_specs PRIVATE mddlog_webfront_test_bridge)
 
 # Actual WebFront-owned opt-in integration (#71), distinct from the #66 reference baseline.
 # An immutable revision lets every supported CI leg build the same application and adapter.
-CPMAddPackage(
-    NAME WebFrontIntegration
-    GITHUB_REPOSITORY ambroise-leclerc/WebFront
-    GIT_TAG b2c2dd6f2f03b826337c5d0f2a06c2445cda2f18
-    DOWNLOAD_ONLY YES
-)
-foreach(kind IN ITEMS source installed)
-    add_test(NAME webfront.integration.${kind}
-        COMMAND "${CMAKE_COMMAND}"
-            "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
-            "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
-            "-DWEBFRONT_SOURCE_DIR=${WebFrontIntegration_SOURCE_DIR}"
-            "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"
-            "-DAR=${CMAKE_AR}" "-DRANLIB=${CMAKE_RANLIB}"
-            "-DSTDLIB_MODULES_JSON=${CMAKE_CXX_STDLIB_MODULES_JSON}"
-            "-DOSX_SYSROOT=${CMAKE_OSX_SYSROOT}"
-            "-DCXX_FLAGS=${CMAKE_CXX_FLAGS}"
-            "-DMSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
-            "-DCONFIG=$<CONFIG>" "-DGENERATOR=${CMAKE_GENERATOR}" "-DKIND=${kind}"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/TestIntegration.cmake")
-    set_tests_properties(webfront.integration.${kind} PROPERTIES
-        LABELS "build;webfront;integration" TIMEOUT 900 RESOURCE_LOCK mddlog_install_tree)
-endforeach()
+if(MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS)
+    CPMAddPackage(
+        NAME WebFrontIntegration
+        GITHUB_REPOSITORY ambroise-leclerc/WebFront
+        GIT_TAG b2c2dd6f2f03b826337c5d0f2a06c2445cda2f18
+        DOWNLOAD_ONLY YES
+    )
+    foreach(kind IN ITEMS source installed)
+        add_test(NAME webfront.integration.${kind}
+            COMMAND "${CMAKE_COMMAND}"
+                "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
+                "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+                "-DWEBFRONT_SOURCE_DIR=${WebFrontIntegration_SOURCE_DIR}"
+                "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DAR=${CMAKE_AR}" "-DRANLIB=${CMAKE_RANLIB}"
+                "-DSTDLIB_MODULES_JSON=${CMAKE_CXX_STDLIB_MODULES_JSON}"
+                "-DOSX_SYSROOT=${CMAKE_OSX_SYSROOT}"
+                "-DCXX_FLAGS=${CMAKE_CXX_FLAGS}"
+                "-DMSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}"
+                "-DCONFIG=$<CONFIG>" "-DGENERATOR=${CMAKE_GENERATOR}" "-DKIND=${kind}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/TestIntegration.cmake")
+        set_tests_properties(webfront.integration.${kind} PROPERTIES
+            LABELS "build;webfront;integration" TIMEOUT 900 RESOURCE_LOCK mddlog_install_tree)
+    endforeach()
+endif()
