@@ -499,15 +499,19 @@ is also theirs: every sync may program a partial page.
 The adapter writes through the operations below. Like 7.2, they are an interface contract, not C++
 signatures; the implementing issue writes those.
 
-- **`open(streamId, segmentIndex, firstSequence)`** creates a segment, writes its preamble and
-  header frame (9.4), and returns only once they are durable, under the same guarantee as `sync`.
-  It answers **opened**, **noSpace** or **failed**.
+- **`open(streamId, segmentIndex, firstSequence)`** creates a segment and appends its preamble and
+  header frame (9.4). It answers **opened**, **noSpace** or **failed**. Like `append`, **opened
+  means nothing about durability**: the preamble and the header become durable through the first
+  `sync` that covers them (below), and only on an eligible backend.
 - **`append(segment, bytes)`** places bytes after the segment's current end. It answers **written**,
   with the new end offset, or **failed**. **Written means nothing about durability.** The bytes may
   still sit in a cache, a buffer or a controller.
 - **`sync(segment, offset)`** answers **durable** only when every byte of the segment before
-  `offset` will survive a power loss at any later instant. Otherwise it answers **failed**. It has
-  no third, optimistic answer.
+  `offset`, the preamble and header included, will survive a power loss at any later instant, and
+  so will the segment's existence, such as a new file's directory entry. On an eligible backend
+  (below), it answers **durable** or **failed**. A backend that is not eligible answers
+  **unsupported**, every time, and never durable. Unsupported is not a failure (9.6). There is no
+  optimistic answer.
 - **`read(segment, offset, length)`** and **`segments()`** serve recovery and verification. They
   return what the medium holds, or **unavailable**.
 - **`reclaim(segment)`** removes a whole segment. Only retention calls it (issue #87).
@@ -529,8 +533,10 @@ providers of 7.2, the integrator demonstrates them for each deployment, and the 
    confirmed offset may be any mix of absent, partial, complete or erased. The layout (9.4) is
    designed to read that region safely. The backend need not order those bytes.
 
-A backend that is not eligible may still store records. It never answers **durable**, so nothing
-it stores is ever durably confirmed, and no anchor ever covers it (7.3).
+A backend that is not eligible may still store records. The integrator declares it as such in the
+configuration. It opens segments and appends frames like any other, and its `sync` answers
+**unsupported**. Nothing it stores is ever durably confirmed, its durable position stays 0, and no
+anchor ever covers it (7.3).
 
 #### 9.3 What "durably confirmed" means
 
@@ -656,13 +662,13 @@ the old instance ends, and the discontinuity stays visible.
 | Cut point | Before the cut | What the medium may hold, and what the reader reports |
 |---|---|---|
 | **Before the append** of frame `n` | At most handed off (level 2). Durable position below `n`. | No frame `n`. The stream ends at an earlier record, possibly with trailing bytes from an earlier unconfirmed frame. Record `n` is lost. Since no anchor exceeds the durable position (7.3), the loss produces no Incomplete finding, and nothing ever claimed `n` durable. |
-| **During the append** | Same. | Part of frame `n`. The scan stops at its start (9.4) and reports trailing bytes there. No record is parsed from them. |
+| **During the append**, before it answers | Same. | Frame `n` absent, partial or complete. The cut may fall after the bytes were fully written, or even persisted, but before `append` returned. Absent or partial: the scan stops at its start (9.4) and reports trailing bytes there, from which no record is parsed. Complete with a valid check: it is a record, as in the next row. Neither case says anything about confirmation, which only a `sync` answer gives (9.3). |
 | **After the append, before `sync`** | Same. `append` answered written, which promises nothing. | Frame `n` absent, partial or complete, and the same for every unconfirmed frame before it. A complete frame with a valid check is a record. It lies past the durable position, so past any anchor, and the verifier reports it internally consistent and unanchored (7.5). |
-| **During `sync`**, before it answers | Same. | As in the previous row. A `sync` that has not answered confirms nothing. |
+| **During `sync`**, before it answers | Same. | As in the previous row. The bytes may already be persisted when the cut falls, and the frame then reads as complete. A `sync` that has not answered confirms nothing, whatever the reader finds. |
 | **After `sync` answered durable**, before the durable position was published | Not yet told. The record was confirmed in fact, but not reported. | Frame `n` is complete and valid, guaranteed by conditions 1 and 2 of 9.2. The host must treat a record it had no confirmation for as **unknown**, never as lost. |
 | **After the durable position was published** | Durable through `n`. | Frame `n` is complete and valid. If it is missing or damaged, that is not a power-loss outcome but a medium fault or an alteration. Up to the last anchor, the verifier reports Incomplete, Inconsistent or Altered (7.5). Past it, the loss cannot be told from records never written, which is the exposure-window limit of 7.5. |
-| **During `open`** of a new segment | No record of the new segment was confirmed, since `append` follows `open`. | A segment with no valid preamble or header frame. The reader reports it as a segment without a valid header, and reads no record from it. |
-| **After `open`, before the first append** | Same. | An empty segment: a valid header, no record frame. This is normal. |
+| **During `open`** of a new segment, before it answers | No record of the new segment was confirmed, since `append` follows `open` and a confirmation needs a `sync` covering the header. | The segment absent, or its preamble and header absent, partial or complete. Without a valid preamble and header frame, the reader reports a segment without a valid header and reads no record from it. With them, it is an empty segment, as in the next row. A valid header proves nothing about durability. |
+| **After `open`, before the first `sync`** that covers the header | Same. | As in the previous row: the header may be absent, partial or complete, since `opened` promised nothing. A complete header with no record frame is an empty segment. This is normal. |
 
 **What a reader concludes from trailing bytes.** In the **last** segment of a stream instance,
 trailing bytes are the expected trace of a cut, and the reader reports their offset and length.
@@ -671,12 +677,15 @@ segment's header carries `firstSequence` equal to that frame's sequence plus one
 continues across the boundary. Otherwise records are missing, and the chain check reports
 **Inconsistent** at the first record that does not follow (Decision 8). Duplicate segment indices
 with valid headers, a gap in segment indices, or a header whose `streamId` differs from its records
-are also reported as Inconsistent: the adapter of 9.6 never produces them.
+are also reported as Inconsistent: the adapter of 9.6 never produces them. These conclusions are
+the verifier's, which reads every segment. The adapter's startup check covers only part of them
+(9.6).
 
 #### 9.6 Storage failures and the audit health signal
 
 - **A failure ends durability for the stream instance.** If `open`, `append` or `sync` answers
-  failed or noSpace, or the adapter detects a retry with different bytes or a sequence out of order
+  failed or noSpace (an **unsupported** `sync` from a declared non-eligible backend is not a
+  failure), or the adapter detects a retry with different bytes or a sequence out of order
   (9.3), the adapter writes nothing more to that instance. It does not retry at the same offset,
   which could overwrite part of a frame, and it does not continue in a new segment, which would
   hide the damaged region. From then on, the persisting sink refuses events for that instance from
@@ -689,11 +698,18 @@ are also reported as Inconsistent: the adapter of 9.6 never produces them.
   failures, no space, duplicate mismatch, and sequence out of order. Events the sink had accepted
   but never confirmed when an instance failed are counted as **not durable at failure**, and they
   are reported as losses after admission.
-- **Recovery findings.** At startup, before a new instance writes, the adapter scans the last
-  segment of every earlier instance (9.5) and reports, through the same signal: trailing bytes
-  (offset and length), segments without a valid header, unknown layout versions, and every
-  inconsistency of 9.5. Recovering the chain state itself, and linking the new chain to the old
-  one, is issue #87.
+- **Recovery findings.** At startup, before a new instance writes, the adapter runs a bounded
+  check and reports, through the same signal, exactly what that check covers:
+  - for **every** segment, its preamble and header frame only: segments without a valid header,
+    unknown layout versions, and, per stream instance, duplicate segment indices and gaps in them;
+  - for the **last** segment of every earlier instance, a full frame scan (9.4): trailing bytes,
+    with their offset and length.
+
+  The check reads no record frame of an earlier segment. It recomputes no digest, does not check
+  that `firstSequence` follows on at a segment boundary, and does not compare the `streamId` of a
+  record with its header's. Those findings belong to the verifier (7.5), which reads every segment
+  in full, and the adapter reports none of them. Recovering the chain state itself, and linking the
+  new chain to the old one, is issue #87.
 - **Never through the failing path.** The adapter never reports a storage failure as an audit
   event, never writes it to the storage that failed, and never sends it through any sink that
   writes to that storage. The health signal is read by the host, as for ADR-002 Decision 3. A host
