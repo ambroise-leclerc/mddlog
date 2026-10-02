@@ -80,7 +80,7 @@ const speclab::Register auditRouting{
                       checks.expect(diagnostic->size() == 0, "diagnostic sink receives no audit record");
                       AuditSinkAdapter adapter;
                       auto             auditSink = std::make_shared<RecordingAuditSink>();
-                      adapter.addRing(ring);
+                      checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered, "ring registered");
                       adapter.setSink(auditSink);
                       auditSink->setEnabled(false);
                       const auto disabled = adapter.drainOnce();

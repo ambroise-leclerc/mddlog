@@ -114,6 +114,10 @@ public:
     [[nodiscard]] bool hasValidIdentity() const noexcept {
         return identityValid;
     }
+    /** @brief The stream identity every admitted event carries; empty when it was invalid. */
+    [[nodiscard]] std::string_view identity() const noexcept {
+        return streamId.view();
+    }
 
 private:
     std::array<AuditEvent, Capacity>  slots{};

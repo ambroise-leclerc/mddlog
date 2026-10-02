@@ -8,6 +8,7 @@ import mddlog.core.auditring;
 namespace {
 
 using mddlog::AuditDrainStatus;
+using mddlog::AuditRingRegistration;
 using mddlog::AuditSink;
 using mddlog::AuditSinkAdapter;
 using mddlog::core::AuditCategory;
@@ -59,7 +60,7 @@ const speclab::Register auditConfigurationIsObservable{
                       speclab::core::Checks checks;
                       AuditRing<1>          ring{"device:boot:producer"};
                       AuditSinkAdapter      adapter;
-                      adapter.addRing(ring);
+                      checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered, "ring registered");
                       checks.expect(ring.tryRecord(auditRequest()).wasAdmitted(), "event admitted before sink setup");
                       checks.expect(adapter.drainOnce().status == AuditDrainStatus::MissingSink, "missing sink is reported");
                       auto sink = std::make_shared<RecordingAuditSink>();
@@ -88,7 +89,8 @@ const speclab::Register auditIgnoresDisabledLogger{"The audit consumer ignores d
                                                                      AuditRing<1>     ring{"device:boot:producer"};
                                                                      AuditSinkAdapter adapter;
                                                                      auto             sink = std::make_shared<RecordingAuditSink>();
-                                                                     adapter.addRing(ring);
+                                                                     checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered,
+                                                                                   "ring registered");
                                                                      adapter.setSink(sink);
                                                                      checks.expect(ring.tryRecord(auditRequest()).wasAdmitted(),
                                                                                    "audit admitted with diagnostics disabled");
@@ -113,7 +115,7 @@ const speclab::Register auditIgnoresDiagnosticThreshold{
                       AuditRing<1>     ring{"device:boot:producer"};
                       AuditSinkAdapter adapter;
                       auto             sink = std::make_shared<RecordingAuditSink>();
-                      adapter.addRing(ring);
+                      checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered, "ring registered");
                       adapter.setSink(sink);
                       checks.expect(ring.tryRecord(auditRequest()).wasAdmitted(), "audit admitted with restrictive diagnostic threshold");
                       checks.expect(adapter.drainOnce().handedOff == 1 && sink->records.size() == 1, "audit still reaches its own sink");
@@ -135,7 +137,7 @@ const speclab::Register auditFailureRetainsAdmission{
                       AuditRing<1>          ring{"device:boot:producer"};
                       AuditSinkAdapter      adapter;
                       auto                  sink = std::make_shared<RecordingAuditSink>();
-                      adapter.addRing(ring);
+                      checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered, "ring registered");
                       adapter.setSink(sink);
                       checks.expect(ring.tryRecord(auditRequest()).sequence() == 1, "first event admitted");
                       checks.expect(!ring.tryRecord(auditRequest()).wasAdmitted() && ring.refusalCount() == 1, "saturation is refused immediately");
@@ -174,7 +176,7 @@ const speclab::Register auditPartialAcknowledgement{
                       AuditSinkAdapter      adapter;
                       auto                  sink = std::make_shared<RecordingAuditSink>();
                       sink->rejectSequence       = 2;
-                      adapter.addRing(ring);
+                      checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered, "ring registered");
                       adapter.setSink(sink);
                       for (int index = 0; index < 3; ++index)
                           checks.expect(ring.tryRecord(auditRequest()).wasAdmitted(), "event admitted");
@@ -207,8 +209,8 @@ const speclab::Register auditIndependentProducerRings{
                       AuditSinkAdapter      adapter;
                       auto                  sink = std::make_shared<RecordingAuditSink>();
                       sink->rejectStream         = "device:boot:A";
-                      adapter.addRing(first);
-                      adapter.addRing(second);
+                      checks.expect(adapter.addRing(first) == AuditRingRegistration::Registered, "ring registered");
+                      checks.expect(adapter.addRing(second) == AuditRingRegistration::Registered, "ring registered");
                       adapter.setSink(sink);
                       checks.expect(first.tryRecord(auditRequest()).wasAdmitted(), "first stream admitted");
                       checks.expect(second.tryRecord(auditRequest()).wasAdmitted(), "second stream admitted");
@@ -239,7 +241,7 @@ const speclab::Register auditHealthVisibleAfterWorkerFailure{
                       AuditSinkAdapter      adapter;
                       auto                  sink = std::make_shared<RecordingAuditSink>();
                       sink->mode                 = RecordingAuditSink::Mode::Throw;
-                      adapter.addRing(ring);
+                      checks.expect(adapter.addRing(ring) == AuditRingRegistration::Registered, "ring registered");
                       adapter.setSink(sink);
                       const auto admission = ring.tryRecord(auditRequest());
                       checks.expect(admission.wasAdmitted(), "producer sees only admission to memory");
@@ -255,6 +257,59 @@ const speclab::Register auditHealthVisibleAfterWorkerFailure{
                       checks.expect(admission.wasAdmitted(), "later failure does not retroactively change admission");
                       checks.raise();
                   })
+            .Execute();
+    }};
+
+const speclab::Register auditStreamIdentitiesAreUnique{
+    "The audit consumer refuses a ring whose stream identity is invalid or already registered",
+    "unit",
+    [] {
+        return speclab::Test("audit-stream-identity-uniqueness")
+            .Then("concurrent and recreated producers cannot share an identity, and refusal is observable",
+                  [] {
+                      speclab::core::Checks checks;
+                      AuditRing<2>          producerA{"device:boot9:producerA"};
+                      AuditRing<2>          producerB{"device:boot9:producerB"};
+                      AuditRing<2>          sameAsA{"device:boot9:producerA"};
+                      AuditRing<2>          invalid{"has spaces"};
+                      AuditSinkAdapter      adapter;
+                      auto                  sink = std::make_shared<RecordingAuditSink>();
+                      adapter.setSink(sink);
+                      checks.expect(adapter.addRing(producerA) == AuditRingRegistration::Registered
+                                        && adapter.addRing(producerB) == AuditRingRegistration::Registered,
+                                    "distinct identities are registered");
+                      checks.expect(adapter.addRing(sameAsA) == AuditRingRegistration::DuplicateStream, "a concurrent producer reusing an identity is refused");
+                      checks.expect(adapter.addRing(invalid) == AuditRingRegistration::InvalidStream, "an invalid identity is refused");
+                      const auto refused = adapter.healthSnapshot();
+                      checks.expect(refused.configurationErrors == 2 && refused.lastIssue == AuditDrainStatus::InvalidStream,
+                                    "each refusal is a configuration error in audit health");
+
+                      // Both registered streams start at sequence 1; their identities disambiguate them.
+                      checks.expect(producerA.tryRecord(auditRequest()).sequence() == 1 && producerB.tryRecord(auditRequest()).sequence() == 1,
+                                    "independent producers each emit sequence 1");
+                      checks.expect(sameAsA.tryRecord(auditRequest()).wasAdmitted(), "a refused ring can still admit to its own memory");
+                      checks.expect(adapter.drainOnce().handedOff == 2, "only registered rings are drained");
+                      checks.expect(sink->records.size() == 2 && sink->records[0].streamId() != sink->records[1].streamId(),
+                                    "(streamId, sequence) stays unambiguous after aggregation");
+                      checks.expect(sameAsA.acknowledgedCount() == 0, "the refused ring's event is never handed off under a duplicate identity");
+                      checks.raise();
+                  })
+            .And("a producer recreated with its old identity is refused once its counter restarts",
+                 [] {
+                     speclab::core::Checks checks;
+                     AuditSinkAdapter      adapter;
+                     auto                  sink = std::make_shared<RecordingAuditSink>();
+                     adapter.setSink(sink);
+                     auto first = std::make_unique<AuditRing<2>>("device:boot9:input");
+                     checks.expect(adapter.addRing(*first) == AuditRingRegistration::Registered, "first instance registered");
+                     checks.expect(first->tryRecord(auditRequest()).sequence() == 1, "first instance emits sequence 1");
+                     checks.expect(adapter.drainOnce().handedOff == 1, "first instance drained");
+                     AuditRing<2> recreated{"device:boot9:input"};
+                     checks.expect(adapter.addRing(recreated) == AuditRingRegistration::DuplicateStream, "the restarted counter cannot reuse the identity");
+                     AuditRing<2> renamed{"device:boot9:input2"};
+                     checks.expect(adapter.addRing(renamed) == AuditRingRegistration::Registered, "a new producer instance identity is accepted");
+                     checks.raise();
+                 })
             .Execute();
     }};
 

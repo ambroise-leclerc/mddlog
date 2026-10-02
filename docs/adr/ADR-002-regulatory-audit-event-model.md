@@ -256,9 +256,10 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   unreliable; an explicit "civil time unavailable/unreliable" state is representable, rather than
   being encoded as a zero or an epoch value.
 - **Sequence scope**: assigned by the producer, monotonic **per stream**, where a stream is one
-  producer within one boot session. Its exhaustion behavior and width must be stated by the
-  implementing issue (a 64-bit counter at any plausible event rate does not wrap within device
-  lifetime, which is the intended answer, but it should be written down rather than assumed).
+  producer within one boot session. The counter is 64 bits wide and starts at 1; refusals do not
+  consume a number. `UINT64_MAX` is admitted once, after which the stream permanently refuses with
+  `SequenceExhausted` rather than wrapping to an ambiguous value. At any plausible event rate this
+  is not reached within device lifetime, but the behavior is stated rather than assumed.
 - **Stream identity must identify the producer, not only the boot.** An earlier revision described
   it as "a boot-session identifier that changes on restart", which distinguishes restarts but not
   the concurrent producers ADR-001 Decision 4 explicitly allows (one ring each, aggregated by the
@@ -270,6 +271,11 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   property, where a globally unique identifier may leave some components implicit but must not give
   up the uniqueness. It is preserved through serialization, and **a producer destroyed and recreated
   within one boot session gets a new stream identity** whenever its counter restarts.
+  The library enforces what it can observe: `AuditSinkAdapter::addRing()` refuses a ring whose
+  identity is invalid or already registered on that adapter, including a recreated producer that
+  kept its identity, and reports the refusal as a configuration error in audit health. Uniqueness
+  across adapters, processes and boot sessions cannot be established from the string alone and
+  remains the host's obligation.
 - No global order is promised across independent producers or across devices; `(streamId, sequence)`
   identifies an event unambiguously, and that is the whole promise.
 
