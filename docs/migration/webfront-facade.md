@@ -237,7 +237,7 @@ structured producer/context/transport bindings described in #70.
 
 ## WebFront adoption (#72)
 
-WebFront revision `5a0f70fcc5d0abf00d86e74df96f612d68a521b7` binds the browser sink,
+WebFront revision `0ad89878972bfd81c91258857ff23084fbddd41a` binds the browser sink,
 emission context and lifecycle described above. `webfront.integration.*` now builds
 and tests that revision. ADR-003 remains **Proposed**; adoption does not accept it.
 
@@ -249,6 +249,12 @@ and tests that revision. ADR-003 remains **Proposed**; adoption does not accept 
   transport is attached and returns it when it exits. The pool mutex orders each
   hand-over, so each ring has one producer at a time and one consumer. An exhausted pool
   returns `RingUnavailable`; a full ring returns `RingFull`; neither waits.
+- **Bounded browser output.** The rings bound producers, not the WebSocket's write queue the
+  consumer feeds. Diagnostic frames use WebFront's `WebSocket::tryWrite`, refused once 64
+  frames await the network; refusals are dropped without logging and counted by
+  `WebLink::droppedLogFrames()` and `TransportHealth::overflows`. Application frames are
+  never dropped. A stalled browser (one write never completing, 10,240 diagnostics) leaves
+  64 frames queued and 10,176 counted refusals.
 - **Consumer-thread diagnostics.** The consumer thread's records go to a ring registered with
   `addConsumerRing()`. Those emitted during dispatch are acknowledged without delivery and
   counted in `reentrantRecords`.
