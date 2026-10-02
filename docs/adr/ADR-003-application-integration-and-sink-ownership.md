@@ -5,8 +5,11 @@ Accepted — Decisions 1–6 are the integration contract the codebase is expect
 They are implemented by #67 (sink registry), #68 (bounded transport consumer), #69 (facade),
 #70 (emission context) and #71 (optional integration), and adopted in WebFront by #72
 ([WebFront#222](https://github.com/ambroise-leclerc/WebFront/pull/222), merged as
-[`3027d33`](https://github.com/ambroise-leclerc/WebFront/commit/3027d33)). Acceptance alone does not
-establish validation of a particular build (see Consequences and Approval).
+[`3027d33`](https://github.com/ambroise-leclerc/WebFront/commit/3027d33)). Decision 4's waiting
+removal is accepted with its two exceptions, self-removal and two-party mutual cross-removal, under
+which `remove()` returns before the target is quiescent; Decision 4 states their consequences.
+Acceptance alone does not establish validation of a particular build (see Consequences and
+Approval).
 
 Requested in the review of PR #6: ADR-001 and ADR-002 define a bounded core and an audit contract,
 neither of which is sufficient to replace an existing application logger. This record covers the
@@ -231,7 +234,9 @@ boundary with a registry where:
   reallocate under an in-flight iteration);
 - **removal waits for in-flight invocations of that sink to finish before returning**, so a
   `~WebLink` that has returned guarantees its captured `this` is no longer reachable from any sink
-  call. This is the property `sinks[id] = nullptr` does not provide;
+  call. This is the property `sinks[id] = nullptr` does not provide. The guarantee is unconditional
+  for a removal issued outside every callback of the registry; the two exceptions below apply only
+  to removals issued from inside a callback;
 - slots are reclaimed rather than leaked one per connection;
 - registering several sinks returns one handle **per sink**, fixing the `size() - 1` defect.
 
@@ -243,8 +248,28 @@ so no new invocation starts, and completes once the current invocation returns. 
 other context waits as described. The two remaining options — rejecting the self-call, or a
 non-waiting self path with no completion guarantee — are worse: the first makes a sink unable to
 retire itself in response to its own transport error, which Decision 5 needs; the second gives back
-the guarantee the decision exists for. A removal issued from inside a *different* sink's callback
-still waits, and an implementation must not let two sinks removing each other wait in a cycle.
+the guarantee the decision exists for.
+
+**Removal from inside a different sink's callback waits, except in a two-party cycle.** If callback
+A's invocation removes B while B's invocation concurrently removes A, both waiting would deadlock.
+The registry detects that two-party cycle and lets the second remover return without waiting. Its
+target is retired — no new invocation starts — but the target's current invocation, which is the
+one blocked removing the other sink, may still be running when that `remove()` returns, and its
+callback is released only once it ends. Consequences:
+
+- a remover that returns as the losing side of such a cycle has **no quiescence guarantee**: it must
+  not release anything the removed callback uses on the strength of the return. Quiescence is
+  established by the other side, whose own removal returns only after the loser's invocation ends;
+- cycles of **three or more** callbacks removing one another are not detected and deadlock. Sinks
+  must not form them;
+- a removal issued outside every callback (destructors, close and completion handlers, ordinary
+  code) is never affected by either exception.
+
+WebFront relies only on the unconditional cases: `~WebLink`, the WebSocket close handler and an
+asynchronous write-completion handler remove a transport from outside the registry, and a
+synchronous write failure removes the transport from inside its own invocation (deferred
+self-removal). No transport callback removes another transport, so neither a cross-removal cycle
+nor its exception can arise there.
 
 **The handle change is a breaking change for multi-sink call sites, deliberately.** Today
 `addSinks(a, b, c)` returns one `size_t`; the replacement returns one handle per sink, so a call
