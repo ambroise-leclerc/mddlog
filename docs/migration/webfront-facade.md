@@ -234,3 +234,47 @@ for the default standalone path (63 tests). These local results do not establish
 on other CI platforms. Configuration with CMake 3.31 and the option on fails explicitly.
 ADR-003 remains **Proposed**; option adoption does not accept the ADR or install the
 structured producer/context/transport bindings described in #70.
+
+## WebFront adoption (#72)
+
+WebFront revision `35141a5e5874f8f66464ebbbcaf7aed90539c054` binds the browser sink,
+emission context and lifecycle described above. `webfront.integration.*` now builds
+and tests that revision. ADR-003 remains **Proposed**; adoption does not accept it.
+
+- **Bounded browser lane.** With `WEBFRONT_USE_MDDLOG=ON`, `log::addTransport()` registers
+  the browser sink on `TransportConsumer`, not as a synchronous `TextLogger` callback. The
+  first registration starts a WebFront-owned consumer thread. All producer rings are
+  registered before it starts, as `addRing()` requires: a fixed pool of 32 rings of
+  128 records. A producer thread claims one free ring on its first emission while a
+  transport is attached and returns it when it exits. The pool mutex orders each
+  hand-over, so each ring has one producer at a time and one consumer. An exhausted pool
+  returns `RingUnavailable`; a full ring returns `RingFull`; neither waits.
+- **Bounded browser output.** The rings bound producers, not the WebSocket's write queue the
+  consumer feeds. Diagnostic frames use WebFront's `WebSocket::tryWrite`, refused once 64
+  frames await the network; refusals are dropped without logging and counted by
+  `WebLink::droppedLogFrames()` and `TransportHealth::overflows`. Application frames are
+  never dropped. A stalled browser (one write never completing, 10,240 diagnostics) leaves
+  64 frames queued and 10,176 counted refusals.
+- **Consumer-thread diagnostics.** The consumer thread's records go to a ring registered with
+  `addConsumerRing()`. Those emitted during dispatch are acknowledged without delivery and
+  counted in `reentrantRecords`.
+- **Failure ordering.** WebFront's `WebSocket::onWriteError` runs before the write-error
+  diagnostic, including after `stop()`. `WebLink` calls `reportFailure` through the facade,
+  then the WebSocket logs. A normal close calls `removeTransport`. No
+  `WebLinkEvent::Code::closed` is emitted; the destructor removes the transport before its
+  own diagnostic. Detachment happens once and the link never attaches again.
+- **Context.** `WebLink` installs `ContextScope` for received messages, close and
+  destruction (`weblink`), calls from JavaScript (`cppFunction`, `js-cpp:<CallId>`) and
+  returns of C++ calls (`jsFunction`, `cpp-js:<CallId>`). Transports receive the owned
+  fields of #70 after the link has gone.
+- **Registrations.** `main` in `HelloWorld.cpp` and `JasmineTest.cpp` keeps and removes its
+  console handle. `LoggerTests.cpp` already did and stays byte-for-byte unchanged.
+- **Audit.** Neither the facade nor the transport lane accepts audit types.
+  `TransportConsumerSpec.cpp` checks at compile time that `TransportConsumer` rejects
+  an `AuditRing`, an `AuditSink` and an audit-event callback.
+
+`MddlogTransportTests.cpp` in WebFront covers saturation while the consumer is blocked,
+synchronous throws, reentrant logging, asynchronous failure reports, quiescent removal
+during concurrent emission, the seven events, and WebLink disconnection, write failures
+and destruction before the drain. Its results, including sanitizer runs, are reported
+in the adoption pull requests.

@@ -27,5 +27,10 @@ transport error, before logging the error elsewhere. Both retire the sink throug
 quiescent removal contract; self-removal is deferred until the callback returns. Normal removal
 releases the self-handle lookup cell without incrementing failure counters.
 
+Threads that start after consumption, such as connection threads, cannot register rings
+late. Register a fixed pool of producer rings first, hand each to one thread at a time under
+a mutex, and return it when the thread exits. WebFront's adoption (#72) follows this pattern;
+see `webfront-facade.md`.
+
 This implements the transport portion of proposed ADR-003; it does not accept the ADR or provide
 WebFront's facade from issue #69.
