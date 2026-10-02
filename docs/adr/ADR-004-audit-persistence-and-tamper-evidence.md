@@ -995,21 +995,47 @@ the verifier's, which reads every segment. The adapter's startup check covers on
 
 #### 9.6 Storage failures and the audit health signal
 
+- **A reserve keeps the ledger writable.** Freeing space needs ledger records first: a `trim` must
+  be durably confirmed before any segment is reclaimed (10.2, 10.4). The adapter therefore keeps a
+  **reserve** of free segments that only the ledger (Decision 10) may open, and counts the free
+  segments itself. The reserve holds `F = N + S + 3` ledger record frames, where `N` is the number
+  of segments on the medium, `S` the declared maximum of producer streams open at once, and each
+  frame is counted at 813 bytes, the largest frame of a contract-version-1 record under layout
+  version 1 (9.4). `N` bounds the `recovered` records of a restart, `S` the `close` records of an
+  orderly shutdown, and the three others are record 1 of a new ledger, one `trim` and
+  `mddlog.ledger.close`. The reserve is the number of segments that holds `F` such frames, at
+  `⌊(segment size − 125) / 813⌋` frames per segment (125 bytes being the largest preamble and header
+  frame), plus one segment. The integrator declares the segment size, `N` and `S`. An adapter whose
+  medium cannot hold the reserve and one more segment refuses to start and reports a configuration
+  error. The ledger opens ordinary free segments while there are any, and draws on the reserve only
+  when there are none.
+- **Full is a state, not a failure.** When a producer stream needs a new segment and only the
+  reserve is free, the stream is **full**. The adapter appends nothing to it, so no partial frame is
+  ever written, and the persisting sink refuses that stream's events from `accept()`. They stay in
+  the ring, and producers see refusals at the call site (ADR-002 Decision 3). They are never
+  blocked. Meanwhile, retention (10.4, 10.5) writes its `trim` records from the reserve and
+  reclaims segments. When a reclaim leaves a free segment beyond the reserve, the stream opens it
+  and leaves the full state. Its sequence and chain continue without a gap, because nothing was
+  written and nothing was skipped. If retention cannot free anything, for example because an anchor
+  does not advance (10.4) or the streams found are inconsistent (10.3), the stream stays full until
+  the host acts. Evidence is never deleted to make room.
 - **A failure ends durability for the stream instance.** If `open`, `append` or `sync` answers
   failed or noSpace (an **unsupported** `sync` from a declared non-eligible backend is not a
-  failure), or the adapter detects a retry with different bytes or a sequence out of order
-  (9.3), the adapter writes nothing more to that instance. It does not retry at the same offset,
-  which could overwrite part of a frame, and it does not continue in a new segment, which would
-  hide the damaged region. From then on, the persisting sink refuses events for that instance from
-  `accept()`. They stay in the ring, the ring fills, and producers see refusals at the call site
-  (ADR-002 Decision 3). The host decides whether to stop, degrade or restart. A restart starts a
-  new instance, with the discontinuity visible.
+  failure; a noSpace from the backend means its capacity was declared wrongly, since the adapter
+  never issues a write beyond the free segments it counts), or the adapter detects a retry with
+  different bytes or a sequence out of order (9.3), the adapter writes nothing more to that
+  instance. It does not retry at the same offset, which could overwrite part of a frame, and it does
+  not continue in a new segment, which would hide the damaged region. From then on, the persisting
+  sink refuses events for that instance from `accept()`. They stay in the ring, the ring fills, and
+  producers see refusals at the call site (ADR-002 Decision 3). The host decides whether to stop,
+  degrade or restart. A restart starts a new instance, with the discontinuity visible.
 - **What the health signal reports.** Alongside the counters of ADR-002 Decision 3, the adapter
-  publishes, for each stream instance, its durable position and its storage state, **persisting**
-  or **failed**, and, across instances, counters with the last cause: open, append and sync
-  failures, no space, duplicate mismatch, and sequence out of order. Events the sink had accepted
-  but never confirmed when an instance failed are counted as **not durable at failure**, and they
-  are reported as losses after admission.
+  publishes, for each stream instance, its durable position and its storage state, **persisting**,
+  **full** or **failed**, and, across instances, the free segments left beyond the reserve and
+  counters with the last cause: entries into the full state, open, append and sync failures, no
+  space, duplicate mismatch, and sequence out of order. Events the sink had accepted but never
+  confirmed when an instance failed are counted as **not durable at failure**, and they are reported
+  as losses after admission.
 - **Recovery findings.** At startup, before a new instance writes, the adapter runs a bounded
   check and reports, through the same signal, exactly what that check covers:
   - for **every** segment, its preamble and header frame only: segments without a valid header,
@@ -1154,17 +1180,21 @@ their last durably confirmed record ends.
   writes the `Failed` form of the affected records, citing the last position that checks. It
   reports an integrity fault through audit health. It never repairs, rewrites or reorders the
   evidence, and retention never removes records of a stream found inconsistent. Releasing them is a
-  decision for the host, outside the library. Until then, a full medium is handled by the storage
-  contract (Decision 9), never by deleting evidence.
+  decision for the host, outside the library. Until then, producer streams that need space stay
+  full (9.6), and no evidence is deleted.
 
 #### 10.4 Rotation: removing a prefix
 
 A bounded medium removes the oldest records of a stream that is still kept. A removal always takes
-a **prefix**: records `1 … q`, never a range in the middle. How storage groups records for removal
-is Decision 9's (9.1). `q` is the boundary the trim record states, fixed before removal begins. The
-prefix actually removed is `1 … k−1`, where `k` is the first record present: `k = q + 1` after a
-complete removal, and `k ≤ q` after an interrupted one.
+a **prefix**: records `1 … q`, never a range in the middle. `q` is the boundary the trim record
+states, fixed before removal begins. The prefix actually removed is `1 … k−1`, where `k` is the
+first record present: `k = q + 1` after a complete removal, and `k ≤ q` after an interrupted one.
 
+- **Whole segments only.** Storage removes whole segments, never part of one (9.1). The adapter
+  therefore chooses `q` as the last record of one of the stream's segments, and never writes a
+  trim whose `q` ends inside a segment. A complete removal reclaims exactly the segments whose
+  records all lie in `1 … q`, which leaves `k = q + 1`. The finest rotation step is therefore one
+  segment, and the segment size the integrator declares sets it.
 - **The verifiable starting point.** Before the removal, the adapter writes `mddlog.stream.trim`
   with `q` and `H_q`. After the removal, a reader verifies the stream from record `q + 1`, using
   `H_q` from the trim record as the start value in place of `H_0`:
@@ -1173,12 +1203,14 @@ complete removal, and `k ≤ q` after an interrupted one.
   digest that reaches the anchor at `p ≥ q + 1` also confirms `H_q`, because no other start value
   could reach `H_p` short of breaking SHA-256.
 - **Never past the anchor.** When a provider is configured, the adapter trims a stream that keeps
-  records only up to that stream's latest accepted anchor: `q ≤ p`. Removing a whole ended stream is
+  records only up to that stream's latest accepted anchor: `q ≤ p`. With whole segments, `q` is the
+  last record of the latest segment that ends at or before `p`. If no segment does, nothing of that
+  stream is trimmed until the anchor advances. Removing a whole ended stream is
   retention, not rotation (10.5). With `q = p`, the trim record's digest is compared directly with
   the anchor's, and a match yields **Anchored** at `p` with no anchored record left in the log.
   Trimming past `p` would remove the only records from which `H_p` can be recomputed, and would turn
   an anchored stream into an unverifiable one. If the anchor cannot advance, the stream cannot be
-  trimmed further, and a full medium is handled by the storage contract (Decision 9). A deployment with no
+  trimmed further. Producer streams that need space then stay full (9.6). A deployment with no
   provider trims without this bound, and its streams are reported unanchored in any case.
 - **No accepted anchor, or no provider answer.** When a provider is configured and no anchor has
   been accepted for the stream, there is no `p`, and rotation removes nothing from that stream. When
@@ -1186,19 +1218,19 @@ complete removal, and `k ≤ q` after an interrupted one.
   digest the adapter already holds from its own `advance` (7.3). Otherwise it waits. Removing a
   whole ended stream follows 10.5.
 - **Room to record the trim.** The trim record must be durably confirmed before space is freed, so a
-  full medium could prevent the very record that frees it. The storage contract (Decision 9) must keep the
-  capacity this requires, or an equivalent strategy, without deleting evidence silently and without
-  holding producers while the provider is awaited (7.3).
+  full medium could prevent the very record that frees it. The reserve of 9.6 keeps that room for
+  the ledger, and producers are refused rather than held while the provider is awaited (7.3, 9.6).
 - **The retained checkpoint.** A trim at or past a reader's retained checkpoint `p_r` (7.4) ends the
   protection that checkpoint gave to its prefix. With `q = p_r`, the reader compares the trim
   digest with `H_r`. With `q > p_r`, the check no longer applies, and the report says so. That is
   the cost of a bounded medium, and the declared retention policy is the only bound on it.
-- **Interrupted removal.** Removal proceeds from the oldest record forward. If it stops part way,
-  records `k … q` remain, with `k > 1`. The reader takes record `k`'s stored digest as the start
-  value for record `k + 1`, and requires the chain to reach the trim's `H_q` at record `q`. If it
-  does, those records are reported as left over from an interrupted removal. If it does not, the
-  stream is Inconsistent. A trim record whose records are all still present is reported as a removal
-  that did not happen, and the stream is verified from `H_0`, with `H_q` also checked.
+- **Interrupted removal.** Removal reclaims segments from the oldest forward. If it stops part way,
+  records `k … q` remain, with `k > 1` the first record of the oldest segment left. The reader takes
+  record `k`'s stored digest as the start value for record `k + 1`, and requires the chain to reach
+  the trim's `H_q` at record `q`. If it does, those records are reported as left over from an
+  interrupted removal. If it does not, the stream is Inconsistent. A trim record whose records are
+  all still present is reported as a removal that did not happen, and the stream is verified from
+  `H_0`, with `H_q` also checked.
 
 #### 10.5 Retention: removing whole streams and ledgers
 
@@ -1244,12 +1276,14 @@ means that no record was lost between the last stored record and the restart.
 | **Trim past the anchor** | With a provider configured, a trim with `q > p` that leaves records of the stream is a finding: `H_p` can no longer be recomputed. The stream is **Cannot verify** with that cause (7.5), and records `q+1 … m` are internally consistent only. |
 
 **Validation cases an implementation must cover.** Rotation with `q < p`, with `q = p`, and the
-refusal of `q > p`; rotation with no accepted anchor and with an unavailable provider; a full
-medium before the trim is written; an interruption after the trim is confirmed, before and during
-removal; whole-stream removal for each answer of `latest` (10.5); producer admission refusing
-`mddlog.ledger.origin`, `mddlog.ledger.predecessor` and another `mddlog.` action without consuming
-a sequence, while admitting an ordinary action, and the adapter building ledger records through its
-own path; and each malformed ledger record listed in 10.2.
+refusal of `q > p`; rotation with no accepted anchor and with an unavailable provider; a full medium
+before the trim is written; a producer stream that enters the full state and leaves it when a
+reclaim frees a segment, with no gap in its chain; a trim chosen at a segment boundary below the
+anchor, and no trim when no segment ends at or before it; an interruption after the trim is
+confirmed, before and during removal; whole-stream removal for each answer of `latest` (10.5);
+producer admission refusing `mddlog.ledger.origin`, `mddlog.ledger.predecessor` and another
+`mddlog.` action without consuming a sequence, while admitting an ordinary action, and the adapter
+building ledger records through its own path; and each malformed ledger record listed in 10.2.
 
 **Limits this decision states.** The ledger lives in the mutable log. Its records are only as
 trustworthy as the ledger's own coverage, and a rewriting adversary can forge ledger records past
@@ -1313,7 +1347,9 @@ disqualify the backend.
   audit ring fills and producers are refused, by design, rather than continuing unpersisted.
 - The ledger (Decision 10) adds records and a durable-confirmation wait at every stream opening,
   close, trim and restart. A bounded medium also cannot trim past an anchor that fails to advance.
-  The storage contract (Decision 9) then decides what a full medium does.
+  Producer streams that need space then stay full, and are refused at the call site (9.6).
+- The ledger's reserve (9.6) takes a share of the medium that grows with its segment count. With
+  64 KiB segments, it is about 1.2 % of the medium, plus a few segments.
 - Only the export format remains open (Decision 4), and nothing stored depends on it. The record
   stays Proposed until its acceptance review (#88): it bounds the design and specifies it, but no
   part of it is implemented. This
