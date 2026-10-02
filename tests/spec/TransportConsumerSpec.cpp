@@ -23,6 +23,7 @@ template <typename Callback>
 concept RegistersTransport = requires(mddlog::adapter::TransportConsumer& consumer, Callback callback) { consumer.addTransport(callback); };
 
 static_assert(ConsumesRing<mddlog::core::RingLog<4>>);
+static_assert(RegistersTransport<void (*)(const mddlog::core::LogRecord&)>);
 static_assert(!ConsumesRing<mddlog::core::AuditRing<4>>);
 static_assert(!RegistersTransport<std::shared_ptr<mddlog::sinks::AuditSink>>);
 static_assert(!RegistersTransport<std::function<void(const mddlog::core::AuditEvent&)>>);
