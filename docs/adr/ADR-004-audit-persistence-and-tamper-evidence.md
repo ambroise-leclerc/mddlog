@@ -1,11 +1,11 @@
 # ADR-004: Audit persistence and tamper evidence
 
 ## Status
-Proposed — **bounded and specified, not implemented, and not accepted.** Every question of
-Decision 4 is resolved by a numbered decision or deferred by Decision 11 with its reason. The record
-is ready for the milestone A acceptance review (`ADR-004-milestone-a-review.md`, #88). **Acceptance
-is the maintainer's decision**; preparing the review, closing #88 or merging this text does not
-amount to it. No part of the design is implemented, so do not read this record as a capability.
+Accepted — milestone A, 2026-10-03. **The design is accepted; nothing is implemented.** Decisions 1
+and 7 to 11 are the design of record for the persistence work of epic #11 (#89 to #93), and
+Decision 11 lists what that work does not include. Acceptance is distinct from implementation and
+from validation evidence: no part of this record is a capability until the lots that realize it are
+merged and verified, so do not read it as one.
 
 ## Context
 
@@ -192,7 +192,7 @@ witness outside the device — distinguishes it from the truth.
 
 Until it is implemented and verified, ADR-002 Decision 3 stands unchanged: mddlog promises in-memory
 admission only, and power loss is outside every guarantee. This record's existence is not evidence of
-a capability, which is the same caution the index applies to every Proposed record.
+a capability, which is the same caution the index applies to every ADR: an Accepted record is not a claim of implementation.
 
 ### 7. The anchor, its providers, and the monotonic position
 
@@ -1398,13 +1398,13 @@ disqualify the backend.
   deferred (Decision 11). The initial backend therefore offers **no authorship evidence** and **no
   reporting**. Nothing stored depends on any of them, but a deployment that needs them must wait for
   a later record or provide its own.
-- The record stays Proposed until the maintainer decides at the milestone A review. It specifies the
-  design, but no part of it is implemented, and its acceptance is a decision the closing of #88 does
-  not carry.
+- The record was accepted by the maintainer at the milestone A review (2026-10-03). It specifies the
+  design, but no part of it is implemented; milestone B (#89 to #93) is released from its dependency
+  on acceptance, not from its other prerequisites or from validation.
 
 ### Risks and Mitigations
 - **The record is read as a plan rather than a boundary.** *Mitigation*: Status and Decision 6 both
-  say what it is; the index marks it Proposed like the rest.
+  say what it is; the index marks it Accepted, and both say that acceptance is not implementation.
 - **The chain is mistaken for the whole mechanism.** This is not hypothetical — the previous
   revision of this record made exactly that error, claiming detection from chaining alone when a
   rewriting adversary defeats it by recomputation or truncation. *Mitigation*: Decision 1 states the
@@ -1439,9 +1439,11 @@ disqualify the backend.
   verifier specified there.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review.
-- **Approved By**: pending (project maintainer).
-- **Review Date**: the milestone A acceptance review. Decision 4's questions are all resolved or
-  deferred with their reason (Decision 11), which was the precondition. The review file is
-  `ADR-004-milestone-a-review.md`. Acceptance is a precondition for any persistent implementation
-  (#89 to #93), and it is the maintainer's to give.
+- **Decision Date**: 2026-10-03.
+- **Approved By**: ambroise-leclerc (project maintainer).
+- **Review Date**: the milestone A acceptance review (`ADR-004-milestone-a-review.md`). Decision 4's
+  questions were all resolved or deferred with their reason (Decision 11), which was the
+  precondition. Decisions 1 and 7 to 11 are accepted as written; the deferred items of Decision 11
+  stay deferred and no lot is opened for them by this approval. Milestone B (#89 to #93) may proceed.
+  Review again if the canonical contract, the anchoring contract or the storage contract needs to
+  change during implementation; such a change is an amendment to this record.
