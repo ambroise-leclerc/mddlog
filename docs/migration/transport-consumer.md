@@ -32,5 +32,5 @@ late. Register a fixed pool of producer rings first, hand each to one thread at 
 a mutex, and return it when the thread exits. WebFront's adoption (#72) follows this pattern;
 see `webfront-facade.md`.
 
-This implements the transport portion of proposed ADR-003; it does not accept the ADR or provide
-WebFront's facade from issue #69.
+This implements the transport portion of ADR-003 (accepted on 2026-10-02); WebFront's facade is
+issue #69.
