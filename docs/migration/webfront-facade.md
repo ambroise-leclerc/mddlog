@@ -237,7 +237,7 @@ structured producer/context/transport bindings described in #70.
 
 ## WebFront adoption (#72)
 
-WebFront revision `45fb6add12c5202ef6bd08bdaa163f078c268433` binds the browser sink,
+WebFront revision `4199bdb99e30e8c958c16b9f9a8a4f76bb22fb65` binds the browser sink,
 emission context and lifecycle described above. `webfront.integration.*` now builds
 and tests that revision. ADR-003 remains **Proposed**; adoption does not accept it.
 
