@@ -168,8 +168,8 @@ independently. For correlation beyond this window, the host must attach a proces
 and link-generation discriminator in its external envelope, or encode a session-qualified
 link id within the 40-byte correlation capacity (refusing longer values). The component is
 not part of call identity: the second request for link 2 remains the same call when its
-component changes from `jsFunction` to `weblink` on disconnect. ADR-003 remains Proposed;
-this reference implementation does not change its review status or deploy WebFront adoption.
+component changes from `jsFunction` to `weblink` on disconnect. This reference implementation
+did not deploy WebFront adoption; see the #72 section below.
 
 `WebFrontContextSpec.cpp` reproduces all seven events of Decision 6, destroys borrowed
 connection strings before draining, compares delivery to two transports, and checks exact
@@ -232,14 +232,15 @@ Local verification on Linux used Clang 21.1.8/libc++, CMake 4.2.3/Ninja for the 
 source and installed paths (68 WebFront tests each), and CMake 3.31.10/Unix Makefiles
 for the default standalone path (63 tests). These local results do not establish results
 on other CI platforms. Configuration with CMake 3.31 and the option on fails explicitly.
-ADR-003 remains **Proposed**; option adoption does not accept the ADR or install the
-structured producer/context/transport bindings described in #70.
+The option alone does not install the structured producer/context/transport bindings
+described in #70; #72 below does.
 
 ## WebFront adoption (#72)
 
 WebFront revision `35141a5e5874f8f66464ebbbcaf7aed90539c054` binds the browser sink,
 emission context and lifecycle described above. `webfront.integration.*` now builds
-and tests that revision. ADR-003 remains **Proposed**; adoption does not accept it.
+and tests that revision. ADR-003 was accepted on 2026-10-02, after this adoption; see its
+Approval section.
 
 - **Bounded browser lane.** With `WEBFRONT_USE_MDDLOG=ON`, `log::addTransport()` registers
   the browser sink on `TransportConsumer`, not as a synchronous `TextLogger` callback. The

@@ -1,7 +1,15 @@
 # ADR-003: Application integration and sink ownership
 
 ## Status
-Proposed — drafted for maintainer review, not yet acted on.
+Accepted — Decisions 1–6 are the integration contract the codebase is expected to conform to.
+They are implemented by #67 (sink registry), #68 (bounded transport consumer), #69 (facade),
+#70 (emission context) and #71 (optional integration), and adopted in WebFront by #72
+([WebFront#222](https://github.com/ambroise-leclerc/WebFront/pull/222), merged as
+[`3027d33`](https://github.com/ambroise-leclerc/WebFront/commit/3027d33)). Decision 4's waiting
+removal is accepted with its two exceptions, self-removal and two-party mutual cross-removal, under
+which `remove()` returns before the target is quiescent; Decision 4 states their consequences.
+Acceptance alone does not establish validation of a particular build (see Consequences and
+Approval).
 
 Requested in the review of PR #6: ADR-001 and ADR-002 define a bounded core and an audit contract,
 neither of which is sufficient to replace an existing application logger. This record covers the
@@ -15,7 +23,7 @@ and every claim below names the file and line it was read from there. Issue #66 
 reference from a fresh clone of that commit on 28 September 2026, when it was also the head of
 WebFront's `develop` branch; it is the pinned baseline for implementation. The corrections that
 revalidation required are applied in place and listed in [Revalidation at `7be626c`](#revalidation-at-7be626c-66).
-Revalidation does not change the status above: acceptance remains a separate maintainer decision.
+Revalidation did not change the status; acceptance followed the implementation (see Approval).
 
 ## Context
 
@@ -184,7 +192,7 @@ enable mask and maps it explicitly:
 `webfront::log::Debug` for display and `LogLevel::Fatal` into `webfront::log::Error`. Audit is not a
 `LogLevel` since #58, and `AuditEvent` is **not routed to this facade at all** (Decision 6).
 
-**Proposed: the mask lives in the adapter** (chosen by #66, subject to review of this record).
+**Decided: the mask lives in the adapter** (chosen by #66, accepted with this record).
 mddlog's `SimpleLogger` keeps its single threshold: no other consumer needs per-level enablement,
 and adding it there would change the filtering semantics every existing mddlog user relies on for
 one consumer's benefit. The adapter's mask is a set of atomic per-level flags, so `set()` concurrent
@@ -206,7 +214,7 @@ Three options, and this record recommends the second:
 What this record rules out is a fourth, unstated option: implying that "both are C++23" makes the
 dependency work. It does not, and the CMake floors differ by a major version.
 
-**Proposed: option 2, with this split of responsibilities** (chosen by #66, subject to review of this record):
+**Decided: option 2, with this split of responsibilities** (chosen by #66, accepted with this record):
 
 - **mddlog** gains the module-side pieces that are general, not WebFront-specific: the sink registry
   of Decision 4 and the bounded transport consumer of Decision 5, in the adapter zone and registered
@@ -226,7 +234,9 @@ boundary with a registry where:
   reallocate under an in-flight iteration);
 - **removal waits for in-flight invocations of that sink to finish before returning**, so a
   `~WebLink` that has returned guarantees its captured `this` is no longer reachable from any sink
-  call. This is the property `sinks[id] = nullptr` does not provide;
+  call. This is the property `sinks[id] = nullptr` does not provide. The guarantee is unconditional
+  for a removal issued outside every callback of the registry; the two exceptions below apply only
+  to removals issued from inside a callback;
 - slots are reclaimed rather than leaked one per connection;
 - registering several sinks returns one handle **per sink**, fixing the `size() - 1` defect.
 
@@ -238,8 +248,28 @@ so no new invocation starts, and completes once the current invocation returns. 
 other context waits as described. The two remaining options — rejecting the self-call, or a
 non-waiting self path with no completion guarantee — are worse: the first makes a sink unable to
 retire itself in response to its own transport error, which Decision 5 needs; the second gives back
-the guarantee the decision exists for. A removal issued from inside a *different* sink's callback
-still waits, and an implementation must not let two sinks removing each other wait in a cycle.
+the guarantee the decision exists for.
+
+**Removal from inside a different sink's callback waits, except in a two-party cycle.** If callback
+A's invocation removes B while B's invocation concurrently removes A, both waiting would deadlock.
+The registry detects that two-party cycle and lets the second remover return without waiting. Its
+target is retired — no new invocation starts — but the target's current invocation, which is the
+one blocked removing the other sink, may still be running when that `remove()` returns, and its
+callback is released only once it ends. Consequences:
+
+- a remover that returns as the losing side of such a cycle has **no quiescence guarantee**: it must
+  not release anything the removed callback uses on the strength of the return. Quiescence is
+  established by the other side, whose own removal returns only after the loser's invocation ends;
+- cycles of **three or more** callbacks removing one another are not detected and deadlock. Sinks
+  must not form them;
+- a removal issued outside every callback (destructors, close and completion handlers, ordinary
+  code) is never affected by either exception.
+
+WebFront relies only on the unconditional cases: `~WebLink`, the WebSocket close handler and an
+asynchronous write-completion handler remove a transport from outside the registry, and a
+synchronous write failure removes the transport from inside its own invocation (deferred
+self-removal). No transport callback removes another transport, so neither a cross-removal cycle
+nor its exception can arise there.
 
 **The handle change is a breaking change for multi-sink call sites, deliberately.** Today
 `addSinks(a, b, c)` returns one `size_t`; the replacement returns one handle per sink, so a call
@@ -249,7 +279,7 @@ chooses the break rather than a compatibility wrapper, because the single-id ret
 convenience to preserve — it is the defect that makes every sink but the last unremovable. For
 single-sink registration the shape is unchanged.
 
-**Proposed spelling** (chosen by #66, subject to review of this record): `addSinks(sink)` returns
+**Decided spelling** (chosen by #66, accepted with this record): `addSinks(sink)` returns
 one handle, and `addSinks(s1, …, sN)` with N > 1 returns `std::array<Handle, N>` in argument order. An array rather than a tuple, because every
 element has the same type and a caller can iterate it to remove them all. The WebFront revalidation
 found **no multi-sink call site**: all four calls at the baseline register a single sink
@@ -431,7 +461,7 @@ Facts the draft did not record, now in Context and Decisions:
   connections.
 - `~WebLink` logs before removing its own sink.
 
-Points the draft left to implementation, now proposed here for review: the mask stays in the adapter
+Points the draft left to implementation, proposed here by #66 and accepted with this record: the mask stays in the adapter
 (Decision 2); option 2 with mddlog owning the registry and transport consumer and WebFront owning
 the facade and adapter TU behind an off-by-default option (Decision 3); `std::array` of handles for
 multi-sink registration (Decision 4).
@@ -465,7 +495,10 @@ and only `WebLink` removes one; the two programs keep `clogSink` for the process
 - mddlog issue #5 — the build/test baseline; this record adds no requirement to it.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review.
-- **Approved By**: pending (project maintainer).
-- **Review Date**: before any adapter code is written. The WebFront baseline was re-verified by #66;
-  that revalidation is input to the review, not a substitute for it.
+- **Decision Date**: 2026-10-02, after #67–#72 were merged.
+- **Approved By**: ambroise-leclerc (project maintainer).
+- **Review Date**: 2026-10-02. The WebFront baseline was re-verified by #66; the adoption was
+  verified by WebFront's CI with the option off and on, including AddressSanitizer,
+  UndefinedBehaviorSanitizer and ThreadSanitizer jobs, and by mddlog's
+  `webfront.integration.*` tests on its supported matrix. Review again if the registry,
+  transport consumer or facade contract changes, or if WebFront's logging entry points move.
