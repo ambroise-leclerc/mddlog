@@ -78,10 +78,9 @@ The [evidence note](docs/governed-evidence.md) states exactly what the module gr
 
 ### Delivery and roadmap
 
-- **Implemented:** bounded audit admission, per-stream sequence, explicit refusal, and in-memory sink hand-off with health reporting.
+- **Implemented and accepted:** bounded audit admission, per-stream sequence, explicit refusal, and in-memory sink hand-off with health reporting ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md); [epic #9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Implemented and accepted:** application integration with WebFront: synchronized sink registry, bounded transport consumer, diagnostic facade and emission context ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); [epic #10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Planned:** durable storage, tamper evidence, and recovery semantics ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); [epic #11](https://github.com/ambroise-leclerc/mddlog/issues/11)).
-- **Under review:** the broader audit event model ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md)).
 
 ## Build and verify
 

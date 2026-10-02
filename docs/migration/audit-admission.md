@@ -81,9 +81,11 @@ These limits are an initial public contract, based on examples available in this
 The correlation capacity covers the full 96-byte source stream identity, a `:` separator,
 and all 20 decimal digits of a 64-bit source sequence. With the stated identifier grammar,
 `<sourceStreamId>:<decimalSourceSequence>` is unambiguous when split at the final colon.
-The host must ensure the source stream identity is unique across producer recreation and
-boot sessions; mddlog cannot establish that uniqueness from string syntax alone.
-They need review against deployment call sites before ADR-002 can be accepted. Longer free text
+`AuditSinkAdapter::addRing()` refuses an identity already registered on that adapter (see
+below). Uniqueness across adapters, processes and boot sessions remains the host's
+responsibility: mddlog cannot establish it from string syntax alone.
+The external-consumer review for #9 (MduX and WebFront, see the validation report) found
+no identifier exceeding these limits. Longer free text
 belongs in `detail`; an invalid event-field identifier is refused with
 `InvalidIdentifier` and the offending `AuditField`. An invalid `streamId` returns
 `InvalidStream` with `AuditField::None`; other non-field refusals also use `None`.
@@ -125,6 +127,14 @@ Register producer-owned rings with `addRing()`, configure one audit sink with `s
 and call `drainOnce()` from exactly one consumer thread. Registration and sink replacement
 also belong to that thread. A diagnostic `Sink` is a different interface and cannot be
 installed as an audit sink.
+
+`addRing()` returns an `AuditRingRegistration` (#9). A ring whose identity is invalid returns
+`InvalidStream`; a ring whose identity was already registered on this adapter returns
+`DuplicateStream`. That includes a second concurrent producer and a recreated producer that
+kept its identity while its sequence restarted. A refused ring is not drained, and each
+refusal increments the configuration-error counter with that status as `lastIssue`.
+Registered identities stay reserved for the adapter's lifetime. **Breaking change:** the
+result is `[[nodiscard]]`; check it where the previous `void` call was ignored.
 
 `AuditSink::accept()` returns true only when the sink has taken responsibility for the
 event in memory. The adapter then acknowledges that event in its ring and increments

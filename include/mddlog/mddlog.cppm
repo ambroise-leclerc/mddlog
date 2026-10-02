@@ -37,6 +37,7 @@ export namespace mddlog {
 using adapter::AuditDrainResult;
 using adapter::AuditDrainStatus;
 using adapter::AuditHealthSnapshot;
+using adapter::AuditRingRegistration;
 using adapter::AuditSinkAdapter;
 using adapter::RingSinkAdapter;
 using core::AuditCategory;

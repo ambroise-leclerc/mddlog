@@ -1,10 +1,25 @@
 # ADR-002: Regulatory audit-event model, separate from application logging
 
 ## Status
-Proposed — drafted for maintainer review, not yet acted on.
+Accepted — Decisions 1–6 are the audit contract the codebase is expected to conform to. They are
+implemented by #56 (`AuditEvent` and bounded admission), #57 (audit-only hand-off and health), #58
+(`logAudit()` migration and removal of `LogLevel::Audit`), #59 (scenario and boundary validation)
+and #94 (stream-identity enforcement and external-consumer review), under epic #9. Scenario,
+boundary and consumer evidence is recorded in [the validation report](../audit-scenario-validation.md).
 
-Scenario and boundary evidence for #59 is recorded in
-[the validation report](../audit-scenario-validation.md). It does not change this status.
+Accepted with these stated limits, which acceptance does not lift:
+
+- only levels 1 (admitted) and 2 (handed off) of Decision 3 are offered; level 3, durable
+  confirmation, belongs to ADR-004 (epic #11), and power loss remains outside every guarantee;
+- the `Lifecycle` and `Operator` categories have no runtime call site in any known consumer; their
+  vocabularies are host-defined (Decision 6);
+- the optional monotonic value of Decision 5 is not carried: ordering within a stream rests on the
+  sequence, and civil time is an attribute;
+- stream uniqueness is enforced per consumer adapter only; across adapters, processes and boot
+  sessions it remains the host's obligation (Decision 5).
+
+Acceptance alone does not establish validation of a particular build or deployment (see
+Consequences and Approval).
 
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
@@ -128,7 +143,8 @@ against ADR-001 Decision 2: `logAudit()` today takes unconstrained `std::string_
 `action`, `actor` and `target` become identifier-kind fields that **refuse** an over-long value
 rather than storing part of it. A caller passing a 4 KiB `eventType` gets a refused event, not a
 truncated one — and calling that "lossless" would be exactly the kind of wording this record is
-supposed to avoid. So the migration owes three things the implementing issue must supply:
+supposed to avoid. So the migration owes three things the implementing issue must supply (supplied by #58 and #59;
+see the migration guide and the validation report):
 
 - **A stated grammar and limit per identifier field** (permitted bytes and maximum length), chosen
   from what real call sites pass rather than guessed, and documented as a public constraint — a
@@ -256,9 +272,10 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   unreliable; an explicit "civil time unavailable/unreliable" state is representable, rather than
   being encoded as a zero or an epoch value.
 - **Sequence scope**: assigned by the producer, monotonic **per stream**, where a stream is one
-  producer within one boot session. Its exhaustion behavior and width must be stated by the
-  implementing issue (a 64-bit counter at any plausible event rate does not wrap within device
-  lifetime, which is the intended answer, but it should be written down rather than assumed).
+  producer within one boot session. The counter is 64 bits wide and starts at 1; refusals do not
+  consume a number. `UINT64_MAX` is admitted once, after which the stream permanently refuses with
+  `SequenceExhausted` rather than wrapping to an ambiguous value. At any plausible event rate this
+  is not reached within device lifetime, but the behavior is stated rather than assumed.
 - **Stream identity must identify the producer, not only the boot.** An earlier revision described
   it as "a boot-session identifier that changes on restart", which distinguishes restarts but not
   the concurrent producers ADR-001 Decision 4 explicitly allows (one ring each, aggregated by the
@@ -270,6 +287,11 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   property, where a globally unique identifier may leave some components implicit but must not give
   up the uniqueness. It is preserved through serialization, and **a producer destroyed and recreated
   within one boot session gets a new stream identity** whenever its counter restarts.
+  The library enforces what it can observe: `AuditSinkAdapter::addRing()` refuses a ring whose
+  identity is invalid or already registered on that adapter, including a recreated producer that
+  kept its identity, and reports the refusal as a configuration error in audit health. Uniqueness
+  across adapters, processes and boot sessions cannot be established from the string alone and
+  remains the host's obligation.
 - No global order is promised across independent producers or across devices; `(streamId, sequence)`
   identifies an event unambiguously, and that is the whole promise.
 
@@ -296,7 +318,9 @@ claims A's events and B's events have a defined relative order; only that no eve
 The provisional category set — `Lifecycle`, `Configuration`, `Access`, `RiskControl`, `Operator` —
 is **drafted, not requirements-derived**. It must be validated against the three scenarios the
 maintainer's review asks for (critical action with a distinct execution result; saturation then
-consumer failure; clock correction and restart) before this ADR moves to Accepted. MduX's own
+consumer failure; clock correction and restart) before this ADR moves to Accepted. #59 validated it
+against those scenarios, and #94 against the known external consumers; `Lifecycle` and `Operator`
+remain without a runtime call site, a gap accepted and stated in Status. MduX's own
 `AuditCategory` was scoped to that project's actual use rather than invented speculatively.
 
 And the limit that matters most: an `AuditEvent` type existing does not mean mddlog operates an
@@ -371,6 +395,9 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - ADR-001 (this repository) — the bounded ring, the refuse-new overflow policy, and the field-kind truncation rules this ADR relies on.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review.
-- **Approved By**: pending (project maintainer).
-- **Review Date**: before any work on persistent or cryptographically-sealed audit storage begins, and after the three validation scenarios in Decision 6 are documented.
+- **Decision Date**: 2026-10-02, after #56–#59 were merged and #94 completed epic #9.
+- **Approved By**: ambroise-leclerc (project maintainer).
+- **Review Date**: 2026-10-02. The three validation scenarios of Decision 6 are documented in the
+  validation report. Review again before ADR-004 attaches durable confirmation (level 3), when a
+  runtime consumer first uses `Lifecycle` or `Operator`, or if capacities or the identifier grammar
+  change.

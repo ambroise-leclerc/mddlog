@@ -9,7 +9,19 @@ export import mddlog.sinks.auditsink;
 export namespace mddlog::adapter {
 
 /** @brief Most recent observable audit delivery problem. */
-enum class AuditDrainStatus : std::uint8_t { Completed, MissingSink, DisabledSink, SinkRejected, SinkThrew, AcknowledgementFailed };
+enum class AuditDrainStatus : std::uint8_t {
+    Completed,
+    MissingSink,
+    DisabledSink,
+    SinkRejected,
+    SinkThrew,
+    AcknowledgementFailed,
+    InvalidStream,
+    DuplicateStream
+};
+
+/** @brief Whether addRing() registered a ring, or why it refused it. */
+enum class AuditRingRegistration : std::uint8_t { Registered, InvalidStream, DuplicateStream };
 
 struct AuditDrainResult {
     std::size_t      handedOff = 0;
@@ -94,6 +106,12 @@ private:
  * acknowledgement is a hand-off, not durable confirmation. A rejection or exception retains
  * the event in its ring. The next drainOnce() retries it and may duplicate a sink side effect
  * if accept() failed after partially acting; sinks should deduplicate by (streamId, sequence).
+ *
+ * (streamId, sequence) identifies an event only if no two rings aggregated here share a stream
+ * identity (ADR-002 Decision 5). addRing() therefore refuses a ring whose identity is invalid or
+ * was already registered on this adapter, including a recreated producer that kept its identity
+ * while its sequence restarted. Uniqueness across adapters, processes and boot sessions remains
+ * the host's responsibility: no string comparison here can establish it.
  */
 class AuditSinkAdapter {
 public:
@@ -110,8 +128,42 @@ public:
     AuditSinkAdapter(AuditSinkAdapter&&)                 = delete;
     AuditSinkAdapter& operator=(AuditSinkAdapter&&)      = delete;
 
+    /**
+     * @brief Register a ring, or refuse it as an observable configuration error.
+     *
+     * Refused rings are not drained. Registered identities stay reserved for the adapter's
+     * lifetime, because rings cannot be removed and a reused identity would make
+     * (streamId, sequence) ambiguous.
+     */
     template <std::size_t Capacity>
-    void addRing(core::AuditRing<Capacity>& ring) {
+    [[nodiscard]] AuditRingRegistration addRing(core::AuditRing<Capacity>& ring) {
+        if (!ring.hasValidIdentity()) {
+            health.recordConfigurationError(AuditDrainStatus::InvalidStream);
+            return AuditRingRegistration::InvalidStream;
+        }
+        if (std::ranges::find(streamIds, ring.identity()) != streamIds.end()) {
+            health.recordConfigurationError(AuditDrainStatus::DuplicateStream);
+            return AuditRingRegistration::DuplicateStream;
+        }
+        streamIds.emplace_back(ring.identity());
+        try {
+            addSource(ring);
+        } catch (...) {
+            // An unregistered ring must not keep its identity reserved, or a retry is refused.
+            streamIds.pop_back();
+            throw;
+        }
+        return AuditRingRegistration::Registered;
+    }
+
+    /** @brief Replace the audit sink; null means an observable missing-sink configuration. */
+    void setSink(sinks::AuditSinkPtr replacement) noexcept {
+        sink = std::move(replacement);
+    }
+
+private:
+    template <std::size_t Capacity>
+    void addSource(core::AuditRing<Capacity>& ring) {
         ringList.push_back({[&ring, pendingFailure = false](sinks::AuditSink& auditSink, AuditHealth& signal) mutable {
                                 AuditDrainResult  result;
                                 const std::size_t available = ring.drain().size();
@@ -171,11 +223,7 @@ public:
                             }});
     }
 
-    /** @brief Replace the audit sink; null means an observable missing-sink configuration. */
-    void setSink(sinks::AuditSinkPtr replacement) noexcept {
-        sink = std::move(replacement);
-    }
-
+public:
     /** @brief Attempt one bounded snapshot per ring and acknowledge only accepted events. */
     [[nodiscard]] AuditDrainResult drainOnce() {
         if (!sink) {
@@ -214,9 +262,10 @@ private:
         std::function<std::uint64_t()>                                   pending;
     };
 
-    std::vector<RingSource> ringList;
-    sinks::AuditSinkPtr     sink;
-    AuditHealth             health;
+    std::vector<RingSource>  ringList;
+    std::vector<std::string> streamIds;
+    sinks::AuditSinkPtr      sink;
+    AuditHealth              health;
 };
 
 }  // namespace mddlog::adapter
