@@ -408,16 +408,18 @@ For a retired stream, the retirement's final `position` and `digest` act as the 
 check below. The list refers to verdicts by name. The order only decides which verdict is reported
 when several apply.
 
-1. **Inconsistent**: under a contract version the verifier knows, a chain link fails between two
-   records present, or a record is malformed or out of chain order (8.3, 8.4). The report names the
-   first failing record.
+1. **Inconsistent**: a record carries version 0, or a version other than the stream's version
+   (8.3, steps 1 and 2), whatever versions the verifier knows. Or, under a stream version the
+   verifier knows, a chain link fails between two records present, or a record is malformed or out
+   of chain order (8.3, 8.4). The report names the first failing record.
 2. **Cannot verify**: the provider holds an anchor for the stream, but the anchor is unusable
    (7.1): its `anchorFormat` or `canonicalVersion` is unknown, or a mandatory field is missing. The
-   same verdict applies when the stream's records carry a contract version the verifier does not
-   know (8.3). This verdict is reached before any check that reads the anchor. For an unusable
-   anchor, the coverage is internal consistency only. For an unknown record version there is no
-   coverage at all, because the version fixes the digest. The report names the unknown version or
-   the missing field. This is the only verdict for an unusable anchor.
+   same verdict applies when the stream's version is one the verifier does not know (8.3, step 3)
+   and no record is Inconsistent under steps 1 and 2. This verdict is reached before any check that
+   reads the anchor. For an unusable anchor, the coverage is internal consistency only. For an
+   unknown stream version there is no coverage at all, because the version fixes the digest. The
+   report names the unknown version or the missing field. This is the only verdict for an unusable
+   anchor.
 3. **Rolled back**: a check of 7.4 fails.
 4. **Conflict**: two anchors for the stream conflict (7.1).
 5. **Altered**: the recomputed `H_p` differs from the anchor's `digest`, or the recomputed digest at
@@ -466,10 +468,12 @@ claims no capability (Decision 6).
   record encoding (8.2), the reading rules (8.3), the digest algorithm, the chain construction and
   the initial chain value (8.4). Changing any of them makes a new version (8.5). The anchor's
   `canonicalVersion` (7.1) carries this number.
-- **Version 0 is never valid.** A version number is never reused for a different contract.
+- **Version 0 is never valid.** No writer produces it, so a record carrying it is corrupt, not of
+  an unsupported version (8.3). A version number is never reused for a different contract.
 - **One stream instance, one version.** The writer fixes the version when a stream instance begins,
   and every record of that instance carries it. A version changes only at a new stream instance,
-  that is, at a restart (ADR-002 Decision 5).
+  that is, at a restart (ADR-002 Decision 5). The **stream's version** is therefore the version of
+  its first record present, and a record carrying any other version is out of chain order (8.4).
 
 #### 8.2 Encoding of a record, version 1
 
@@ -546,8 +550,22 @@ this decision. Changing one is a new version (8.5).
 
 #### 8.3 Reading a record
 
-Under a version it knows, a reader decodes the record and finds it **malformed** if any of the
-following holds:
+A reader checks the stream in three steps, in this order. The first two need no knowledge of any
+version, so their findings take precedence over an unknown version.
+
+1. **Version 0.** A record shorter than the two version bytes, or whose version is 0, is
+   **malformed**, whatever versions the reader knows (8.1).
+2. **Version change.** A record whose version differs from the stream's version (8.1) is out of
+   chain order (8.4). This holds whether or not the reader knows either version: a stream that
+   starts in version 1 and then carries a version 2 is a chain failure at the first version-2
+   record, even for a reader that knows only version 1.
+3. **Unknown stream version.** If the reader does not know the stream's version, it decodes no
+   record. The version also fixes the digest, so the reader cannot check the links either. The
+   verifier reports **Cannot verify** and names the version (7.5). It never skips a record, and it
+   never guesses another version.
+
+Under a stream version it knows, a reader decodes each record and also finds it **malformed** if
+any of the following holds:
 
 - the bytes end before field 15;
 - bytes remain after field 15, within the record's storage frame (#86);
@@ -561,9 +579,9 @@ following holds:
 Each field has exactly one encoding. Decoding a well-formed record and encoding it again therefore
 gives back its bytes, and a reader may use that as its check.
 
-A record whose version the reader does not know is not decoded. The version also fixes the digest,
-so the reader cannot check the record's links either. The verifier reports **Cannot verify** and
-names the version (7.5). It never skips the record, and it never guesses another version.
+Steps 1 and 2 and these decoding failures are reported as **Inconsistent** (8.4, 7.5). Step 3 is
+reported as **Cannot verify**. Inconsistent comes first in 7.5, so a stream with both findings is
+reported as Inconsistent, naming the first failing record.
 
 #### 8.4 Digest and chain
 
@@ -582,8 +600,9 @@ names the version (7.5). It never skips the record, and it never guesses another
 - **Chain order.** The `k`-th record of a stream instance has `sequence = k` and that instance's
   `streamId`. A verifier treats any of the following as a chain failure at that record, reported
   as **Inconsistent** (7.5): a stored digest that differs from the recomputed `H_k`, a record whose
-  `sequence` or `streamId` breaks this order, a malformed record (8.3), or a record whose version
-  differs from the stream's first record (8.1).
+  `sequence` or `streamId` breaks this order, a malformed record (8.3, including version 0), or a
+  record whose version differs from the stream's version (8.1). The last two are found before, and
+  regardless of, any unknown version (8.3).
 - **One initial value.** `H_0` is the same for every stream. Each chain is scoped by the `streamId`
   inside every record. A link from a new stream instance to the previous one (issue #87) is carried
   in records, never by changing `H_0`.
@@ -600,9 +619,11 @@ names the version (7.5). It never skips the record, and it never guesses another
   the identifier grammar, adding an enum value, or changing the digest or the chain makes a new
   version. ADR-002 Decision 6 keeps the category set provisional, so a new category is a new
   version. Once a stored record uses a version, that version's text and its vectors never change.
-- **Unknown version.** A verifier that does not know a record's version reports **Cannot verify**
-  for the stream (8.3, 7.5). A verifier keeps every version it has supported. If it drops one that
-  stored records still use, those records become unverifiable, and the verifier reports that.
+- **Unknown version.** A verifier that does not know a stream's version reports **Cannot verify**
+  for the stream (8.3, step 3; 7.5). Version 0 and a version change inside a stream are not
+  unknown versions: they are Inconsistent (8.3, steps 1 and 2). A verifier keeps every version it
+  has supported. If it drops one that stored records still use, those records become unverifiable,
+  and the verifier reports that.
 - **A field added later.** Stored records are never re-encoded, upgraded or re-hashed. Each one
   keeps its version and is verified under that version's rules. A field added in version `N + 1`
   is not part of a version-`N` record: a report shows it as "not present in version N", never as
