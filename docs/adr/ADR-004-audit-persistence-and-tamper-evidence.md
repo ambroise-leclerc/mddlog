@@ -785,11 +785,20 @@ what the adapter found at a restart.
   built by the adapter, encoded and chained exactly as Decision 8 specifies. The ledger has its
   own sequence, its own chain and its own anchors (Decision 7). No new record format is needed, and
   contract version 1 is unchanged.
-- **Reserved actions.** Actions beginning with `mddlog.` are reserved for ledger records. A reader
-  recognises a ledger as a stream whose first record is `mddlog.ledger.origin` or
-  `mddlog.ledger.predecessor`. Outside a ledger, a reserved action is not interpreted, and a reader
-  reports its presence. Admission should refuse reserved actions in producer streams. Until it does,
-  this reporting rule applies.
+- **Reserved actions.** Actions beginning with the case-sensitive ASCII prefix `mddlog.` are
+  reserved for ledger records. **Producer admission must refuse every such action** before it
+  consumes a sequence or publishes a record, and the refusal must be observable in the admission
+  result, with an explicit reason that the implementing issue defines. The check belongs at the
+  producer boundary (`AuditRing::tryRecord` and any other producer entry point), not in the generic
+  validation of `AuditEvent`, so that the adapter can still build ledger records through a path it
+  owns. This narrows, for producers only, the identifier grammar ADR-002 admits. Enforcing it is a
+  prerequisite for implementing this decision: without it, a producer stream whose first action is
+  `mddlog.ledger.origin` would be recognised as a ledger.
+- **Recognising a ledger.** A reader recognises a ledger as a stream whose first record is
+  `mddlog.ledger.origin` or `mddlog.ledger.predecessor`. Outside a ledger, a reserved action is not
+  interpreted, and a reader reports its presence. That report is a reader's safeguard, not the
+  enforcement of the admission rule. The prefix reserves a namespace. It proves nothing about who
+  wrote a record, which remains bounded by the ledger's own anchors.
 - **What a ledger attests.** A ledger record states what the adapter recorded, when it recorded it.
   Its authenticity is that of the ledger stream, which Decisions 1 and 7 bound like any other
   stream. A ledger record **never extends the anchored coverage of the stream it describes**: the
@@ -813,6 +822,31 @@ the record's meaning. A digest in `correlationId` is the 64-character lowercase 
 | `mddlog.stream.close` | the closed stream's `streamId` | its last position `m` | `H_m` | Orderly close, written after record `m` is durably confirmed and after the anchor attempt of 7.3. |
 | `mddlog.stream.trim` | the trimmed stream's `streamId` | the last position `q` to be removed | `H_q` | Records `1 … q` are about to be removed (9.4). `q` equal to the stream's last position means the whole stream (9.5). |
 | `mddlog.ledger.close` | this ledger's `streamId` | absent | empty | Orderly end of the session, after every stream it opened is closed. |
+
+**Validating ledger records.** A ledger record is a valid `AuditEvent`, but a valid `AuditEvent` is
+not necessarily a valid ledger record. A reader checks each ledger record against the table above
+and finds it **malformed** (8.3) if any of the following holds:
+
+- its category is not `Lifecycle`, or its phase is not `Executed`, except `Failed` for
+  `predecessor` and `recovered`;
+- `actor`, `requirementRef` or `riskRef` is not empty;
+- `sourceSequence` is present where the table says absent, or absent where the table requires a
+  position (`close`, `trim`, and the `Executed` forms of `predecessor` and `recovered`);
+- `correlationId` is not empty where the table says empty, or is not exactly 64 lowercase
+  hexadecimal characters where it carries a digest;
+- its action is under `mddlog.` but not in the table;
+- `origin` or `predecessor` appears anywhere but record 1, or record 1 is neither; the `target` of
+  `origin` or `ledger.close` is not the ledger's own `streamId`;
+- a `recovered` record follows a record other than record 1 or another `recovered`; a record
+  follows `ledger.close`;
+- for one stream, `close` appears twice, a record other than `trim` follows its `close`, its trims
+  do not have increasing positions, or a trim's position exceeds its `close` position.
+
+A malformed ledger record makes the ledger **Inconsistent** at that record (7.5). The operation it
+describes is never applied: an invalid trim accounts for no missing records, and an invalid close
+ends no stream. An implementation should read and write ledger records through a typed view (for
+example a `LedgerRecord` that names `target`, `sourceSequence` and `correlationId` by their ledger
+meaning) without introducing another canonical format.
 
 **Ordering.** Each step below waits until the previous record is durably confirmed (#86):
 
@@ -880,6 +914,15 @@ complete removal, and `k ≤ q` after an interrupted one.
   an anchored stream into an unverifiable one. If the anchor cannot advance, the stream cannot be
   trimmed further, and a full medium is handled by the storage contract (#86). A deployment with no
   provider trims without this bound, and its streams are reported unanchored in any case.
+- **No accepted anchor, or no provider answer.** When a provider is configured and no anchor has
+  been accepted for the stream, there is no `p`, and rotation removes nothing from that stream. When
+  the provider is unavailable, rotation may rely only on an accepted anchor whose position and
+  digest the adapter already holds from its own `advance` (7.3). Otherwise it waits. Removing a
+  whole ended stream follows 9.5.
+- **Room to record the trim.** The trim record must be durably confirmed before space is freed, so a
+  full medium could prevent the very record that frees it. The storage contract (#86) must keep the
+  capacity this requires, or an equivalent strategy, without deleting evidence silently and without
+  holding producers while the provider is awaited (7.3).
 - **The retained checkpoint.** A trim at or past a reader's retained checkpoint `p_r` (7.4) ends the
   protection that checkpoint gave to its prefix. With `q = p_r`, the reader compares the trim
   digest with `H_r`. With `q > p_r`, the check no longer applies, and the report says so. That is
@@ -933,6 +976,14 @@ means that no record was lost between the last stored record and the restart.
 | **Interrupted removal** | Leftover records `k … q`, checked against the trim's `H_q` (9.4), or a trim not carried out. |
 | **Retention of a whole stream** | **Retired** (7.5), with the trim's `m` and `H_m`. If the trim's `q` equals the retirement's position, the two digests are compared. Records `p+1 … m` are reported as removed without anchor. Without a provider, or for a stream the provider never anchored: "removed under retention, never anchored" from the trim record, with no finding. A stream gone with neither trim nor retirement is a finding under 7.4 and 7.5. |
 | **Trim past the anchor** | With a provider configured, a trim with `q > p` that leaves records of the stream is a finding: `H_p` can no longer be recomputed. The stream is **Cannot verify** with that cause (7.5), and records `q+1 … m` are internally consistent only. |
+
+**Validation cases an implementation must cover.** Rotation with `q < p`, with `q = p`, and the
+refusal of `q > p`; rotation with no accepted anchor and with an unavailable provider; a full
+medium before the trim is written; an interruption after the trim is confirmed, before and during
+removal; whole-stream removal for each answer of `latest` (9.5); producer admission refusing
+`mddlog.ledger.origin`, `mddlog.ledger.predecessor` and another `mddlog.` action without consuming
+a sequence, while admitting an ordinary action, and the adapter building ledger records through its
+own path; and each malformed ledger record listed in 9.2.
 
 **Limits this decision states.** The ledger lives in the mutable log. Its records are only as
 trustworthy as the ledger's own coverage, and a rewriting adversary can forge ledger records past
