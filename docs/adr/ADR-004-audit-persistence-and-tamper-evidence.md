@@ -231,7 +231,7 @@ stream for which the provider holds no anchor at all is **unanchored**.
 | `anchorFormat` | Version of this anchor layout. If the verifier does not know it, the anchor is unusable. |
 | `canonicalVersion` | Version of the canonical byte contract (Decision 2) under which `digest` was computed. A verifier recomputes under that version. If it does not know the version, the anchor is unusable. A verifier never substitutes another version. |
 | `streamId` | The stream instance identity of ADR-002 Decision 5, copied exactly. An anchor covers one stream instance and nothing else. |
-| `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The anchor covers records `1 … position` of that stream instance. |
+| `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The digest commits to the chain from record 1, or from the trim's recorded digest after a rotation (10.4). The records a verifier can check against it are `s … position`, with `s` the first record retained (Decision 1). |
 | `digest` | The chain digest `H_position` of Decision 2, in the representation 8.4 fixes. |
 | `providerId` | Identifies the provider instance that accepted the claim, so a reader knows which retained state (7.4) applies. |
 | `counter` | Assigned by the provider, not by the log writer. Each accepted anchor and each retirement (7.2) takes the provider's next counter value, so counters strictly increase across all streams. A stream's anchor therefore usually has a counter well below the provider's current **head** (7.2). That is normal, not a rollback (7.4). |
@@ -374,7 +374,8 @@ The record recognises three kinds of provider. None of them is the default.
 - **Unavailability.** The provider could not answer. The verifier reports **anchor unavailable**,
   which has the same coverage as unanchored but a different cause, so the two are never merged.
 - **Staleness by position.** The anchor's position is below the last record present for that stream.
-  Coverage is `1 … position`, and the verifier reports the records past it as internally consistent
+  Coverage is `s … position`, with `s` the first record retained (Decision 1, 10.4), and the
+  verifier reports the records past it as internally consistent
   and unanchored. Every verdict that applies to an anchored stream states the anchor's position,
   including the full one.
 - **Staleness by age.** The anchor's `acceptedTime` is older than the declared bound `T` relative to
