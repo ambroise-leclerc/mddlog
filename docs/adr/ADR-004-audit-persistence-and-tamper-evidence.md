@@ -96,12 +96,10 @@ Two prerequisites this record inherits rather than invents:
 - a **canonical** serialization — same record, same bytes, on every toolchain. MduX's ADR-007
   pipeline exists for exactly this reason (sorted keys, no locale-dependent formatting, and floats as
   bit patterns rather than decimal text); mddlog cannot import it but should not re-derive the lesson
-  from scratch either. **Pointing at that precedent is not a specification, and this record does not
-  pretend otherwise**: field order, byte encoding, the rule for absent optional fields, a schema
-  version, and the digest's own encoding are all undefined here, and two implementations following
-  this text as written would hash different bytes. Fixing them is a blocking prerequisite, listed as
-  such in Decision 4 — a canonical format decided late is a format decided twice, because the first
-  stored record freezes it;
+  from scratch either. **Pointing at that precedent is not a specification.** Field order, byte
+  encoding, the rule for absent optional fields, a contract version and the digest's encoding were a
+  blocking prerequisite (Decision 4): a canonical format decided late is a format decided twice,
+  because the first stored record freezes it. Decision 8 specifies them, with reference vectors;
 - the stream identity and per-stream sequence from ADR-002 Decision 5 — note that identity now
   includes the producer instance, not only the boot session, so a chain is scoped to one stream
   instance and a restart begins a new, explicitly linked chain rather than appearing continuous.
@@ -124,9 +122,10 @@ may be stored before they are answered, because the first record written freezes
   retention and retirement, absence and staleness, the reader's monotonic position, the verifier's
   verdicts, and the threat model they assume. Decision 7 chooses no single provider. A deployment
   that configures none has internal chain consistency only, and the verifier reports exactly that.
-- **The canonical byte contract** (blocking, Decision 2) — field order, encoding, absent-optional
-  rules, schema version, and digest encoding, specified precisely enough that two independent
-  implementations hash identical bytes for identical records.
+- **The canonical byte contract** (blocking, Decision 2). **Resolved by Decision 8**: the contract
+  version, field order and encoding, the absent, empty and zero rules, the reading rules, SHA-256
+  and the chain input with its initial value, the digest's representation, evolution, the room left
+  for a signature, and reference vectors that fix every case byte for byte.
 - **Storage medium and layout** — segmented files, a circular region of flash, or an
   append-only device log. Each has a different truncation and wear story.
 - **Power-loss atomicity** — what "durably confirmed" (ADR-002 level 3) means precisely: written,
@@ -200,14 +199,14 @@ stream for which the provider holds no anchor at all is **unanchored**.
 | `canonicalVersion` | Version of the canonical byte contract (Decision 2) under which `digest` was computed. A verifier recomputes under that version. If it does not know the version, the anchor is unusable. A verifier never substitutes another version. |
 | `streamId` | The stream instance identity of ADR-002 Decision 5, copied exactly. An anchor covers one stream instance and nothing else. |
 | `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The anchor covers records `1 … position` of that stream instance. |
-| `digest` | The chain digest `H_position` of Decision 2, in the representation Decision 2 fixes. |
+| `digest` | The chain digest `H_position` of Decision 2, in the representation 8.4 fixes. |
 | `providerId` | Identifies the provider instance that accepted the claim, so a reader knows which retained state (7.4) applies. |
 | `counter` | Assigned by the provider, not by the log writer. Each accepted anchor and each retirement (7.2) takes the provider's next counter value, so counters strictly increase across all streams. A stream's anchor therefore usually has a counter well below the provider's current **head** (7.2). That is normal, not a rollback (7.4). |
 | `acceptedTime` | When the provider accepted the claim, by the provider's clock if it has one. Otherwise an explicit "unavailable" value, as in ADR-002 Decision 5. It is used only for age staleness (7.3). |
 
 `streamId`, `position` and `digest` are the minimum of Decision 1. `canonicalVersion` is required
-because a digest has no meaning without the bytes it was computed over. The schema-version field of
-the canonical contract (issue #84) supplies the value. `counter` lets a rollback that crosses
+because a digest has no meaning without the bytes it was computed over. The contract version of
+Decision 8 supplies the value; it equals the version carried by the stream's records (8.1). `counter` lets a rollback that crosses
 streams be detected through the provider's head (7.4). A per-stream position alone does not see a
 stream that has disappeared.
 
@@ -409,13 +408,16 @@ For a retired stream, the retirement's final `position` and `digest` act as the 
 check below. The list refers to verdicts by name. The order only decides which verdict is reported
 when several apply.
 
-1. **Inconsistent**: a chain link fails between two records present. The report names the first
-   failing sequence.
+1. **Inconsistent**: under a contract version the verifier knows, a chain link fails between two
+   records present, or a record is malformed or out of chain order (8.3, 8.4). The report names the
+   first failing record.
 2. **Cannot verify**: the provider holds an anchor for the stream, but the anchor is unusable
-   (7.1): its `anchorFormat` or `canonicalVersion` is unknown, or a mandatory field is missing. This
-   verdict is reached before any check that reads the anchor. The coverage is internal consistency
-   only, and the report names the unknown version or the missing field. This is the only verdict
-   for an unusable anchor.
+   (7.1): its `anchorFormat` or `canonicalVersion` is unknown, or a mandatory field is missing. The
+   same verdict applies when the stream's records carry a contract version the verifier does not
+   know (8.3). This verdict is reached before any check that reads the anchor. For an unusable
+   anchor, the coverage is internal consistency only. For an unknown record version there is no
+   coverage at all, because the version fixes the digest. The report names the unknown version or
+   the missing field. This is the only verdict for an unusable anchor.
 3. **Rolled back**: a check of 7.4 fails.
 4. **Conflict**: two anchors for the stream conflict (7.1).
 5. **Altered**: the recomputed `H_p` differs from the anchor's `digest`, or the recomputed digest at
@@ -449,6 +451,280 @@ rewritten history, or present the removal of evidence as routine retention, and 
 then attests the substitute. Only a checkpoint the reader retained earlier still protects its prefix.
 A verifier does not report such a compromise. It reports what the anchors attest. Choosing a provider fit for the device's threat model is part of the
 manufacturer's risk file, not the library's.
+
+### 8. The canonical byte contract
+
+This decision answers the second blocking question of Decision 4. It fixes the bytes of a record,
+the digest, and the chain input, so that two implementations following this text produce the same
+bytes and the same digests for the same `AuditEvent`. It is a specification. It writes no record and
+claims no capability (Decision 6).
+
+#### 8.1 The contract version
+
+- **One number names the whole contract.** The contract version is an unsigned 16-bit value and
+  the first two bytes of every record. This decision defines **version 1**. A version fixes the
+  record encoding (8.2), the reading rules (8.3), the digest algorithm, the chain construction and
+  the initial chain value (8.4). Changing any of them makes a new version (8.5). The anchor's
+  `canonicalVersion` (7.1) carries this number.
+- **Version 0 is never valid.** A version number is never reused for a different contract.
+- **One stream instance, one version.** The writer fixes the version when a stream instance begins,
+  and every record of that instance carries it. A version changes only at a new stream instance,
+  that is, at a restart (ADR-002 Decision 5).
+
+#### 8.2 Encoding of a record, version 1
+
+The canonical bytes `C` of a record are the concatenation of the fields below, in this order, with
+nothing before, between or after them. The primitive encodings are:
+
+| Encoding | Bytes |
+|---|---|
+| `u8`, `u16`, `u64` | Unsigned integer, big-endian, fixed width of 1, 2 or 8 bytes. |
+| `i64` | Signed integer, two's complement, big-endian, 8 bytes. |
+| `string` | A `u16` byte count, then exactly that many bytes, copied as stored. No terminator, no padding, no Unicode normalization, no case folding, no trimming. |
+| `enum` | One byte, taken from the tables below **by name**. The in-memory enumerator value is never cast into the record. `0x00` is never a valid enum byte. |
+| `flag` | One byte: `0x00` false, `0x01` true. |
+| `presence` | One byte: `0x00` absent, and nothing follows; `0x01` present, and the value follows. |
+
+| # | Field | Encoding | Source in `AuditEvent` | Constraint a reader checks (8.3) |
+|---|---|---|---|---|
+| 1 | contract version | `u16` | — | `1` for this decision |
+| 2 | `streamId` | `string` | `streamId()` | 1 … 96 bytes, identifier grammar |
+| 3 | `sequence` | `u64` | `sequence()` | `≥ 1` |
+| 4 | `category` | `enum` | `category()` | table below |
+| 5 | `phase` | `enum` | `phase()` | table below |
+| 6 | `time` | `presence`, then `i64` | `time()` | see below |
+| 7 | `action` | `string` | `action()` | 1 … 64 bytes, identifier grammar |
+| 8 | `actor` | `string` | `actor()` | 0 … 64 bytes, identifier grammar |
+| 9 | `target` | `string` | `target()` | 1 … 96 bytes, identifier grammar |
+| 10 | `requirementRef` | `string` | `requirementRef()` | 0 … 64 bytes, identifier grammar |
+| 11 | `riskRef` | `string` | `riskRef()` | 0 … 64 bytes, identifier grammar |
+| 12 | `correlationId` | `string` | `correlationId()` | 0 … 117 bytes, identifier grammar |
+| 13 | `sourceSequence` | `presence`, then `u64` | `sourceSequence()` | any value when present, `0` included |
+| 14 | `detail` | `string` | `detail()` | 0 … 160 bytes, any byte values |
+| 15 | `detailTruncated` | `flag` | `detailTruncated()` | `0x00` or `0x01` |
+
+The identifier grammar is the one `AuditEvent` enforces at admission: ASCII letters, digits,
+underscore, dot, colon, slash and hyphen. The capacities are those of `AuditEvent` at the time of
+this decision. Changing one is a new version (8.5).
+
+| `category` | Byte | | `phase` | Byte |
+|---|---|---|---|---|
+| `Lifecycle` | `0x01` | | `Requested` | `0x01` |
+| `Configuration` | `0x02` | | `Confirmed` | `0x02` |
+| `Access` | `0x03` | | `Executed` | `0x03` |
+| `RiskControl` | `0x04` | | `Failed` | `0x04` |
+| `Operator` | `0x05` | | | |
+
+- **Time.** An unavailable `RawTime` is encoded as the single byte `0x00`. The timestamp an
+  unavailable `RawTime` holds in memory is not encoded. An available `RawTime` is `0x01` followed by
+  its value as an `i64`: nanoseconds since the Unix epoch, as held by `RawTime`, with no conversion,
+  rounding or leap-second adjustment. ADR-001 Decision 7 checks no plausibility, so zero and
+  negative values are valid and encoded as they are (vectors V3 and V4). Version 1 requires the
+  value to fit in 64 signed bits, which is the representation of `std::chrono::nanoseconds` on the
+  supported toolchains.
+- **Absent, empty, and zero.** Two kinds of optional value exist, and the encoding keeps each one
+  exactly as the model has it:
+  - `time` and `sourceSequence` have a presence state. A presence byte precedes the value, so an
+    absent value (`0x00`) and a present value of zero (`0x01` then zero bytes) are different bytes
+    (vectors V2 and V3).
+  - `actor`, `requirementRef`, `riskRef` and `correlationId` have no absent state separate from
+    empty. In `AuditEvent` an empty value is how the producer says "not supplied", and it is
+    encoded as a zero byte count. That is the only encoding of this state. If a later model has to
+    tell a supplied empty value from absence, that is a new version (8.5).
+  - `detail` is not optional. It may be empty, which is a zero byte count.
+- **Detail and its truncation.** The encoder writes the stored `detail` bytes and the stored
+  `detailTruncated` flag. It never truncates, re-truncates, validates or repairs them. Truncation
+  happened at admission (ADR-001 Decision 2), and the flag records it. The flag is part of the
+  hashed bytes, so clearing it later breaks the chain. Neither the encoder nor the reader checks
+  that `detail` is valid UTF-8.
+- **Every field, and nothing else.** The fifteen fields cover every value `AuditEvent` holds,
+  including its provenance: `sourceSequence` and `detailTruncated`. The canonical bytes contain no
+  digest, no storage offset, no frame length and no signature. The admission result
+  (`AuditWriteResult`) is not part of the record.
+- **Self-delimiting.** A reader that knows version 1 finds the end of a record from its own bytes.
+  How records are framed in storage is issue #86.
+
+#### 8.3 Reading a record
+
+Under a version it knows, a reader decodes the record and finds it **malformed** if any of the
+following holds:
+
+- the bytes end before field 15;
+- bytes remain after field 15, within the record's storage frame (#86);
+- an enum byte is not in its table;
+- a presence or flag byte is neither `0x00` nor `0x01`;
+- a byte count exceeds the field's capacity;
+- an identifier field holds a byte outside the grammar;
+- `streamId`, `action` or `target` is empty;
+- `sequence` is zero.
+
+Each field has exactly one encoding. Decoding a well-formed record and encoding it again therefore
+gives back its bytes, and a reader may use that as its check.
+
+A record whose version the reader does not know is not decoded. The version also fixes the digest,
+so the reader cannot check the record's links either. The verifier reports **Cannot verify** and
+names the version (7.5). It never skips the record, and it never guesses another version.
+
+#### 8.4 Digest and chain
+
+- **Algorithm.** SHA-256 as specified in FIPS 180-4. Its output is 32 bytes.
+- **Chain input.** For the records of one stream instance, with `C_k` the canonical bytes of the
+  record whose `sequence` is `k`:
+
+  ```text
+  H_0 = 32 bytes of 0x00
+  H_k = SHA-256( C_k ‖ H_{k−1} )      for k ≥ 1
+  ```
+
+  `‖` is plain concatenation, and `H_{k−1}` enters as its 32 raw bytes. No separator and no
+  length prefix are added. The input is unambiguous because `H_{k−1}` has a fixed size and comes
+  last.
+- **Chain order.** The `k`-th record of a stream instance has `sequence = k` and that instance's
+  `streamId`. A verifier treats any of the following as a chain failure at that record, reported
+  as **Inconsistent** (7.5): a stored digest that differs from the recomputed `H_k`, a record whose
+  `sequence` or `streamId` breaks this order, a malformed record (8.3), or a record whose version
+  differs from the stream's first record (8.1).
+- **One initial value.** `H_0` is the same for every stream. Each chain is scoped by the `streamId`
+  inside every record. A link from a new stream instance to the previous one (issue #87) is carried
+  in records, never by changing `H_0`.
+- **Hashed as stored.** A verifier hashes the record bytes as stored. It never hashes a re-encoding
+  of the decoded fields. This is what keeps records of an older version verifiable (8.5).
+- **Representation.** Inside the chain input, and wherever a digest is stored next to its record,
+  a digest is its 32 raw bytes. In an anchor's `digest` (7.1), in a verifier's report and in any
+  text, it is written as 64 lowercase hexadecimal characters, with no prefix and no separator. A
+  verifier compares digests as bytes, after decoding the text.
+
+#### 8.5 Evolution
+
+- **Any change is a new version.** Adding, removing or reordering a field, changing a capacity or
+  the identifier grammar, adding an enum value, or changing the digest or the chain makes a new
+  version. ADR-002 Decision 6 keeps the category set provisional, so a new category is a new
+  version. Once a stored record uses a version, that version's text and its vectors never change.
+- **Unknown version.** A verifier that does not know a record's version reports **Cannot verify**
+  for the stream (8.3, 7.5). A verifier keeps every version it has supported. If it drops one that
+  stored records still use, those records become unverifiable, and the verifier reports that.
+- **A field added later.** Stored records are never re-encoded, upgraded or re-hashed. Each one
+  keeps its version and is verified under that version's rules. A field added in version `N + 1`
+  is not part of a version-`N` record: a report shows it as "not present in version N", never as
+  a default value. Re-encoding a stored record would change every later digest and break every
+  anchor past it. A verifier could not tell that from a rewrite (Decision 1), which is what the
+  chain exists to reveal.
+
+#### 8.6 Room for a signature
+
+Decision 3 requires room for a future signature over the chain head. Version 1 leaves that room
+**outside** the canonical bytes and outside the chain input. No record field, no byte of `C_k` and
+no part of the input to `H_k` is reserved for a signature, and none would change when one is added.
+A future signature would cover a head statement holding at least the contract version, the
+`streamId`, a position `p` and `H_p`, which is the claim of 7.1. That later decision specifies the
+statement's encoding, the algorithm and the key. It extends the anchor format or defines a separate
+object, never this contract. Records written under version 1 therefore remain valid and verifiable
+after signing is introduced.
+
+#### 8.7 Reference vectors
+
+Four records form one stream instance, `device-42/boot-7`, with sequences 1 to 4. Each block lists
+the fields in order, as hexadecimal bytes. `C_k` is the concatenation of the bytes in the block,
+without spaces, field names or comments. `61 × 159` means the byte `0x61` repeated 159 times. The
+digests chain from `H_0` (8.4). Two independent implementations of this text computed the vectors
+and agree on every byte and digest.
+
+| Vector | What it fixes |
+|---|---|
+| V1 | Every optional value present; time available; detail not truncated. |
+| V2 | Optional identifiers empty; `sourceSequence` absent; time unavailable; empty detail. |
+| V3 | Detail truncated: the producer passed 161 bytes, 159 bytes `a` and then `é` (`c3 a9`). Admission cut it at 159 bytes, before the two-byte sequence, under ADR-001 Decision 2, and set the flag. `sourceSequence` and time are present with the value zero. |
+| V4 | Negative time; the largest `sourceSequence`; a non-ASCII detail that is not truncated. |
+
+**V1** — `|C_1|` = 157 bytes.
+
+```text
+version          00 01
+streamId         00 10 64 65 76 69 63 65 2d 34 32 2f 62 6f 6f 74 2d 37   ; "device-42/boot-7"
+sequence         00 00 00 00 00 00 00 01                                  ; 1
+category         02                                                       ; Configuration
+phase            03                                                       ; Executed
+time             01 18 86 72 51 f5 55 cd 15                               ; available, 1767225600123456789 ns
+action           00 10 74 68 65 72 61 70 79 2e 72 61 74 65 2e 73 65 74   ; "therapy.rate.set"
+actor            00 11 6f 70 65 72 61 74 6f 72 3a 6e 75 72 73 65 2d 30 37
+                                                                          ; "operator:nurse-07"
+target           00 0e 70 75 6d 70 2f 63 68 61 6e 6e 65 6c 2d 41         ; "pump/channel-A"
+requirementRef   00 0b 52 45 51 2d 41 4c 4d 2d 30 31 32                   ; "REQ-ALM-012"
+riskRef          00 05 52 43 2d 31 37                                     ; "RC-17"
+correlationId    00 07 6f 70 2d 30 30 30 31                               ; "op-0001"
+sourceSequence   01 00 00 00 00 00 00 00 29                               ; present, 41
+detail           00 18 72 61 74 65 20 31 32 2e 35 20 6d 4c 2f 68 20 63 6f 6e 66 69 72 6d 65 64
+                                                                          ; "rate 12.5 mL/h confirmed"
+detailTruncated  00                                                       ; false
+
+H_1 = 5384ec4133d6baab7790b48a0fa0c8eb3d249e37d9487a886aa47b09803b9055
+```
+
+**V2** — `|C_2|` = 68 bytes.
+
+```text
+version          00 01
+streamId         00 10 64 65 76 69 63 65 2d 34 32 2f 62 6f 6f 74 2d 37   ; "device-42/boot-7"
+sequence         00 00 00 00 00 00 00 02                                  ; 2
+category         01                                                       ; Lifecycle
+phase            01                                                       ; Requested
+time             00                                                       ; unavailable
+action           00 0c 64 65 76 69 63 65 2e 73 74 61 72 74               ; "device.start"
+actor            00 00                                                    ; empty
+target           00 09 64 65 76 69 63 65 2d 34 32                         ; "device-42"
+requirementRef   00 00                                                    ; empty
+riskRef          00 00                                                    ; empty
+correlationId    00 00                                                    ; empty
+sourceSequence   00                                                       ; absent
+detail           00 00                                                    ; empty
+detailTruncated  00                                                       ; false
+
+H_2 = dd894a8130712adfc820f13daf1bc72f68ba701d7bf4f6cbd2b8ff31f5591fd8
+```
+
+**V3** — `|C_3|` = 251 bytes.
+
+```text
+version          00 01
+streamId         00 10 64 65 76 69 63 65 2d 34 32 2f 62 6f 6f 74 2d 37   ; "device-42/boot-7"
+sequence         00 00 00 00 00 00 00 03                                  ; 3
+category         04                                                       ; RiskControl
+phase            04                                                       ; Failed
+time             01 00 00 00 00 00 00 00 00                               ; available, 0 ns
+action           00 09 61 6c 61 72 6d 2e 61 63 6b                         ; "alarm.ack"
+actor            00 00                                                    ; empty
+target           00 0f 61 6c 61 72 6d 2f 6f 63 63 6c 75 73 69 6f 6e      ; "alarm/occlusion"
+requirementRef   00 00                                                    ; empty
+riskRef          00 05 52 43 2d 30 33                                     ; "RC-03"
+correlationId    00 00                                                    ; empty
+sourceSequence   01 00 00 00 00 00 00 00 00                               ; present, 0
+detail           00 9f 61 × 159                                           ; 159 bytes "a"
+detailTruncated  01                                                       ; true
+
+H_3 = 0a870f567b1cb9781ebde3d8bdc9d388d463ee6c38fe660256cf36e9da147027
+```
+
+**V4** — `|C_4|` = 98 bytes.
+
+```text
+version          00 01
+streamId         00 10 64 65 76 69 63 65 2d 34 32 2f 62 6f 6f 74 2d 37   ; "device-42/boot-7"
+sequence         00 00 00 00 00 00 00 04                                  ; 4
+category         03                                                       ; Access
+phase            02                                                       ; Confirmed
+time             01 ff ff ff ff ff ff ff ff                               ; available, -1 ns
+action           00 0d 73 65 73 73 69 6f 6e 2e 6c 6f 67 69 6e            ; "session.login"
+actor            00 0b 73 76 63 3a 75 70 64 61 74 65 72                   ; "svc:updater"
+target           00 09 73 65 73 73 69 6f 6e 2f 33                         ; "session/3"
+requirementRef   00 00                                                    ; empty
+riskRef          00 00                                                    ; empty
+correlationId    00 00                                                    ; empty
+sourceSequence   01 ff ff ff ff ff ff ff ff                               ; present, 18446744073709551615
+detail           00 02 c3 a9                                              ; "é"
+detailTruncated  00                                                       ; false
+
+H_4 = 12d523bdf4082156aecfb31c96af83a80054383470b9b06f7e6b5be447c42b07
+```
 
 ## Alternatives Considered
 
@@ -485,7 +761,10 @@ severity exists precisely so this choice can be made once, correctly.
 - Detecting a joint rollback of log and anchor requires state kept off the device (Decision 7.4).
   The reader's tooling has to keep and protect that state, which is an operational burden outside
   the library.
-- Six questions remain open (Decision 4), and the canonical byte contract is still blocking. This
+- Every change to the record format is a new contract version (8.5), and a verifier keeps every
+  version that stored records use. The format can grow, but never in place.
+- Five questions remain open (Decision 4). Both blocking ones are answered (Decisions 7 and 8), but
+  no anchor may advance before the storage contract defines durable confirmation (7.3, #86). This
   record therefore cannot be implemented as it stands. It bounds the design rather than settling it.
 
 ### Risks and Mitigations
@@ -504,9 +783,10 @@ severity exists precisely so this choice can be made once, correctly.
   that keeps and exposes its full history is a stronger option, left to a separate decision.
 - **A chain is treated as proof of authorship.** *Mitigation*: Decision 1 states what the claim is
   and is not, in the words to use.
-- **Canonical serialization is re-derived badly, or decided late.** *Mitigation*: Decision 2 names
-  the prerequisite, says plainly that pointing at MduX ADR-007 is not a specification, and Decision 4
-  marks the byte contract blocking — the first stored record freezes it.
+- **Canonical serialization is re-derived badly, or decided late.** *Mitigation*: Decision 4 kept
+  the byte contract blocking until Decision 8 specified it. Decision 8 fixes each field's encoding
+  by name rather than by in-memory layout, and gives reference vectors that two independent
+  implementations reproduced byte for byte.
 
 ## References
 - ADR-002 Decision 3 and Decision 5 (this repository) — the delivery level this record would fill,
@@ -514,7 +794,10 @@ severity exists precisely so this choice can be made once, correctly.
 - ADR-001 (this repository) — why key material and storage cannot be governed-zone concerns.
 - [MduX ADR-007: Evidence pipeline doctrine](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/docs/adr/ADR-007-evidence-pipeline-doctrine.md) — canonical, byte-stable serialization and the determinism failure modes Decision 2 inherits.
 - mddlog issue #5 — the explicit exclusion of persistent/cryptographically protected audit storage.
-- mddlog issues #84 (canonical byte contract and its schema version, which `canonicalVersion` cites),
+- [FIPS 180-4: Secure Hash Standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) — SHA-256,
+  the digest of Decision 8.
+- mddlog issues #84 (canonical byte contract and its contract version, specified by Decision 8 and
+  cited by `canonicalVersion`),
   #86 (storage and the meaning of durably confirmed, which bounds an anchor's position) and #87
   (restart, rotation and retention, which bound how long anchors are kept). Decision 7 depends on
   all three. #90 implements the provider interface and verifier specified there.
