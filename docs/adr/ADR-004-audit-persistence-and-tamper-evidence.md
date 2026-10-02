@@ -66,7 +66,7 @@ So the property is conditional, and the condition is part of the claim:
 
 > Given an **authentic anchor held independently of the mutable log** — at minimum the stream
 > identity, the position it covers, and the digest at that position — a reader can detect any
-> alteration of, or truncation after, that position. Records after the last trusted anchor are
+> alteration of, or truncation within, the prefix that anchor covers. Records after the last trusted anchor are
 > covered only by the chain's internal consistency, which a rewriting adversary can reproduce.
 
 What that means in practice:
