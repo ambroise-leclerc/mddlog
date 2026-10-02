@@ -211,7 +211,10 @@ stream for which the provider holds no anchor at all is **unanchored**.
 
 `streamId`, `position` and `digest` are the minimum of Decision 1. `canonicalVersion` is required
 because a digest has no meaning without the bytes it was computed over. The contract version of
-Decision 8 supplies the value; it equals the version carried by the stream's records (8.1). `counter` lets a rollback that crosses
+Decision 8 supplies the value; it equals the version carried by the stream's records (8.1). A
+usable anchor whose `canonicalVersion` differs from the stream's version yields **Altered** (7.5),
+checked before any digest is compared: the anchor attests a chain written under another contract,
+so the stored records are not the records that were anchored. `counter` lets a rollback that crosses
 streams be detected through the provider's head (7.4). A per-stream position alone does not see a
 stream that has disappeared.
 
@@ -431,7 +434,8 @@ when several apply.
    `H_p` cannot be recomputed, and the report names that cause.
 3. **Rolled back**: a check of 7.4 fails.
 4. **Conflict**: two anchors for the stream conflict (7.1).
-5. **Altered**: the recomputed `H_p` differs from the anchor's `digest`, or the recomputed digest at
+5. **Altered**: the anchor's `canonicalVersion` is known but differs from the stream's version
+   (7.1, 8.1), the recomputed `H_p` differs from the anchor's `digest`, or the recomputed digest at
    the retained checkpoint differs from the retained digest (7.4). Some record at or before that
    position was changed, or a record was inserted or removed at or before it. The report names
    which comparison failed.
@@ -815,9 +819,9 @@ the record's meaning. A digest in `correlationId` is the 64-character lowercase 
 1. At start: record 1 (`origin` or `predecessor`), then the `recovered` records.
 2. Before the first record of a stream is stored: its `open` record.
 3. At orderly close of a stream: its last record, then the anchor attempt (7.3), then `close`.
-4. Before any removal: the `trim` record. Then the removal. For a whole stream, then `retire`
-   (7.2). The order keeps an interruption on the safe side: a recorded trim whose removal did not
-   happen, never a removal with no trim.
+4. Before any removal: the `trim` record. Then the removal. For a whole stream that the provider
+   has anchored, then `retire` (7.2, 9.5). The order keeps an interruption on the safe side: a
+   recorded trim whose removal did not happen, never a removal with no trim.
 
 #### 9.3 Restart and chain state recovery
 
@@ -857,7 +861,9 @@ their last durably confirmed record ends.
 
 A bounded medium removes the oldest records of a stream that is still kept. A removal always takes
 a **prefix**: records `1 … q`, never a range in the middle. How storage groups records for removal
-is issue #86's. `q` is the last sequence actually removed.
+is issue #86's. `q` is the boundary the trim record states, fixed before removal begins. The
+prefix actually removed is `1 … k−1`, where `k` is the first record present: `k = q + 1` after a
+complete removal, and `k ≤ q` after an interrupted one.
 
 - **The verifiable starting point.** Before the removal, the adapter writes `mddlog.stream.trim`
   with `q` and `H_q`. After the removal, a reader verifies the stream from record `q + 1`, using
@@ -888,11 +894,19 @@ is issue #86's. `q` is the last sequence actually removed.
 #### 9.5 Retention: removing whole streams and ledgers
 
 - **A whole stream.** A stream that has ended, by orderly close or by restart, may be removed
-  entirely: a trim with `q` equal to its last position `m`, then the removal, then `retire` at the
-  provider when one is configured. 7.2 makes the retirement cite the highest accepted anchor `p`.
-  If `m > p`, records `p+1 … m` were never anchored, and the trim record is the only trace of them.
-  A reader reports them as removed without anchor. Without a provider there is no retirement, and
-  the trim record alone states that the stream was removed under retention.
+  entirely, whether or not it was ever anchored: a trim with `q` equal to its last position `m`,
+  then the removal. Before writing the trim, the adapter asks the provider, when one is configured,
+  for the stream's `latest`:
+  - **an anchor** at `p`: after the removal the adapter calls `retire`, which cites `p` (7.2). If
+    `m > p`, records `p+1 … m` were never anchored, and the trim record is the only trace of them.
+    A reader reports them as removed without anchor. An interruption between removal and `retire`
+    leaves the stream anchored with no records: **Incomplete** with `m = 0` (7.5), the report citing
+    the trim, until the adapter completes the `retire`, which it retries after a restart (7.3);
+  - **absent**: the stream was never anchored, so the provider holds nothing to retire, and the
+    adapter calls no `retire`. The trim record alone states the removal;
+  - **unavailable**: the adapter writes no trim and removes nothing yet, and retries under the
+    retention policy. Retention waits rather than guessing between the first two cases.
+  Without a provider there is no retirement either, and the trim record alone states the removal.
 - **A ledger.** A ledger is a stream and is retained by the same rules, with two more conditions:
   every stream it opened has been removed, and a newer ledger in the log cites it as predecessor.
   The newest ledger is therefore never removed. After a removal, the oldest remaining ledger cites
@@ -917,7 +931,7 @@ means that no record was lost between the last stored record and the restart.
 | **Rotation** | "Records `1 … q` removed under retention", with the ledger position of the trim. Coverage starts at `q + 1` (7.5). Records missing between `q + 1` and the first record present make the stream **Incomplete**. |
 | **Prefix missing without a trim** | **Incomplete**: records `1 … k−1` are missing and no trim accounts for them. The chain cannot start, so no anchor can be checked. |
 | **Interrupted removal** | Leftover records `k … q`, checked against the trim's `H_q` (9.4), or a trim not carried out. |
-| **Retention of a whole stream** | **Retired** (7.5), with the trim's `m` and `H_m`. If the trim's `q` equals the retirement's position, the two digests are compared. Records `p+1 … m` are reported as removed without anchor. Without a provider: "removed under retention" from the trim record, unanchored. A stream gone with neither trim nor retirement is a finding under 7.4 and 7.5. |
+| **Retention of a whole stream** | **Retired** (7.5), with the trim's `m` and `H_m`. If the trim's `q` equals the retirement's position, the two digests are compared. Records `p+1 … m` are reported as removed without anchor. Without a provider, or for a stream the provider never anchored: "removed under retention, never anchored" from the trim record, with no finding. A stream gone with neither trim nor retirement is a finding under 7.4 and 7.5. |
 | **Trim past the anchor** | With a provider configured, a trim with `q > p` that leaves records of the stream is a finding: `H_p` can no longer be recomputed. The stream is **Cannot verify** with that cause (7.5), and records `q+1 … m` are internally consistent only. |
 
 **Limits this decision states.** The ledger lives in the mutable log. Its records are only as
