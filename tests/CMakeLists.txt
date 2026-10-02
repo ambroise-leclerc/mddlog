@@ -102,7 +102,6 @@ add_executable(mddlog_specs
     spec/RingDrainSpec.cpp
     spec/SinkRegistrySpec.cpp
     spec/TransportConsumerSpec.cpp
-    spec/WebFrontContextSpec.cpp
     spec/TextLoggerSpec.cpp
     spec/VersionSpec.cpp
 )
@@ -127,5 +126,3 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 mddlog_discover_tests(mddlog_specs)
-
-add_subdirectory(webfront)

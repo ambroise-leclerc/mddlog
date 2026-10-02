@@ -62,7 +62,7 @@ jobs:
     # description names this workflow, and the only way that statement stays true is for the job
     # to actually use it.
     - name: Configure CMake
-      run: cmake --preset ninja-gcc -DMDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS=ON
+      run: cmake --preset ninja-gcc
 
     - name: Build
       run: cmake --build --preset ninja-gcc

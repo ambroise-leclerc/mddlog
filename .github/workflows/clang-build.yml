@@ -41,7 +41,7 @@ jobs:
     # The preset, not an equivalent-looking configure line: CMakePresets.json's ninja-clang
     # description exists precisely to keep the preset and CI from drifting apart.
     - name: Configure CMake
-      run: cmake --preset ninja-clang -DMDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS=ON
+      run: cmake --preset ninja-clang
 
     - name: Build
       run: cmake --build --preset ninja-clang

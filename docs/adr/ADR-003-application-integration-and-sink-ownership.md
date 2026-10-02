@@ -9,7 +9,8 @@ They are implemented by #67 (sink registry), #68 (bounded transport consumer), #
 removal is accepted with its two exceptions, self-removal and two-party mutual cross-removal, under
 which `remove()` returns before the target is quiescent; Decision 4 states their consequences.
 Acceptance alone does not establish validation of a particular build (see Consequences and
-Approval).
+Approval). [Amendment 1](#amendment-1-verification-boundary-103) (#103) moves the verification of
+the facade and of the integration into WebFront; Decisions 1–6 are unchanged.
 
 Requested in the review of PR #6: ADR-001 and ADR-002 define a bounded core and an audit contract,
 neither of which is sufficient to replace an existing application logger. This record covers the
@@ -484,6 +485,52 @@ Usage census at the baseline, for the implementing issues:
 No call site outside `LoggerTests.cpp` uses `set()` or `is()`. None registers more than one sink,
 and only `WebLink` removes one; the two programs keep `clogSink` for the process lifetime.
 
+## Amendment 1: verification boundary (#103)
+
+**Date**: 2026-10-02. Requested by the maintainer in #103; takes effect when that change is merged.
+
+**What changes.** Decisions 1–6 stand as written; only where they are verified changes. mddlog's
+source tree, build and test suite contain and download no application code, including in tests.
+Specifically, mddlog no longer carries:
+
+- the reference bridge of #69 (`tests/webfront/Logger.cpp`, `tooling/LoggerApi.hpp`,
+  `tooling/Logger.hpp`) nor the download of WebFront's `test/LoggerTests.cpp` and Catch2 that ran
+  it as `webfront.baseline.LoggerTests` (#66);
+- the `webfront.integration.{source,installed}` tests and the
+  `MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS` option of #71, which configured, built and ran
+  WebFront itself on every supported CI leg;
+- `tests/spec/WebFrontContextSpec.cpp`, which specified the bridge's context capture and hex
+  rendering of #70.
+
+**Who verifies what.**
+
+| Concern | Owner | Evidence |
+|---|---|---|
+| Sink registry (Decision 4), transport consumer (Decision 5), per-group text adapter (Decision 2), audit exclusion (Decision 6) | mddlog | `SinkRegistrySpec`, `TransportConsumerSpec`, `TextLoggerSpec`, `GovernedRecordSpec` |
+| `webfront::log` facade, its rendered shape against `LoggerTests.cpp` (Decision 1), the optional build (Decision 3), emission context and hex dump (Decision 6) | WebFront | WebFront's `MddlogIntegration.yml` workflow, against a pinned mddlog revision: source and installed integration on Linux with Clang 21 and libc++, plus AddressSanitizer/UndefinedBehaviorSanitizer and ThreadSanitizer jobs; its default build covers the option off |
+
+**Why.**
+
+- *Direction of dependency.* Decision 3 already assigns the facade and its translation unit to
+  WebFront. Verifying them in mddlog made the library test one of its clients, and tied mddlog's
+  results to a third-party revision.
+- *Verification evidence for a medical-device library.* Everything mddlog's tests execute is part of
+  the evidence a manufacturer reviews (IEC 62304 configuration management and verification). An
+  application in that evidence must be placed under configuration control and justified, and it
+  tells the manufacturer nothing about mddlog itself.
+- *Cost.* The integration tests were the largest share of mddlog's CI time (#99).
+
+**Consequences.**
+
+- A change to the registry, the transport consumer or `TextLogger` that breaks WebFront is no
+  longer caught by mddlog's CI; it is caught when WebFront moves its pinned mddlog revision.
+  mddlog's own specifications remain the contract it guarantees, and the review trigger in Approval
+  still applies.
+- The integration is no longer exercised on GCC 16, MSVC or macOS: mddlog's
+  `webfront.integration.*` tests ran on its four CI legs, while WebFront's workflow runs on Linux
+  with Clang 21 only. mddlog itself is still built and tested on all four. Extending the integration
+  matrix is WebFront's decision.
+
 ## References
 - WebFront at `7be626ccfbb50524c9c03296e6c84555ea7d2c7c`: `include/tooling/Logger.hpp`,
   `include/weblink/WebLink.hpp`, `include/weblink/Messages.hpp`, `include/http/WebSocket.hpp`,
@@ -499,6 +546,6 @@ and only `WebLink` removes one; the two programs keep `clogSink` for the process
 - **Approved By**: ambroise-leclerc (project maintainer).
 - **Review Date**: 2026-10-02. The WebFront baseline was re-verified by #66; the adoption was
   verified by WebFront's CI with the option off and on, including AddressSanitizer,
-  UndefinedBehaviorSanitizer and ThreadSanitizer jobs, and by mddlog's
+  UndefinedBehaviorSanitizer and ThreadSanitizer jobs, and, until Amendment 1, by mddlog's
   `webfront.integration.*` tests on its supported matrix. Review again if the registry,
   transport consumer or facade contract changes, or if WebFront's logging entry points move.
