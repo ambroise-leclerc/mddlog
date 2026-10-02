@@ -333,6 +333,13 @@ private:
                 return !logQueue.empty() || !flushPromises.empty() || shuttingDown.load();
             });
 
+            // Take the pending flush requests BEFORE draining: every record a flush() call must wait
+            // for was queued before its request, so it is delivered by the drain below. A request
+            // that arrives while the lock is released during that drain stays queued for the next
+            // pass; fulfilling it here could release it ahead of records still in the queue.
+            std::queue<std::promise<void>> dueFlushes;
+            dueFlushes.swap(flushPromises);
+
             // Process all queued log records
             while (!logQueue.empty()) {
                 auto record = std::move(logQueue.front());
@@ -344,14 +351,15 @@ private:
                 lock.lock();
             }
 
-            // Process flush requests
-            while (!flushPromises.empty()) {
-                auto promise = std::move(flushPromises.front());
-                flushPromises.pop();
+            // Complete the flush requests taken above
+            if (!dueFlushes.empty()) {
                 lock.unlock();
 
                 flushSinks();
-                promise.set_value();
+                while (!dueFlushes.empty()) {
+                    dueFlushes.front().set_value();
+                    dueFlushes.pop();
+                }
 
                 lock.lock();
             }
