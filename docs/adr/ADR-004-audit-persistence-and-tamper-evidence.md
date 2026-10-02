@@ -120,10 +120,10 @@ An implementation must not settle any of these silently. Two of them were **bloc
 may be stored before they are answered, because the first record written freezes both.
 
 - **The anchoring mechanism** (blocking, Decision 1). **Resolved by Decision 7**: anchor contents,
-  the provider interface and eligibility, the exclusions, advancement, independent retention, absence
-  and staleness, the reader's monotonic position, and the verifier's verdicts. Decision 7 chooses no
-  single provider. A deployment that configures none has internal chain consistency only, and the
-  verifier reports exactly that.
+  the provider interface and eligibility, the exclusions, advancement and resumption, independent
+  retention and retirement, absence and staleness, the reader's monotonic position, the verifier's
+  verdicts, and the threat model they assume. Decision 7 chooses no single provider. A deployment
+  that configures none has internal chain consistency only, and the verifier reports exactly that.
 - **The canonical byte contract** (blocking, Decision 2) — field order, encoding, absent-optional
   rules, schema version, and digest encoding, specified precisely enough that two independent
   implementations hash identical bytes for identical records.
@@ -149,6 +149,7 @@ implementation that reports "valid" for the first three has not implemented Deci
 | **Suffix truncation** — the last *n* records are deleted, leaving last sequence `m`, with the anchor at `p` | `m < p`: **Incomplete** (7.5). Records `m+1 … p` are reported missing, and the prefix is reported internally consistent. `m ≥ p`: only records past the anchor were removed. This cannot be told apart from records never written, and the report says coverage is `1 … p` |
 | **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5). The provider head is below the retained head, the stream's anchor is below its retained anchor, or a retained stream is missing without a retirement. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
 | **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, **Unanchored**). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
+| **Resumption after storage alteration** — the storage is altered while the adapter is stopped, and the adapter then restarts | Alteration at or before the last anchor `p`: the adapter's continuity check (7.3) fails. It advances nothing for the old stream, reports an integrity fault through audit health, and starts the new stream instance with the discontinuity visible. The verifier reports the old stream as **Altered** (7.5). Alteration only past `p`: the check passes, the adapter never anchors those reloaded records (7.3), and the verifier reports them as internally consistent and unanchored. The alteration is not detectable, which is the exposure-window limit of 7.5 |
 | **Restart** — a new stream instance begins (ADR-002 Decision 5) | A new chain, explicitly linked to the previous stream identity, with the discontinuity visible rather than closed up |
 
 The third scenario is the one that shows why an anchor must be more than a digest: a rollback of log
@@ -170,6 +171,17 @@ their own threat model. Nothing here requires a key or a signature (Decision 3).
 credentials of its own, such as authenticated storage or a channel to a remote service. Those
 credentials belong to the provider and the host. They are not part of any mddlog record, and this
 record does not specify them.
+
+**Threat model.** The guarantee covers an adversary who can rewrite the log's storage but cannot
+authorize anchors to advance or retire. That holds whether the adversary would act directly or by
+diverting the adapter. The adapter, together with its resumption procedure (7.3), lies inside the
+trust boundary. The provider described here accepts claims without checking that the chain is
+continuous: it cannot, because it never sees the records. Whoever holds the authority to advance or
+retire can therefore substitute a rewritten history for any guarantee that rests on the latest anchor
+alone. A compromise of that authority is **outside the covered model**. Only a retained checkpoint
+the reader verified earlier (7.4) still protects the prefix up to that checkpoint. A provider that
+keeps and exposes its whole history would offer a stronger guarantee. That option widens the storage,
+read and retention contract, and it is left to a separate decision.
 
 #### 7.1 Contents of an anchor
 
@@ -244,6 +256,12 @@ A provider is **eligible** only if all of the following hold:
    may still serve as an anchor, but it must not drop anchors. Retirements are small: one per
    stream instance, the same size as an anchor. Issue #87 may define a compaction only if the
    compaction keeps an aged-out stream distinguishable from a deleted one.
+5. **Authority over `advance` and `retire`.** Only the adapter, inside the trust boundary, can
+   invoke `advance` and `retire`. An adversary who can rewrite the log's storage cannot invoke them,
+   either directly or by getting the adapter to relay a claim built from storage it has rewritten
+   (7.3). The integrator demonstrates this condition for each deployment. The library cannot
+   establish it. A provider with its own clock may also refuse a `retire` before a declared minimum
+   retention period has elapsed. That narrows the reliance on this condition without removing it.
 
 The record recognises three kinds of provider. None of them is the default.
 
@@ -298,6 +316,22 @@ The record recognises three kinds of provider. None of them is the default.
   legitimate only when an independently held retirement attests it.
   How a stream is verified while only part of it has aged out is a rotation-boundary question for
   issue #87. This record fixes only the two endpoints: all records present, or none.
+- **Claim construction and resumption.** An adapter builds a claim only from the chain state it
+  computed itself while writing that stream instance's records. It never builds a claim from chain
+  state read back from the mutable storage. An adapter that resumes from storage first checks
+  continuity. It recomputes `H_p` from the stored records up to the provider's latest position `p`
+  for that stream, and compares the result with the provider's digest. Resumption happens after a
+  restart, when chain state is recovered (issue #87), or before a `retire`. The adapter performs
+  this check before any `advance`, and before any link that cites the old chain. If the digests
+  differ, the adapter advances nothing, reports an integrity fault through audit health, and leaves
+  the evidence untouched for the verifier. Records of an earlier stream instance past its last
+  anchor are never anchored after resumption, because that would launder the exposure window. They
+  stay internally consistent and unanchored. A restart starts a new stream instance in any case
+  (ADR-002 Decision 5), so no live stream needs an anchor built from reloaded state.
+- **Authority to expire.** `retire` is the adapter's to call, under the retention policy only
+  (issue #87), and within the same trust boundary as `advance` (7.2, condition 5). A retirement
+  issued with that authority from outside the policy is indistinguishable from a legitimate expiry.
+  That is the same limit as for `advance`, and it is stated in 7.5.
 - **Absence.** The provider holds neither an anchor nor a retirement for the stream, because none was
   ever accepted. The verifier reports the stream as **unanchored**. An anchor the provider holds but
   the verifier cannot use is not absence (7.1).
@@ -349,6 +383,13 @@ position**:
   An anchor whose counter is below the provider head, while the stream's own counter and position
   are not below its retained anchor, is **not** a rollback. It is a stream that has not advanced
   since.
+- **Re-verifying the retained checkpoint.** For a stream with a retained anchor `(p_r, H_r)`, the
+  verifier recomputes `H_{p_r}` from the log it is given and compares the result with `H_r`, whatever
+  position the current anchor has. A mismatch is reported as **Altered**, not as a rollback. A log
+  that ends before `p_r` is reported as **Incomplete**. Comparing positions alone would miss a
+  history that was rewritten and then re-anchored at some `q > p_r`. This check protects the prefix
+  up to `p_r` even when the authority of 7.2, condition 5, was compromised after that verification.
+  It does not apply to a retired stream whose records are gone.
 - **The first verification.** With no retained position, a joint rollback cannot be excluded. The
   verifier says so: "rollback not excluded: no retained position". A rollback finding is never
   implied by silence.
@@ -377,12 +418,15 @@ when several apply.
    for an unusable anchor.
 3. **Rolled back**: a check of 7.4 fails.
 4. **Conflict**: two anchors for the stream conflict (7.1).
-5. **Altered**: the recomputed `H_p` differs from the anchor's `digest`. Some record at or before `p`
-   was changed, or a record was inserted or removed at or before `p`.
+5. **Altered**: the recomputed `H_p` differs from the anchor's `digest`, or the recomputed digest at
+   the retained checkpoint differs from the retained digest (7.4). Some record at or before that
+   position was changed, or a record was inserted or removed at or before it. The report names
+   which comparison failed.
 6. **Retired**: the stream is retired and the log holds none of its records. The records aged out
    under retention, through position `p`. There is nothing left to verify, and that is not a
    finding.
-7. **Incomplete**: the last record present has a sequence `m < p`. Records `m+1 … p` are missing. The
+7. **Incomplete**: the last record present has a sequence `m < p`, or `m` is below the retained
+   checkpoint `p_r` (7.4). Records `m+1 … p` are missing. The
    prefix is internally consistent but cannot be matched against `digest`, because `H_p` cannot be
    computed. A stream the provider holds an anchor for, and the log holds no record of, is
    Incomplete with `m = 0`.
@@ -399,7 +443,11 @@ records **after** the last anchor cannot be detected. A rewriting adversary can 
 consistency there, and a truncated suffix cannot be told apart from records never written. The
 exposure window of 7.3 bounds this limit. Nothing removes it. A verifier with no retained position
 cannot exclude a joint rollback of log and anchor. An eligible provider that is itself compromised
-defeats the mechanism. Choosing a provider fit for the device's threat model is part of the
+defeats the mechanism. So does a compromise of the authority to `advance` or `retire` (7.2,
+condition 5), which is outside the covered model. Whoever holds that authority can re-anchor a
+rewritten history, or present the removal of evidence as routine retention, and the latest anchor
+then attests the substitute. Only a checkpoint the reader retained earlier still protects its prefix.
+A verifier does not report such a compromise. It reports what the anchors attest. Choosing a provider fit for the device's threat model is part of the
 manufacturer's risk file, not the library's.
 
 ## Alternatives Considered
@@ -448,6 +496,12 @@ severity exists precisely so this choice can be made once, correctly.
   rewriting adversary defeats it by recomputation or truncation. *Mitigation*: Decision 1 states the
   conditional property and its scope, and Decision 5's first three scenarios fail any implementation
   that reproduces the error.
+- **The latest anchor is trusted beyond its threat model.** An adversary who controls the adapter,
+  or who gets it to relay a rewritten chain, can re-anchor that history. The provider of Decision 7
+  does not check chain continuity. *Mitigation*: Decision 7 states the threat model, makes the
+  authority over `advance` and `retire` an eligibility condition, requires a continuity check before
+  any resumed adapter advances, and has the reader re-verify its retained checkpoint. A provider
+  that keeps and exposes its full history is a stronger option, left to a separate decision.
 - **A chain is treated as proof of authorship.** *Mitigation*: Decision 1 states what the claim is
   and is not, in the words to use.
 - **Canonical serialization is re-derived badly, or decided late.** *Mitigation*: Decision 2 names
