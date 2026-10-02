@@ -93,10 +93,12 @@ if [ -n "${SHARD:-}" ]; then
         */*) shard_k="${SHARD%/*}"; shard_n="${SHARD#*/}" ;;
         *) fail "SHARD must be 'K/N', got '$SHARD'." ;;
     esac
-    case "$shard_k$shard_n" in
-        ''|*[!0-9]*) fail "SHARD must be 'K/N' with positive integers, got '$SHARD'." ;;
-    esac
-    if [ "$shard_n" -lt 1 ] || [ "$shard_k" -lt 1 ] || [ "$shard_k" -gt "$shard_n" ]; then
+    # Decimal without leading zeros and at most three digits: bash arithmetic would read '08' as
+    # invalid octal, and an oversized value could wrap into a different, valid shard.
+    for part in "$shard_k" "$shard_n"; do
+        [[ "$part" =~ ^[1-9][0-9]{0,2}$ ]] || fail "SHARD must be 'K/N' with K, N in 1..999, got '$SHARD'."
+    done
+    if [ "$shard_k" -gt "$shard_n" ]; then
         fail "SHARD must satisfy 1 <= K <= N, got '$SHARD'."
     fi
     full_count="${#scope[@]}"

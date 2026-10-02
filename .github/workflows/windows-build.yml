@@ -10,10 +10,11 @@ on:
     # Markdown changes nothing this workflow builds or tests; pushes to develop/master still run.
     paths-ignore: [ '**.md' ]
 
-# A newer push to the same pull request supersedes the run in flight. Branch pushes are never
-# cancelled, so every develop/master commit keeps a complete record.
+# A newer push to the same pull request supersedes the run in flight. Every other run gets a group
+# of its own (run_id): a shared per-branch group would let a newer push replace a still-pending
+# one, so an intermediate develop/master commit could go unchecked.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
