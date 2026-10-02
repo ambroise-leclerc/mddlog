@@ -36,8 +36,8 @@ export namespace mddlog {
 // Re-export core types
 using adapter::AuditDrainResult;
 using adapter::AuditDrainStatus;
-using adapter::AuditRingRegistration;
 using adapter::AuditHealthSnapshot;
+using adapter::AuditRingRegistration;
 using adapter::AuditSinkAdapter;
 using adapter::RingSinkAdapter;
 using core::AuditCategory;
