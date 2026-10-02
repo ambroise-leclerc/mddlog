@@ -7,6 +7,14 @@ on:
     branches: [ master, develop ]
   pull_request:
     branches: [ master, develop ]
+    # Markdown changes nothing this workflow builds or tests; pushes to develop/master still run.
+    paths-ignore: [ '**.md' ]
+
+# A newer push to the same pull request supersedes the run in flight. Branch pushes are never
+# cancelled, so every develop/master commit keeps a complete record.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -65,8 +73,9 @@ jobs:
       run: ctest --preset ninja-msvc -L governed --verbose --no-tests=error --timeout 120
       shell: cmd
 
+    # -LE governed: the step above already ran (and verbosely logged) every governed test.
     - name: Run tests
-      run: ctest --preset ninja-msvc --output-on-failure --no-tests=error --timeout 120
+      run: ctest --preset ninja-msvc -LE governed --parallel --output-on-failure --no-tests=error --timeout 120
       shell: cmd
 
     - name: Verify no source-tree writes

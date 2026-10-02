@@ -54,6 +54,13 @@ if(MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS)
                 "-DCONFIG=$<CONFIG>" "-DGENERATOR=${CMAKE_GENERATOR}" "-DKIND=${kind}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/TestIntegration.cmake")
         set_tests_properties(webfront.integration.${kind} PROPERTIES
-            LABELS "build;webfront;integration" TIMEOUT 900 RESOURCE_LOCK mddlog_install_tree)
+            LABELS "build;webfront;integration" TIMEOUT 900)
+        # Only the installed variant runs 'cmake --install' on this build tree (which rewrites its
+        # install_manifest.txt), so only it shares the install-tree lock with the consumer tests.
+        # The source variant touches nothing but its own scratch directory and runs alongside.
+        if(kind STREQUAL "installed")
+            set_tests_properties(webfront.integration.${kind} PROPERTIES
+                RESOURCE_LOCK mddlog_install_tree)
+        endif()
     endforeach()
 endif()

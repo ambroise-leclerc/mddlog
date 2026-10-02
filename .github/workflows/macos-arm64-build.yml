@@ -5,7 +5,15 @@ on:
     branches: [ master, develop ]
   pull_request:
     branches: [ master, develop ]
+    # Markdown changes nothing this workflow builds or tests; pushes to develop/master still run.
+    paths-ignore: [ '**.md' ]
   workflow_dispatch:
+
+# A newer push to the same pull request supersedes the run in flight. Branch pushes are never
+# cancelled, so every develop/master commit keeps a complete record.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -52,8 +60,9 @@ jobs:
     - name: Verify governed boundary and negative controls
       run: ctest --preset ninja-macos-clang -L governed --verbose --no-tests=error --timeout 120
 
+    # -LE governed: the step above already ran (and verbosely logged) every governed test.
     - name: Run full test suite
-      run: ctest --preset ninja-macos-clang --output-on-failure --no-tests=error --timeout 120
+      run: ctest --preset ninja-macos-clang -LE governed --parallel --output-on-failure --no-tests=error --timeout 120
 
     - name: Configure ASan and UBSan
       run: |
@@ -78,7 +87,7 @@ jobs:
       env:
         ASAN_OPTIONS: detect_leaks=0
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      run: ctest --preset ninja-macos-clang-debug -E 'InstallTree(Consumer|CoreConsumer)' --output-on-failure --no-tests=error --timeout 120
+      run: ctest --preset ninja-macos-clang-debug -E 'InstallTree(Consumer|CoreConsumer)' --parallel --output-on-failure --no-tests=error --timeout 120
 
     - name: Verify no source-tree writes
       shell: bash

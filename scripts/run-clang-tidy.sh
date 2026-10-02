@@ -17,6 +17,9 @@
 # Usage: scripts/run-clang-tidy.sh [build-dir]        (default: build-clang)
 # Env:   CLANG_TIDY  clang-tidy binary (default: clang-tidy-21, then /usr/lib/llvm-21/bin/clang-tidy)
 #        JOBS        parallel analyses (default: nproc)
+#        SHARD       'K/N' analyses only the K-th of N round-robin slices of the scope (1-based), so
+#                    CI can split the run across jobs. The whole scope is still checked against the
+#                    compilation database; the N shards together cover it exactly once.
 set -euo pipefail
 
 readonly REFERENCE_MAJOR=21
@@ -84,6 +87,28 @@ if [ "${#missing[@]}" -gt 0 ]; then
     exit 1
 fi
 
+shard_label=""
+if [ -n "${SHARD:-}" ]; then
+    case "$SHARD" in
+        */*) shard_k="${SHARD%/*}"; shard_n="${SHARD#*/}" ;;
+        *) fail "SHARD must be 'K/N', got '$SHARD'." ;;
+    esac
+    case "$shard_k$shard_n" in
+        ''|*[!0-9]*) fail "SHARD must be 'K/N' with positive integers, got '$SHARD'." ;;
+    esac
+    if [ "$shard_n" -lt 1 ] || [ "$shard_k" -lt 1 ] || [ "$shard_k" -gt "$shard_n" ]; then
+        fail "SHARD must satisfy 1 <= K <= N, got '$SHARD'."
+    fi
+    full_count="${#scope[@]}"
+    sharded=()
+    for i in "${!scope[@]}"; do
+        if [ $((i % shard_n)) -eq $((shard_k - 1)) ]; then sharded+=("${scope[$i]}"); fi
+    done
+    [ "${#sharded[@]}" -gt 0 ] || fail "shard $SHARD of $full_count translation units is empty; use fewer shards."
+    scope=("${sharded[@]}")
+    shard_label=" (shard $SHARD of $full_count)"
+fi
+
 out_dir="$(mktemp -d)"
 trap 'rm -rf "$out_dir"' EXIT
 jobs_n="${JOBS:-$(nproc 2>/dev/null || echo 1)}"
@@ -100,7 +125,7 @@ analyse() {
     fi
 }
 
-echo "run-clang-tidy: analysing ${#scope[@]} translation units with $jobs_n jobs"
+echo "run-clang-tidy: analysing ${#scope[@]} translation units${shard_label} with $jobs_n jobs"
 running=0
 for f in "${scope[@]}"; do
     analyse "$f" &
@@ -123,7 +148,7 @@ for f in "${scope[@]}"; do
     esac
 done
 
-summary="clang-tidy $major: analysed ${ok_count}/${#scope[@]} translation units cleanly (.cppm interface units: ${cppm_ok}/${cppm_total}); ${fail_count} failed; clang-diagnostic-error occurrences: ${module_errors}."
+summary="clang-tidy $major${shard_label}: analysed ${ok_count}/${#scope[@]} translation units cleanly (.cppm interface units: ${cppm_ok}/${cppm_total}); ${fail_count} failed; clang-diagnostic-error occurrences: ${module_errors}."
 echo "run-clang-tidy: $summary"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {
