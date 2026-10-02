@@ -126,10 +126,14 @@ may be stored before they are answered, because the first record written freezes
   version, field order and encoding, the absent, empty and zero rules, the reading rules, SHA-256
   and the chain input with its initial value, the digest's representation, evolution, the room left
   for a signature, and reference vectors that fix every case byte for byte.
-- **Storage medium and layout** — segmented files, a circular region of flash, or an
-  append-only device log. Each has a different truncation and wear story.
-- **Power-loss atomicity** — what "durably confirmed" (ADR-002 level 3) means precisely: written,
-  flushed, or acknowledged by the medium. Until this is answered, level 3 stays unclaimed.
+- **Storage medium and layout**. **Resolved by Decision 9**: append-only segments, each holding one
+  stream instance and removed only whole, on files, a circular flash region turned one segment at a
+  time, or an append-only device log. Decision 9 also fixes the storage abstraction, its
+  eligibility conditions, and the framing of the stored bytes.
+- **Power-loss atomicity**. **Resolved by Decision 9**: "durably confirmed" (ADR-002 level 3) means
+  acknowledged by the medium, at the return of a `sync` that answered durable, as a prefix of the
+  stream instance. Every power-cut point has a defined outcome, and a partial record is recognised
+  by its frame. Level 3 stays unclaimed until an implementation is verified (Decision 6).
 - **Retention and rotation** — how a bounded medium ages out old records without making the chain
   unverifiable, and what a reader sees at the boundary.
 - **Chain state recovery** — where the last digest lives across a restart, and what a reader
@@ -149,6 +153,7 @@ implementation that reports "valid" for the first three has not implemented Deci
 | **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5). The provider head is below the retained head, the stream's anchor is below its retained anchor, or a retained stream is missing without a retirement. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
 | **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, **Unanchored**). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
 | **Resumption after storage alteration** — the storage is altered while the adapter is stopped, and the adapter then restarts | Alteration at or before the last anchor `p`: the adapter's continuity check (7.3) fails. It advances nothing for the old stream, reports an integrity fault through audit health, and starts the new stream instance with the discontinuity visible. The verifier reports the old stream as **Altered** (7.5). Alteration only past `p`: the check passes, the adapter never anchors those reloaded records (7.3), and the verifier reports them as internally consistent and unanchored. The alteration is not detectable, which is the exposure-window limit of 7.5 |
+| **Power loss while writing** — the cut falls before, during or after an append, or during a `sync` | The reader reports the trailing bytes of the stream's last segment (9.4) and reads no record from them. A complete frame past the durable position is a record, internally consistent and unanchored. No record at or below the durable position is missing, so no anchor reports a loss (9.5) |
 | **Restart** — a new stream instance begins (ADR-002 Decision 5) | A new chain, explicitly linked to the previous stream identity, with the discontinuity visible rather than closed up |
 
 The third scenario is the one that shows why an anchor must be more than a digest: a rollback of log
@@ -286,11 +291,11 @@ The record recognises three kinds of provider. None of them is the default.
 
 #### 7.3 Advancement, independent retention, absence and staleness
 
-- **What may be anchored.** An anchor's position never exceeds the highest record the storage
-  contract reports as **durably confirmed** (ADR-002 level 3; the storage contract is issue #86).
-  Without this rule, power loss after anchoring but before storage would turn into a false
-  truncation finding. Until that contract is accepted, no anchor may be advanced, because nothing is
-  durably confirmed.
+- **What may be anchored.** An anchor's position never exceeds the stream's **durable position**:
+  the highest record the storage contract reports as **durably confirmed** (ADR-002 level 3,
+  Decision 9.3). Without this rule, power loss after anchoring but before storage would turn into a
+  false truncation finding. Until that contract is accepted and implemented on an eligible backend
+  (9.2), no anchor may be advanced, because nothing is durably confirmed.
 - **Frequency.** The integrator chooses a policy and declares it to the verifier as configuration,
   not as a constant in the library. The policy has two bounds: a record bound `N` (advance once at
   most `N` records lie past the current anchor) and an age bound `T` (advance once the current anchor
@@ -546,7 +551,7 @@ this decision. Changing one is a new version (8.5).
   digest, no storage offset, no frame length and no signature. The admission result
   (`AuditWriteResult`) is not part of the record.
 - **Self-delimiting.** A reader that knows version 1 finds the end of a record from its own bytes.
-  How records are framed in storage is issue #86.
+  How records are framed in storage is Decision 9 (9.4).
 
 #### 8.3 Reading a record
 
@@ -568,7 +573,7 @@ Under a stream version it knows, a reader decodes each record and also finds it 
 any of the following holds:
 
 - the bytes end before field 15;
-- bytes remain after field 15, within the record's storage frame (#86);
+- bytes remain after field 15, within the record's storage frame (9.4);
 - an enum byte is not in its table;
 - a presence or flag byte is neither `0x00` nor `0x01`;
 - a byte count exceeds the field's capacity;
@@ -747,6 +752,267 @@ detailTruncated  00                                                       ; fals
 H_4 = 12d523bdf4082156aecfb31c96af83a80054383470b9b06f7e6b5be447c42b07
 ```
 
+### 9. Storage, power-loss atomicity, and what "durably confirmed" means
+
+This decision answers two questions of Decision 4: the storage medium and layout, and power-loss
+atomicity. It fixes the layout of the stored bytes, the storage abstraction the adapter writes
+through, the exact point at which a record becomes **durably confirmed** (ADR-002 Decision 3,
+level 3), what every power cut leaves behind, and how storage failures reach the audit health
+signal. It is a specification. It writes no record, and level 3 stays unclaimed until an
+implementation exists and is verified (Decision 6).
+
+Storage is an adapter concern (ADR-001). Nothing here moves I/O, flushing or recovery into the
+governed core. The records written are the canonical bytes and digests of the canonical byte
+contract (Decision 8, issue #84). This decision frames them and never interprets them.
+
+#### 9.1 Medium and layout: append-only segments, on any eligible medium
+
+The record chooses a **layout**, not a medium. The stored log is a set of **segments**. A segment is
+a bounded byte region that is written only by appending, and is never rewritten in place. It is
+removed only whole, by retention (issue #87). Each segment holds records of exactly one stream
+instance (ADR-002 Decision 5). A stream instance spans one or more segments, numbered from 0
+without gaps.
+
+The three media Decision 4 named are all usable, under this layout, and only under it:
+
+- **Segmented files**: one segment is one file, created exclusively, and appended to.
+- **A circular region of flash**: the region is divided into segments of whole erase blocks. The
+  circle turns **one segment at a time**. A segment is erased only whole, and only when retention
+  reclaims it. Erasing in whole segments also spreads wear across the region in order.
+- **An append-only device log**: one segment is one range of the device log, if the device gives
+  the acknowledgment 9.2 requires.
+
+**Rejected: overwriting the oldest records in place**, at record or page granularity. A cut during
+such an overwrite leaves a half-erased old record next to a half-written new one, and the medium
+then holds bytes that belong to no single state of the log. Ageing out is a retention decision
+(issue #87), taken one whole segment at a time.
+
+Which medium a deployment uses, and the size of a segment, are the integrator's choice. They
+declare both as configuration. The wear and write-amplification trade-off of the sync policy (9.3)
+is also theirs: every sync may program a partial page.
+
+#### 9.2 The storage abstraction and its minimal contract
+
+The adapter writes through the operations below. Like 7.2, they are an interface contract, not C++
+signatures; the implementing issue writes those.
+
+- **`open(streamId, segmentIndex, firstSequence)`** creates a segment and appends its preamble and
+  header frame (9.4). It answers **opened**, **noSpace** or **failed**. Like `append`, **opened
+  means nothing about durability**: the preamble and the header become durable through the first
+  `sync` that covers them (below), and only on an eligible backend.
+- **`append(segment, bytes)`** places bytes after the segment's current end. It answers **written**,
+  with the new end offset, or **failed**. **Written means nothing about durability.** The bytes may
+  still sit in a cache, a buffer or a controller.
+- **`sync(segment, offset)`** answers **durable** only when every byte of the segment before
+  `offset`, the preamble and header included, will survive a power loss at any later instant, and
+  so will the segment's existence, such as a new file's directory entry. On an eligible backend
+  (below), it answers **durable** or **failed**. A backend that is not eligible answers
+  **unsupported**, every time, and never durable. Unsupported is not a failure (9.6). There is no
+  optimistic answer.
+- **`read(segment, offset, length)`** and **`segments()`** serve recovery and verification. They
+  return what the medium holds, or **unavailable**.
+- **`reclaim(segment)`** removes a whole segment. Only retention calls it (issue #87).
+
+A storage backend is **eligible for level 3** only if all of the following hold. As for the
+providers of 7.2, the integrator demonstrates them for each deployment, and the library cannot.
+
+1. **A truthful barrier.** `sync` answers **durable** only after the medium itself has acknowledged
+   persistence. A volatile write cache that a power loss empties, or a flush that returns before the
+   medium has persisted the data, disqualifies the backend. Examples of what the integrator must
+   check: on Linux, `fsync` on the file, plus the directory when a segment file is created; on
+   macOS, `F_FULLFSYNC`, because `fsync` there does not flush the drive's cache; on raw flash, the
+   end of the program operation as the controller reports it.
+2. **A stable prefix.** Bytes of a segment before the last offset `sync` confirmed are never
+   altered by a later `append`, `sync` or power loss. A medium where an interrupted program can
+   corrupt data programmed earlier, as with paired pages on some NAND flash, is eligible only if
+   its backend prevents that, for example by padding to the safe boundary before each sync.
+3. **Nothing past the barrier is promised.** After a power loss, the bytes after the last
+   confirmed offset may be any mix of absent, partial, complete or erased. The layout (9.4) is
+   designed to read that region safely. The backend need not order those bytes.
+
+A backend that is not eligible may still store records. The integrator declares it as such in the
+configuration. It opens segments and appends frames like any other, and its `sync` answers
+**unsupported**. Nothing it stores is ever durably confirmed, its durable position stays 0, and no
+anchor ever covers it (7.3).
+
+#### 9.3 What "durably confirmed" means
+
+Of the three readings Decision 4 offered (written, flushed, acknowledged by the medium), this
+record takes the third.
+
+> A record of sequence `n` in a stream instance is **durably confirmed** when `sync` has answered
+> **durable** for an offset at or beyond the end of its frame (9.4), and every earlier record of
+> that instance is durably confirmed.
+
+- **The acknowledgment boundary is the return of `sync` with the answer durable.** The return of
+  `append` is not a confirmation, and neither is a flush that was issued. A `sync` still in progress
+  confirms nothing.
+- **Confirmation is a prefix.** It advances in sequence order, and never past a record that is not
+  confirmed. The adapter publishes it per stream instance as the **durable position**: the highest
+  confirmed sequence, or 0. The durable position only increases.
+- **Level 3 is not level 2.** `AuditSink::accept()` returning true still means hand-off: the
+  persisting sink copied the event into its own bounded pending buffer. Durable confirmation is
+  reported later, through the durable position (9.6), never through the producing call or through
+  `accept()`.
+- **No durable acknowledgment before the contract holds.** The adapter never publishes a durable
+  position, and never offers an anchor claim (7.3), above what a `sync` answered durable for. A
+  backend that is not eligible (9.2) publishes none.
+- **Sync policy.** A `sync` per record is allowed but not required. The integrator declares a
+  policy with a record bound and an age bound, as for anchors (7.3), plus a sync on orderly close.
+  The adapter syncs on its consumer thread. Syncing never holds up admission: while it runs, the
+  ring absorbs events, and a full ring refuses at the call site (ADR-002 Decision 3).
+- **Retries.** `AuditSink` allows a retry of the same `(streamId, sequence)` (ADR-002 Decision 3).
+  A retried event whose sequence was already appended, and whose canonical bytes are identical, is
+  accepted without a second append. Different bytes under the same sequence are an integrity fault
+  (9.6). An event whose sequence is not the next one of its instance is a fault too, because the
+  chain admits no gap (Decision 8).
+
+#### 9.4 Layout of the stored bytes, layout version 1
+
+All integers are big-endian, as in Decision 8. Version 1 of this layout is independent of the
+contract version of Decision 8: a segment can only hold records of one contract version, because
+it holds one stream instance (Decision 8).
+
+**A segment** is a **preamble**, then **frames** back to back, then unused space.
+
+| Bytes | Field | Value |
+|---|---|---|
+| 4 | magic | `6d 64 6c 67` (`"mdlg"`) |
+| 2 | layout version | `u16`, `1` for this decision. `0` is never valid. |
+
+**A frame** is:
+
+| Bytes | Field | Value |
+|---|---|---|
+| 1 | type | `0x01` segment header, `0x02` record. Every other value is invalid in layout version 1. |
+| 4 | length | `u32`, the length of the payload. For type `0x01`, from 15 to 65 536. For type `0x02`, from 33 to 65 536. |
+| length | payload | see below |
+| 4 | check | `u32`, CRC-32C of the type, length and payload bytes |
+
+- **The CRC.** CRC-32C (Castagnoli): reflected polynomial `0x82F63B78`, initial value
+  `0xFFFFFFFF`, final XOR `0xFFFFFFFF`. The check value for the ASCII bytes `123456789` is
+  `0xE3069283`. The check detects **accidental** damage, a torn write above all. It proves nothing
+  against a deliberate rewrite: anyone can recompute it. Tamper evidence is the chain's job and the
+  anchor's (Decision 1).
+- **Header frame (type `0x01`).** The first frame of every segment, and only there. Its payload is
+  `segmentIndex` (`u32`, from 0), `firstSequence` (`u64`, the sequence the first record of this
+  segment will carry) and `streamId`, encoded as a Decision 8 `string`.
+- **Record frame (type `0x02`).** Its payload is `C_k ‖ H_k`: the canonical bytes of the record
+  (Decision 8), then its 32-byte chain digest. `C_k` takes the first `length − 32` bytes. Bytes left
+  after field 15 of `C_k` make the record malformed (Decision 8).
+- **Why types and bounds.** An erased flash byte (`0xFF`) and a zeroed byte (`0x00`) are both
+  invalid types, and an erased or zeroed length is out of bounds. Unused space therefore never
+  reads as a frame. The bounds do not depend on the contract version.
+- **Evolution.** Any change to the preamble, a frame type, a payload or a bound is a new layout
+  version. A reader that does not know a segment's layout version reads nothing from it and reports
+  **Cannot verify** for the stream, naming the version, as Decision 8 does for an unknown contract
+  version.
+
+**Recognising a partial record.** A reader scans a segment from the end of the preamble. The bytes
+at offset `o` are a **valid frame** when all of the following hold. Otherwise the scan stops at `o`:
+
+1. the 5 bytes of type and length lie inside what the medium returns;
+2. the type is `0x01` at the first frame, and `0x02` after it;
+3. the length is within the bounds of its type;
+4. the whole frame, check included, lies inside what the medium returns;
+5. the check equals the CRC-32C the reader computes.
+
+The bytes from `o` to the end of the segment are the segment's **trailing bytes**. The reader never
+parses a record from them, never repairs them, and never resynchronises inside them, because a
+payload may contain anything. A record is in the log only if its frame is valid.
+
+**Vectors.** The first segment of the stream instance `device-42/boot-7`, holding the record of
+vector V1 (Decision 8):
+
+```text
+offset 0    preamble       6d 64 6c 67 00 01
+offset 6    header frame   01                                           ; type: segment header
+                           00 00 00 1e                                  ; length 30
+                           00 00 00 00                                  ; segmentIndex 0
+                           00 00 00 00 00 00 00 01                      ; firstSequence 1
+                           00 10 64 65 76 69 63 65 2d 34 32 2f 62 6f 6f 74 2d 37
+                                                                        ; "device-42/boot-7"
+                           78 0d 8e 4f                                  ; check
+offset 45   record frame   02                                           ; type: record
+                           00 00 00 bd                                  ; length 189 = 157 + 32
+                           C_1                                          ; 157 bytes, vector V1
+                           53 84 ec 41 33 d6 ba ab 77 90 b4 8a 0f a0 c8 eb
+                           3d 24 9e 37 d9 48 7a 88 6a a4 7b 09 80 3b 90 55
+                                                                        ; H_1
+                           99 90 ad 35                                  ; check
+offset 243  end of the last frame
+```
+
+If a cut leaves that segment ending at an offset `e` with `45 < e < 243`, the record frame fails
+rule 1 (`e < 50`) or rule 4: the reader finds the header, no record, and `e − 45` trailing bytes
+from offset 45. With `e ≥ 243`, the record is present. Changing any single byte of the record
+frame other than its length makes rule 2 or rule 5 fail, because a CRC-32C detects every error
+confined to 32 consecutive bits.
+
+#### 9.5 Every power-cut point has a defined outcome
+
+The table follows one record, of sequence `n`, through its write. "Before the cut" is what the host
+had been told. "After restart" is what the medium may hold, and what a reader then reports. A
+restart always starts a new stream instance (ADR-002 Decision 5), so no cut is ever "continued":
+the old instance ends, and the discontinuity stays visible.
+
+| Cut point | Before the cut | What the medium may hold, and what the reader reports |
+|---|---|---|
+| **Before the append** of frame `n` | At most handed off (level 2). Durable position below `n`. | No frame `n`. The stream ends at an earlier record, possibly with trailing bytes from an earlier unconfirmed frame. Record `n` is lost. Since no anchor exceeds the durable position (7.3), the loss produces no Incomplete finding, and nothing ever claimed `n` durable. |
+| **During the append**, before it answers | Same. | Frame `n` absent, partial or complete. The cut may fall after the bytes were fully written, or even persisted, but before `append` returned. Absent or partial: the scan stops at its start (9.4) and reports trailing bytes there, from which no record is parsed. Complete with a valid check: it is a record, as in the next row. Neither case says anything about confirmation, which only a `sync` answer gives (9.3). |
+| **After the append, before `sync`** | Same. `append` answered written, which promises nothing. | Frame `n` absent, partial or complete, and the same for every unconfirmed frame before it. A complete frame with a valid check is a record. It lies past the durable position, so past any anchor, and the verifier reports it internally consistent and unanchored (7.5). |
+| **During `sync`**, before it answers | Same. | As in the previous row. The bytes may already be persisted when the cut falls, and the frame then reads as complete. A `sync` that has not answered confirms nothing, whatever the reader finds. |
+| **After `sync` answered durable**, before the durable position was published | Not yet told. The record was confirmed in fact, but not reported. | Frame `n` is complete and valid, guaranteed by conditions 1 and 2 of 9.2. The host must treat a record it had no confirmation for as **unknown**, never as lost. |
+| **After the durable position was published** | Durable through `n`. | Frame `n` is complete and valid. If it is missing or damaged, that is not a power-loss outcome but a medium fault or an alteration. Up to the last anchor, the verifier reports Incomplete, Inconsistent or Altered (7.5). Past it, the loss cannot be told from records never written, which is the exposure-window limit of 7.5. |
+| **During `open`** of a new segment, before it answers | No record of the new segment was confirmed, since `append` follows `open` and a confirmation needs a `sync` covering the header. | The segment absent, or its preamble and header absent, partial or complete. Without a valid preamble and header frame, the reader reports a segment without a valid header and reads no record from it. With them, it is an empty segment, as in the next row. A valid header proves nothing about durability. |
+| **After `open`, before the first `sync`** that covers the header | Same. | As in the previous row: the header may be absent, partial or complete, since `opened` promised nothing. A complete header with no record frame is an empty segment. This is normal. |
+
+**What a reader concludes from trailing bytes.** In the **last** segment of a stream instance,
+trailing bytes are the expected trace of a cut, and the reader reports their offset and length.
+In any **earlier** segment, the bytes after the last valid frame are unused space if the next
+segment's header carries `firstSequence` equal to that frame's sequence plus one, and the chain
+continues across the boundary. Otherwise records are missing, and the chain check reports
+**Inconsistent** at the first record that does not follow (Decision 8). Duplicate segment indices
+with valid headers, a gap in segment indices, or a header whose `streamId` differs from its records
+are also reported as Inconsistent: the adapter of 9.6 never produces them. These conclusions are
+the verifier's, which reads every segment. The adapter's startup check covers only part of them
+(9.6).
+
+#### 9.6 Storage failures and the audit health signal
+
+- **A failure ends durability for the stream instance.** If `open`, `append` or `sync` answers
+  failed or noSpace (an **unsupported** `sync` from a declared non-eligible backend is not a
+  failure), or the adapter detects a retry with different bytes or a sequence out of order
+  (9.3), the adapter writes nothing more to that instance. It does not retry at the same offset,
+  which could overwrite part of a frame, and it does not continue in a new segment, which would
+  hide the damaged region. From then on, the persisting sink refuses events for that instance from
+  `accept()`. They stay in the ring, the ring fills, and producers see refusals at the call site
+  (ADR-002 Decision 3). The host decides whether to stop, degrade or restart. A restart starts a
+  new instance, with the discontinuity visible.
+- **What the health signal reports.** Alongside the counters of ADR-002 Decision 3, the adapter
+  publishes, for each stream instance, its durable position and its storage state, **persisting**
+  or **failed**, and, across instances, counters with the last cause: open, append and sync
+  failures, no space, duplicate mismatch, and sequence out of order. Events the sink had accepted
+  but never confirmed when an instance failed are counted as **not durable at failure**, and they
+  are reported as losses after admission.
+- **Recovery findings.** At startup, before a new instance writes, the adapter runs a bounded
+  check and reports, through the same signal, exactly what that check covers:
+  - for **every** segment, its preamble and header frame only: segments without a valid header,
+    unknown layout versions, and, per stream instance, duplicate segment indices and gaps in them;
+  - for the **last** segment of every earlier instance, a full frame scan (9.4): trailing bytes,
+    with their offset and length.
+
+  The check reads no record frame of an earlier segment. It recomputes no digest, does not check
+  that `firstSequence` follows on at a segment boundary, and does not compare the `streamId` of a
+  record with its header's. Those findings belong to the verifier (7.5), which reads every segment
+  in full, and the adapter reports none of them. Recovering the chain state itself, and linking the
+  new chain to the old one, is issue #87.
+- **Never through the failing path.** The adapter never reports a storage failure as an audit
+  event, never writes it to the storage that failed, and never sends it through any sink that
+  writes to that storage. The health signal is read by the host, as for ADR-002 Decision 3. A host
+  that records the failure as an audit event of its own does so knowingly, through the normal
+  path, where that event may itself be refused.
+
 ## Alternatives Considered
 
 ### 1. Signed records from the start, no separate chaining step (Rejected for now)
@@ -764,6 +1030,19 @@ rewrite, which is the case an audit trail exists for.
 **Cons:** Volume. Diagnostics at debug level on a busy device would dominate the medium and force
 retention policies that then age out the audit records too. ADR-002's separation of audit from
 severity exists precisely so this choice can be made once, correctly.
+
+### 4. Overwrite the oldest records in place, in one circular region (Rejected)
+**Pros:** The simplest flash layout; no segment bookkeeping.
+**Cons:** A cut during an overwrite leaves bytes that belong to no single state of the log, and
+ageing out becomes a side effect of writing rather than a retention decision. Decision 9 keeps the
+circle, but turns it one whole segment at a time.
+
+### 5. Treat a successful write, or an issued flush, as durable (Rejected)
+**Pros:** Confirmation at once, with no barrier and no sync policy.
+**Cons:** Write caches and flushes that return early lose acknowledged data on power loss. An
+anchor built on that confirmation would then report a truncation that never happened (7.3).
+Decision 9 confirms only on the medium's acknowledgment, and makes a lying barrier a reason to
+disqualify the backend.
 
 ## Consequences
 
@@ -784,8 +1063,13 @@ severity exists precisely so this choice can be made once, correctly.
   the library.
 - Every change to the record format is a new contract version (8.5), and a verifier keeps every
   version that stored records use. The format can grow, but never in place.
-- Five questions remain open (Decision 4). Both blocking ones are answered (Decisions 7 and 8), but
-  no anchor may advance before the storage contract defines durable confirmation (7.3, #86). This
+- Durable confirmation costs a `sync` on the persistence path, and on flash, write amplification.
+  The sync policy trades that cost against how many handed-off records a power cut may lose (9.3).
+- A storage failure ends durability for its stream instance (9.6). Until the host restarts it, the
+  audit ring fills and producers are refused, by design, rather than continuing unpersisted.
+- Three questions remain open (Decision 4). Both blocking ones are answered (Decisions 7 and 8),
+  and Decision 9 defines durable confirmation, but retention, rotation and chain state recovery
+  (#87) must still be settled before anything is stored. This
   record therefore cannot be implemented as it stands. It bounds the design rather than settling it.
 
 ### Risks and Mitigations
@@ -819,7 +1103,8 @@ severity exists precisely so this choice can be made once, correctly.
   the digest of Decision 8.
 - mddlog issues #84 (canonical byte contract and its contract version, specified by Decision 8 and
   cited by `canonicalVersion`),
-  #86 (storage and the meaning of durably confirmed, which bounds an anchor's position) and #87
+  #86 (storage and the meaning of durably confirmed, which bounds an anchor's position, specified
+  by Decision 9) and #87
   (restart, rotation and retention, which bound how long anchors are kept). Decision 7 depends on
   all three. #90 implements the provider interface and verifier specified there.
 
