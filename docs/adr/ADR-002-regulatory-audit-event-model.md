@@ -27,10 +27,12 @@ the baseline mddlog issue #5 verifies against.
 
 ## Context
 
-`README.md` lists, under Medical Device Compliance: "Audit Trail: Tamper-proof logging with
-cryptographic signatures", "Risk Management: Hazard tracking and mitigation logging per ISO 14971",
-"Regulatory Reporting: Automated compliance report generation", and an `AuditSink` marked
-`(planned)`. None of it exists in the current module set. What exists instead:
+When this record was written, `README.md` listed, under Medical Device Compliance: "Audit Trail:
+Tamper-proof logging with cryptographic signatures", "Risk Management: Hazard tracking and
+mitigation logging per ISO 14971", "Regulatory Reporting: Automated compliance report generation",
+and an `AuditSink` marked `(planned)`. None of it existed in the module set. The README has since
+been corrected and no longer makes the tamper-proof or reporting claims (see ADR-004). What existed
+instead:
 
 - `Audit` is one more value of the `LogLevel` enum (`include/mddlog/core/LogLevel.cppm:24`), ordered
   as the **highest** severity, above `Fatal`. Severity and audit-relevance are conflated: nothing
