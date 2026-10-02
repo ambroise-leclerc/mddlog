@@ -32,7 +32,7 @@ while the module-consuming TU includes those declarations after `import std`, av
 standard-library declarations across the two mechanisms.
 These are a reference bridge for adoption, built only with `MDDLOG_BUILD_TESTS=ON`;
 they are not installed or linked into the production library. ADR acceptance and WebFront
-adoption remain separate review decisions.
+adoption remain separate review decisions. See the optional WebFront integration below.
 
 The header retains `webfront::log::debug`, `info`, `warn`, `error`, `infoHex`, `set`, `is`,
 `setLogLevel`, `addSinks`, and `removeSinks`. Mapping is an explicit switch, never a numeric
@@ -176,3 +176,61 @@ connection strings before draining, compares delivery to two transports, and che
 field capacities, identifier refusals, UTF-8 truncation, nested scopes, out-of-call context,
 observable ring saturation, hex caller locations, explicit dump truncation and independent
 legacy text delivery on structured refusal. The original WebFront suite and #69 regressions still run.
+
+
+## Optional WebFront integration (#71)
+
+WebFront revision `b2c2dd6f2f03b826337c5d0f2a06c2445cda2f18` adopts the facade behind
+`WEBFRONT_USE_MDDLOG=OFF` by default. WebFront owns its facade declarations, ordinary
+header and module-consuming `logging/Logger.cpp`; mddlog still installs only module
+libraries. Enabling the option links WebFront's compiled adapter through its `WebFront`
+target. Ordinary consumers keep including `tooling/Logger.hpp` and import no modules.
+`WEBFRONT_MDDLOG_SOURCE_DIR` selects a source checkout; leaving it empty selects
+`find_package(mddlog CONFIG REQUIRED)` and the supplied installation prefix.
+
+With the option off WebFront remains standalone/header-only with CMake 3.31. Its normal
+CI pins CMake 3.31.10. The enabled path selects the experimental gate before compiler
+discovery, requires qualified CMake 4.0–4.3 and a Ninja generator, and enforces mddlog's
+compiler/platform restrictions. Apple Silicon requires upstream LLVM/Clang 21.1.8,
+matching llvm-ar/llvm-ranlib, libc++ and CMake 4.3.1 exactly; AppleClang is rejected.
+See [WebFront's integration guide](https://github.com/ambroise-leclerc/WebFront/blob/b2c2dd6f2f03b826337c5d0f2a06c2445cda2f18/docs/mddlog-integration.md)
+for the complete matrix, linkage, runtime and registration ownership rules.
+
+The opt-in path preserves the toolchain's MSVC runtime choice. Source integration scopes
+mddlog's dependency options and prepends its own CMake helpers, avoiding collisions with
+WebFront helpers of the same names. In particular mddlog's Clang BMI warning policy is
+needed when CMake recompiles installed module interfaces. The enabled POSIX path uses
+`Threads::Threads`, avoiding a late directory-wide `-pthread` that would disagree with
+Clang's std BMI. Toolchains needing explicit thread flags must initialize them consistently.
+
+With `MDDLOG_BUILD_TESTS=ON`, enable `MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS`
+(default `OFF`) to fetch the pinned integration revision and register two CTest tests.
+Leaving it off avoids this additional network/cache dependency; the historical test
+suite still needs its existing SpecLab, Catch2 and WebFront baseline dependencies.
+The two tests configure the **actual WebFront project**, compile and link the adapter,
+compile/link its header consumers, and run the full CEF-off suite:
+
+```bash
+cmake --preset ninja-clang -DMDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS=ON
+cmake --build --preset ninja-clang
+ctest --test-dir build-clang -R '^webfront.integration.' --output-on-failure
+```
+
+`webfront.integration.source` builds against this mddlog source tree.
+`webfront.integration.installed` first removes its scratch prefix and installs the current
+build, then uses its package. Both tests clear their consumer build directory when the
+forwarded toolchain/configuration inputs change, including when an optional input is
+removed. Unchanged inputs retain incremental builds. Each reports configuration, adapter
+compilation/static linkage, consumer compilation/executable linkage and execution as separate stages. Both run the
+unchanged original `LoggerTests.cpp` and the WebFront-owned facade regressions. They
+are explicitly enabled on the four supported release CI legs, with the compiler, std manifest,
+archive tools, sysroot, flags, configuration and MSVC runtime forwarded. The historical
+#66/#69 reference tests remain registered independently. No new mddlog module or installed
+facade header is introduced.
+
+Local verification on Linux used Clang 21.1.8/libc++, CMake 4.2.3/Ninja for the enabled
+source and installed paths (68 WebFront tests each), and CMake 3.31.10/Unix Makefiles
+for the default standalone path (63 tests). These local results do not establish results
+on other CI platforms. Configuration with CMake 3.31 and the option on fails explicitly.
+ADR-003 remains **Proposed**; option adoption does not accept the ADR or install the
+structured producer/context/transport bindings described in #70.

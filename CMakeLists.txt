@@ -300,6 +300,7 @@ unset(_mddlog_forbidden_name)
 # Build options
 option(MDDLOG_BUILD_EXAMPLES "Build MddLog examples" ON)
 option(MDDLOG_BUILD_TESTS "Build MddLog tests" ON)
+option(MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS "Build and run the actual WebFront integration tests" OFF)
 
 # Add subdirectories
 if(MDDLOG_BUILD_EXAMPLES)
