@@ -145,10 +145,10 @@ implementation that reports "valid" for the first three has not implemented Deci
 
 | Scenario | Expected verifier output |
 |---|---|
-| **Rewrite with recomputation** — record `k` is altered and every later digest recomputed; the anchor covers position `p` | `k ≤ p`: **Altered** (7.5, verdict 4). The recomputed `H_p` differs from the anchor's digest, even though every internal link checks out, which is why the anchor is required. `k > p`: the alteration cannot be detected. The report says coverage is `1 … p` and that records past `p` are only internally consistent (7.5, limits) |
-| **Suffix truncation** — the last *n* records are deleted, leaving last sequence `m`, with the anchor at `p` | `m < p`: **Incomplete** (7.5, verdict 5). Records `m+1 … p` are reported missing, and the prefix is reported internally consistent. `m ≥ p`: only records past the anchor were removed. This cannot be told apart from records never written, and the report says coverage is `1 … p` |
-| **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5, verdict 2). The anchor's `counter` or `position` is below the retained value, or a retained stream is missing. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
-| **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, verdict 8). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
+| **Rewrite with recomputation** — record `k` is altered and every later digest recomputed; the anchor covers position `p` | `k ≤ p`: **Altered** (7.5). The recomputed `H_p` differs from the anchor's digest, even though every internal link checks out, which is why the anchor is required. `k > p`: the alteration cannot be detected. The report says coverage is `1 … p` and that records past `p` are only internally consistent (7.5, limits) |
+| **Suffix truncation** — the last *n* records are deleted, leaving last sequence `m`, with the anchor at `p` | `m < p`: **Incomplete** (7.5). Records `m+1 … p` are reported missing, and the prefix is reported internally consistent. `m ≥ p`: only records past the anchor were removed. This cannot be told apart from records never written, and the report says coverage is `1 … p` |
+| **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5). The provider head is below the retained head, the stream's anchor is below its retained anchor, or a retained stream is missing without a retirement. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
+| **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, **Unanchored**). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
 | **Restart** — a new stream instance begins (ADR-002 Decision 5) | A new chain, explicitly linked to the previous stream identity, with the discontinuity visible rather than closed up |
 
 The third scenario is the one that shows why an anchor must be more than a digest: a rollback of log
@@ -174,24 +174,30 @@ record does not specify them.
 #### 7.1 Contents of an anchor
 
 An anchor is an **anchor claim**, which states what the log contained, plus a **provider stamp**,
-which states where and when the claim was accepted. All of the following fields are mandatory. A
-claim missing any of them is not an anchor, and a verifier treats the stream as unanchored (7.5).
+which states where and when the claim was accepted. All of the following fields are mandatory.
+
+An anchor the provider returns is either **usable** or **unusable**. It is unusable when its
+`anchorFormat` or `canonicalVersion` is unknown to the verifier, or when a mandatory field is
+missing. An unusable anchor yields **Cannot verify** (7.5), every time. It is never treated as
+absent, because the provider does hold an anchor, and it is never treated as matching. Only a
+stream for which the provider holds no anchor at all is **unanchored**.
 
 | Field | Meaning |
 |---|---|
-| `anchorFormat` | Version of this anchor layout. A verifier that does not know the version treats the anchor as absent, never as matching. |
-| `canonicalVersion` | Version of the canonical byte contract (Decision 2) under which `digest` was computed. A verifier recomputes under that version or reports that it cannot (7.5). It never substitutes another version. |
+| `anchorFormat` | Version of this anchor layout. If the verifier does not know it, the anchor is unusable. |
+| `canonicalVersion` | Version of the canonical byte contract (Decision 2) under which `digest` was computed. A verifier recomputes under that version. If it does not know the version, the anchor is unusable. A verifier never substitutes another version. |
 | `streamId` | The stream instance identity of ADR-002 Decision 5, copied exactly. An anchor covers one stream instance and nothing else. |
 | `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The anchor covers records `1 … position` of that stream instance. |
 | `digest` | The chain digest `H_position` of Decision 2, in the representation Decision 2 fixes. |
 | `providerId` | Identifies the provider instance that accepted the claim, so a reader knows which retained state (7.4) applies. |
-| `counter` | Assigned by the provider, not by the log writer. It strictly increases across **every** anchor that provider instance accepts, across all streams. |
+| `counter` | Assigned by the provider, not by the log writer. Each accepted anchor and each retirement (7.2) takes the provider's next counter value, so counters strictly increase across all streams. A stream's anchor therefore usually has a counter well below the provider's current **head** (7.2). That is normal, not a rollback (7.4). |
 | `acceptedTime` | When the provider accepted the claim, by the provider's clock if it has one. Otherwise an explicit "unavailable" value, as in ADR-002 Decision 5. It is used only for age staleness (7.3). |
 
 `streamId`, `position` and `digest` are the minimum of Decision 1. `canonicalVersion` is required
 because a digest has no meaning without the bytes it was computed over. The schema-version field of
 the canonical contract (issue #84) supplies the value. `counter` lets a rollback that crosses
-streams be detected (7.4). A per-stream position alone does not see a stream that has disappeared.
+streams be detected through the provider's head (7.4). A per-stream position alone does not see a
+stream that has disappeared.
 
 Two anchors **conflict** when they have the same `providerId` and `streamId`, and either the same
 `position` with different `digest` values, or positions that decrease while `counter` increases.
@@ -208,11 +214,20 @@ The provider sits in the adapter zone. It does I/O, so it cannot sit in the gove
     accepted position for that stream), `conflict` (the same position with a different digest) or
     `malformed`;
   - **unavailable**: the provider could not be reached or written to. This answer accepts nothing.
-- **`latest(streamId)`** returns the highest accepted anchor for that stream, **absent**, or
-  **unavailable**.
-- **`streams()`** returns every stream identity the provider has accepted an anchor for, each with its
-  highest anchor, or **unavailable**. A verifier uses this list to find streams that are missing from
-  the log entirely.
+- **`retire(streamId, position)`** records that a stream's records have aged out under the retention
+  policy (issue #87). `position` is the stream's highest accepted position. The provider answers
+  **accepted** with a counter, **refused** (`conflict` if `position` is not the highest accepted
+  position, or `unknownStream`), or **unavailable**. A **retirement** keeps the stream's
+  `streamId`, its final `position` and `digest`, the counter of that final anchor, and the
+  retirement's own counter and time. The provider retains it under the same custody as an anchor.
+  A retired stream accepts no further `advance`.
+- **`latest(streamId)`** returns the stream's highest accepted anchor, its retirement, **absent**,
+  or **unavailable**.
+- **`streams()`** returns the provider's **head**, which is the highest counter it has assigned, and
+  every stream identity it holds an anchor or a retirement for, each with that anchor or retirement.
+  The answer may also be **unavailable**. The head is kept by the provider as a value of its own.
+  It is not computed from the surviving entries, so it never decreases, even after a retirement.
+  A verifier uses this list to find streams that are missing from the log entirely.
 
 A provider is **eligible** only if all of the following hold:
 
@@ -220,9 +235,15 @@ A provider is **eligible** only if all of the following hold:
    has accepted, and cannot return the provider to an earlier state, using the access it uses to
    write the log. A provider that this test would disqualify is not an anchor, whatever its name.
 2. **Monotonic acceptance.** The provider enforces the `positionNotIncreasing` and `conflict`
-   refusals itself. It does not depend on the caller to behave.
-3. **Faithful reads.** `latest` and `streams` return what the provider accepted, or **unavailable**.
-   They never return a value fabricated from the log.
+   refusals itself, never lowers its head, and never assigns a counter twice. It does not depend on
+   the caller to behave.
+3. **Faithful reads.** `latest` and `streams` return what the provider accepted or retired, or
+   **unavailable**. They never return a value fabricated from the log.
+4. **Retirements are kept.** A provider keeps every retirement for its own lifetime, and drops a
+   stream's anchor only by replacing it with a retirement. A provider that cannot keep retirements
+   may still serve as an anchor, but it must not drop anchors. Retirements are small: one per
+   stream instance, the same size as an anchor. Issue #87 may define a compaction only if the
+   compaction keeps an aged-out stream distinguishable from a deleted one.
 
 The record recognises three kinds of provider. None of them is the default.
 
@@ -270,10 +291,16 @@ The record recognises three kinds of provider. None of them is the default.
   the log or the provider has diverged, and it is reported as an integrity fault.
 - **Independent retention.** Accepted anchors are retained by the provider, under eligibility
   condition 1, for at least as long as the records they cover are retained. Retention and rotation
-  are issue #87. An anchor whose records have aged out may be dropped. A record retained longer than
-  its anchors falls back to internal consistency, and the verifier reports that.
-- **Absence.** No anchor exists for a stream, either because none was ever accepted or because the
-  anchor did not satisfy 7.1. The verifier reports the stream as **unanchored**.
+  are issue #87. When a stream's records age out, the adapter calls `retire`, and the retirement
+  replaces the anchor (7.2). The adapter calls it **after** the records are removed, never before,
+  so an interrupted retention leaves the stream anchored rather than falsely retired. Absent a
+  retirement, a stream that has disappeared is a finding, never expiry (7.4, 7.5). An expiry is
+  legitimate only when an independently held retirement attests it.
+  How a stream is verified while only part of it has aged out is a rotation-boundary question for
+  issue #87. This record fixes only the two endpoints: all records present, or none.
+- **Absence.** The provider holds neither an anchor nor a retirement for the stream, because none was
+  ever accepted. The verifier reports the stream as **unanchored**. An anchor the provider holds but
+  the verifier cannot use is not absence (7.1).
 - **Unavailability.** The provider could not answer. The verifier reports **anchor unavailable**,
   which has the same coverage as unanchored but a different cause, so the two are never merged.
 - **Staleness by position.** The anchor's position is below the last record present for that stream.
@@ -292,22 +319,36 @@ the restored log. Only state that the rollback could not reach tells the restore
 real one. Decision 5's third scenario depends on that state, which this record calls the **retained
 position**:
 
-- **What is retained.** For each `providerId`: the highest `counter` accepted, and for each
-  `streamId`, the highest anchored `position` and the `digest` at that position.
+- **What is retained.** Two separate values, which are never compared with each other:
+  - for each `providerId`, the **retained head**: the highest provider head seen;
+  - for each `streamId`, the **retained anchor**: the `position`, `digest` and `counter` of the
+    highest anchor verified for that stream, plus whether that stream had been retired.
+  The provider's head advances with every stream. A stream's anchor counter advances only when that
+  stream advances. Comparing one stream's anchor counter with the provider head would therefore
+  report a rollback for every stream that was merely idle while another advanced.
 - **Who retains it.** Either the **reader**, meaning the verification tooling, kept off the device
   and outside the log writer's authority, or an **independent witness**. A remote-witness provider
-  already holds this state. A tamper-resistant counter on the device holds `counter` but not the
+  already holds this state. A tamper-resistant counter on the device holds the head but not the
   per-stream part, so the reader must keep that part. State the device restores together with its
   log is excluded for the same reason anchors on the log's medium are (7.2).
 - **When it is updated.** Only after a verification that finds neither a mismatch nor a conflict, and
   only by raising values, never by lowering them. A failed verification leaves the retained position
   unchanged, so a rollback that has been reported cannot be accepted silently afterwards.
-- **What it detects.** An anchor, or a `streams()` result, is **rolled back** when any of the
+- **What it detects.** The provider, or one of its streams, is **rolled back** when any of the
   following holds:
-  - its `counter` is below the retained counter for that provider;
-  - its `position` is below the retained position for that stream;
-  - it has the same position as the retained position but a different digest;
-  - a stream the retained position records is missing from both the provider and the log.
+  - **Provider head.** The head from `streams()` is below the retained head for that provider.
+    This is the only check that uses the retained head.
+  - **Stream anchor.** The stream's anchor, or its retirement's final anchor, has a `counter` or a
+    `position` below the retained anchor. The rollback finding also covers the same position with a
+    different digest.
+  - **Retirement undone.** The retained anchor records the stream as retired, but the provider holds
+    an anchor for it again instead of the retirement.
+  - **Stream missing.** A stream in the retained state has neither an anchor nor a retirement at the
+    provider. Expiry never looks like this, because a legitimately aged-out stream carries a
+    retirement (7.3).
+  An anchor whose counter is below the provider head, while the stream's own counter and position
+  are not below its retained anchor, is **not** a rollback. It is a stream that has not advanced
+  since.
 - **The first verification.** With no retained position, a joint rollback cannot be excluded. The
   verifier says so: "rollback not excluded: no retained position". A rollback finding is never
   implied by silence.
@@ -323,23 +364,35 @@ A report states the following:
 - the outcome of the retained-position check;
 - one **verdict** from the list below, the first that applies.
 
+For a retired stream, the retirement's final `position` and `digest` act as the anchor for every
+check below. The list refers to verdicts by name. The order only decides which verdict is reported
+when several apply.
+
 1. **Inconsistent**: a chain link fails between two records present. The report names the first
    failing sequence.
-2. **Rolled back**: the retained-position check of 7.4 fails.
-3. **Conflict**: two anchors for the stream conflict (7.1).
-4. **Altered**: the recomputed `H_p` differs from the anchor's `digest`. Some record at or before `p`
+2. **Cannot verify**: the provider holds an anchor for the stream, but the anchor is unusable
+   (7.1): its `anchorFormat` or `canonicalVersion` is unknown, or a mandatory field is missing. This
+   verdict is reached before any check that reads the anchor. The coverage is internal consistency
+   only, and the report names the unknown version or the missing field. This is the only verdict
+   for an unusable anchor.
+3. **Rolled back**: a check of 7.4 fails.
+4. **Conflict**: two anchors for the stream conflict (7.1).
+5. **Altered**: the recomputed `H_p` differs from the anchor's `digest`. Some record at or before `p`
    was changed, or a record was inserted or removed at or before `p`.
-5. **Incomplete**: the last record present has a sequence `m < p`. Records `m+1 … p` are missing. The
+6. **Retired**: the stream is retired and the log holds none of its records. The records aged out
+   under retention, through position `p`. There is nothing left to verify, and that is not a
+   finding.
+7. **Incomplete**: the last record present has a sequence `m < p`. Records `m+1 … p` are missing. The
    prefix is internally consistent but cannot be matched against `digest`, because `H_p` cannot be
-   computed.
-6. **Cannot verify**: the anchor's `canonicalVersion` or `anchorFormat` is unknown to the verifier.
-7. **Anchored**: `H_p` matches. The report states `p`, and lists records past `p` as internally
+   computed. A stream the provider holds an anchor for, and the log holds no record of, is
+   Incomplete with `m = 0`.
+8. **Anchored**: `H_p` matches. The report states `p`, and lists records past `p` as internally
    consistent and unanchored. When no retained position existed, it adds "rollback not excluded".
-8. **Unanchored** or **anchor unavailable**: "internally consistent, unanchored", together with the
+9. **Unanchored** or **anchor unavailable**: "internally consistent, unanchored", together with the
    cause.
 
-No verdict is called "verified" unless it is verdict 7, and verdict 7 always carries its position.
-The word never appears without the range it applies to.
+No result is called "verified" unless the verdict is **Anchored**, and an Anchored verdict always
+carries its position. The word never appears without the range it applies to.
 
 **Limits this record states rather than hides.** An alteration or truncation that affects only
 records **after** the last anchor cannot be detected. A rewriting adversary can reproduce internal
