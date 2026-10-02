@@ -1,16 +1,19 @@
 # ADR-004: Audit persistence and tamper evidence
 
 ## Status
-Proposed — **the least developed of the four records.** It exists to bound what may be claimed while
-the design is open, and to hold the open questions in one place. Several decisions below are
-deliberately left unanswered and marked as such; do not read an unanswered question as a permissive
-default.
+Proposed — **bounded and specified, not implemented, and not accepted.** Every question of
+Decision 4 is resolved by a numbered decision or deferred by Decision 11 with its reason. The record
+is ready for the milestone A acceptance review (`ADR-004-milestone-a-review.md`, #88). **Acceptance
+is the maintainer's decision**; preparing the review, closing #88 or merging this text does not
+amount to it. No part of the design is implemented, so do not read this record as a capability.
 
 ## Context
 
-`README.md` promises, under Audit Trail Features, "Tamper-proof records with cryptographic
-signatures" and, under Medical Device Compliance, "Regulatory Reporting: Automated compliance report
-generation" — both marked `(planned)`. Nothing implements either.
+An earlier `README.md` promised "Tamper-proof records with cryptographic signatures" and
+"Regulatory Reporting: Automated compliance report generation", both marked `(planned)`. Neither was
+implemented, and the README no longer makes either promise: it lists durable storage, tamper
+evidence and recovery as planned and points here. Decision 1 states what may be claimed instead, and
+Decision 11 records signatures and reporting as later work.
 
 ADR-002 Decision 3 defines a three-level delivery contract — admitted, handed off, durably confirmed
 — and states that **no backend offers level 3 today**, leaving that level in the contract purely so a
@@ -26,7 +29,7 @@ Two constraints from the earlier records shape everything here:
 - **The word matters.** "Tamper-proof" claims prevention. Nothing a logging library can do prevents
   someone with write access to the medium from altering or deleting records. What is achievable is
   **tamper-evident**: alteration or truncation becomes detectable after the fact. This record adopts
-  the second word and recommends the README be corrected to match before anything here ships.
+  the second word, and the README has been corrected to match.
 
 ## Medical Device Considerations
 
@@ -63,7 +66,7 @@ So the property is conditional, and the condition is part of the claim:
 
 > Given an **authentic anchor held independently of the mutable log** — at minimum the stream
 > identity, the position it covers, and the digest at that position — a reader can detect any
-> alteration of, or truncation after, that position. Records after the last trusted anchor are
+> alteration of, or truncation within, the prefix that anchor covers. Records after the last trusted anchor are
 > covered only by the chain's internal consistency, which a rewriting adversary can reproduce.
 
 What that means in practice:
@@ -80,8 +83,25 @@ What that means in practice:
   the exclusions, and what a verifier reports.
 
 **Absent any anchoring mechanism, the claim reduces to internal chain consistency**, and that is
-what must be written in user-facing material. README's "tamper-proof" wording should be corrected
-independently of whether this record is accepted.
+what must be written in user-facing material.
+
+**Wording for README, documentation, comments and reports.** The claim is bounded on both sides:
+
+- *Allowed*: "tamper-evident relative to an authentic anchor held independently of the log"; "a
+  verifier reports the coverage `s … p`, where `s` is the first record retained (1, or `q + 1` after a
+  trim at `q`, 10.4), and what lies beyond `p` as internally consistent only";
+  "internally consistent, unanchored"; "alteration or truncation within the anchored range is
+  detected".
+- *Not allowed*: "tamper-proof", "tamper-resistant", "immutable", "cannot be altered", "prevents
+  alteration or deletion", "unforgeable", "verified" without the anchor and coverage that make it so.
+- *Not allowed, authorship*: a chain over canonical bytes involves no key. It shows that a sequence
+  is internally consistent, not **who** wrote it, and it is not non-repudiation, a signature or
+  evidence of origin. Only a later, key-bound mechanism (Decision 11) could support such a claim,
+  and that is not provided here.
+- Neither the chain nor the anchor establishes that a record is *true*. They show that what was
+  stored is what the anchor covers.
+
+A new claim outside the first list needs an ADR amendment first.
 
 ### 2. Hash chaining over a canonical serialization is the minimum mechanism
 
@@ -142,8 +162,11 @@ may be stored before they are answered, because the first record written freezes
   concludes when it is missing or inconsistent. **Resolved by Decision 10**: no separate head store,
   recovery by recomputation and continuity check, the link between successive ledgers, and the
   adapter's and reader's handling of absent and inconsistent state.
-- **Export format** — the "automated compliance report generation" README claims; likely a separate
-  record again, since an export format is read by tools nobody here controls.
+- **Export format** — the "automated compliance report generation" an earlier README claimed.
+  **Deferred by Decision 11**, with its reason: a separate record, since an export format is read by
+  tools nobody here controls. Nothing stored depends on it, and the backend does not include it.
+- **Signing, key custody, provisioning and rotation** (Decision 3). **Deferred by Decision 11**.
+  Listed here so that no question is left open by omission.
 
 ### 5. Validation scenarios any implementation must answer
 
@@ -152,8 +175,8 @@ implementation that reports "valid" for the first three has not implemented Deci
 
 | Scenario | Expected verifier output |
 |---|---|
-| **Rewrite with recomputation** — record `k` is altered and every later digest recomputed; the anchor covers position `p` | `k ≤ p`: **Altered** (7.5). The recomputed `H_p` differs from the anchor's digest, even though every internal link checks out, which is why the anchor is required. `k > p`: the alteration cannot be detected. The report says coverage is `1 … p` and that records past `p` are only internally consistent (7.5, limits) |
-| **Suffix truncation** — the last *n* records are deleted, leaving last sequence `m`, with the anchor at `p` | `m < p`: **Incomplete** (7.5). Records `m+1 … p` are reported missing, and the prefix is reported internally consistent. `m ≥ p`: only records past the anchor were removed. This cannot be told apart from records never written, and the report says coverage is `1 … p` |
+| **Rewrite with recomputation** — record `k` is altered and every later digest recomputed; the anchor covers position `p` | `k ≤ p`: **Altered** (7.5). The recomputed `H_p` differs from the anchor's digest, even though every internal link checks out, which is why the anchor is required. `k > p`: the alteration cannot be detected. The report says coverage is `s … p` (`s` as in Decision 1: 1, or `q + 1` after a trim) and that records past `p` are only internally consistent (7.5, limits) |
+| **Suffix truncation** — the last *n* records are deleted, leaving last sequence `m`, with the anchor at `p` | `m < p`: **Incomplete** (7.5). Records `m+1 … p` are reported missing, and the prefix is reported internally consistent. `m ≥ p`: only records past the anchor were removed. This cannot be told apart from records never written, and the report says coverage is `s … p` (`s` as in Decision 1) |
 | **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5). The provider head is below the retained head, the stream's anchor is below its retained anchor, or a retained stream is missing without a retirement. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
 | **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, **Unanchored**). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
 | **Resumption after storage alteration** — the storage is altered while the adapter is stopped, and the adapter then restarts | Alteration at or before the last anchor `p`: the adapter's continuity check (7.3) fails. It advances nothing for the old stream, reports an integrity fault through audit health, and starts the new stream instance with the discontinuity visible. The verifier reports the old stream as **Altered** (7.5). Alteration only past `p`: the check passes, the adapter never anchors those reloaded records (7.3), and the verifier reports them as internally consistent and unanchored. The alteration is not detectable, which is the exposure-window limit of 7.5 |
@@ -208,7 +231,7 @@ stream for which the provider holds no anchor at all is **unanchored**.
 | `anchorFormat` | Version of this anchor layout. If the verifier does not know it, the anchor is unusable. |
 | `canonicalVersion` | Version of the canonical byte contract (Decision 2) under which `digest` was computed. A verifier recomputes under that version. If it does not know the version, the anchor is unusable. A verifier never substitutes another version. |
 | `streamId` | The stream instance identity of ADR-002 Decision 5, copied exactly. An anchor covers one stream instance and nothing else. |
-| `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The anchor covers records `1 … position` of that stream instance. |
+| `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The digest commits to the chain from record 1, or from the trim's recorded digest after a rotation (10.4). The records a verifier can check against it are `s … position`, with `s` the first record retained (Decision 1). |
 | `digest` | The chain digest `H_position` of Decision 2, in the representation 8.4 fixes. |
 | `providerId` | Identifies the provider instance that accepted the claim, so a reader knows which retained state (7.4) applies. |
 | `counter` | Assigned by the provider, not by the log writer. Each accepted anchor and each retirement (7.2) takes the provider's next counter value, so counters strictly increase across all streams. A stream's anchor therefore usually has a counter well below the provider's current **head** (7.2). That is normal, not a rollback (7.4). |
@@ -351,7 +374,8 @@ The record recognises three kinds of provider. None of them is the default.
 - **Unavailability.** The provider could not answer. The verifier reports **anchor unavailable**,
   which has the same coverage as unanchored but a different cause, so the two are never merged.
 - **Staleness by position.** The anchor's position is below the last record present for that stream.
-  Coverage is `1 … position`, and the verifier reports the records past it as internally consistent
+  Coverage is `s … position`, with `s` the first record retained (Decision 1, 10.4), and the
+  verifier reports the records past it as internally consistent
   and unanchored. Every verdict that applies to an anchored stream states the anchor's position,
   including the full one.
 - **Staleness by age.** The anchor's `acceptedTime` is older than the declared bound `T` relative to
@@ -1291,6 +1315,26 @@ the ledger's last anchor, exactly as for any stream. A power loss and a delibera
 last records look the same after an abrupt end. Trimming past a retained checkpoint gives up that
 checkpoint's protection.
 
+### 11. Deferred work: not included, even implicitly, in the initial backend
+
+Each item below is **outside** this record and outside the initial backend (#89 to #93). None is
+settled by silence, and none may be added to the backend without its own record. Each is attached to
+epic #11 until the maintainer opens a lot for it; no lot exists yet, and this record does not invent
+issue numbers.
+
+| Deferred work | Why it is not decided here | What this record already leaves for it | Attachment |
+|---|---|---|---|
+| **Signatures** over a chain head | A signature needs a private key on the device, and the answers about where it lives and what a compromise does are not logging questions (Decision 3). A wrong answer is worse than a missing one. | Room outside the canonical bytes and the chain input (8.6); the head statement's contents (8.6, 7.1); signing as one possible anchor provider (Decision 1, 7.2) | Later record under epic #11; needs the key decisions below first |
+| **Key management**: custody and storage | Depends on the target's secure element, hardware and threat model, which differ per manufacturer and are the manufacturer's risk file's concern (Medical Device Considerations) | Nothing in the core or the storage contract holds a key (ADR-001) | Later record under epic #11 |
+| **Key provisioning** | Needs a manufacturing and enrolment process that this library does not own | None. No provisioning interface is specified | Later record under epic #11 |
+| **Key rotation and compromise handling** | Needs a rule for what an old signature means after a key changes, and for how a verifier learns of a revocation | Signatures sit outside the canonical contract (8.6): a future record extends the anchor format or defines a separate object, and defines the key and signature contract itself | Later record under epic #11 |
+| **Export format** | Read by tools nobody here controls; sketching it before there is stored data to export fixes a format twice | The canonical bytes and layout are versioned (8.1, 9.4); the verifier's verdicts and coverage are defined (7.5) | Later record under epic #11 |
+| **Compliance reports** | A report states a claim about conformity to a regulation, which only the manufacturer can make. The library supplies evidence, never conformity. Needs the export format first | The verifier's coverage and limits (7.5) are the evidence a report could cite | Later record under epic #11, after the export format |
+
+Until each exists, README and documentation present none of them as delivered or implied. A
+deployment that needs authorship or non-repudiation has no mechanism here and must supply its own,
+outside the library, under its own risk file.
+
 ## Alternatives Considered
 
 ### 1. Signed records from the start, no separate chaining step (Rejected for now)
@@ -1350,10 +1394,13 @@ disqualify the backend.
   Producer streams that need space then stay full, and are refused at the call site (9.6).
 - The ledger's reserve (9.6) takes a share of the medium that grows with its segment count. With
   64 KiB segments, it is about 1.2 % of the medium, plus a few segments.
-- Only the export format remains open (Decision 4), and nothing stored depends on it. The record
-  stays Proposed until its acceptance review (#88): it bounds the design and specifies it, but no
-  part of it is implemented. This
-  record therefore cannot be implemented as it stands. It bounds the design rather than settling it.
+- Signing, key management, provisioning and rotation, the export format and compliance reports are
+  deferred (Decision 11). The initial backend therefore offers **no authorship evidence** and **no
+  reporting**. Nothing stored depends on any of them, but a deployment that needs them must wait for
+  a later record or provide its own.
+- The record stays Proposed until the maintainer decides at the milestone A review. It specifies the
+  design, but no part of it is implemented, and its acceptance is a decision the closing of #88 does
+  not carry.
 
 ### Risks and Mitigations
 - **The record is read as a plan rather than a boundary.** *Mitigation*: Status and Decision 6 both
@@ -1394,4 +1441,7 @@ disqualify the backend.
 ## Approval
 - **Decision Date**: not yet approved — drafted for review.
 - **Approved By**: pending (project maintainer).
-- **Review Date**: when Decision 4's open questions are answered, which is a precondition for any implementation work.
+- **Review Date**: the milestone A acceptance review. Decision 4's questions are all resolved or
+  deferred with their reason (Decision 11), which was the precondition. The review file is
+  `ADR-004-milestone-a-review.md`. Acceptance is a precondition for any persistent implementation
+  (#89 to #93), and it is the maintainer's to give.
