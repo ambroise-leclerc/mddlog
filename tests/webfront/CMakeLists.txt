@@ -36,7 +36,7 @@ if(MDDLOG_BUILD_WEBFRONT_INTEGRATION_TESTS)
     CPMAddPackage(
         NAME WebFrontIntegration
         GITHUB_REPOSITORY ambroise-leclerc/WebFront
-        GIT_TAG 4199bdb99e30e8c958c16b9f9a8a4f76bb22fb65
+        GIT_TAG 6d86c590c24d70bc7c47a5921f0555c4bed62864
         DOWNLOAD_ONLY YES
     )
     foreach(kind IN ITEMS source installed)
