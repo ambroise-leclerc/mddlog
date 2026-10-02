@@ -27,7 +27,7 @@ record and its delivery contract on top of it, and promises in-memory admission 
 the other direction — what an existing application needs before it can adopt any of this, with
 WebFront as the concrete consumer — and ADR-004 holds the storage and tamper-evidence questions
 ADR-002 deferred, in a state of "bounded, not settled": it exists to keep the claims honest while
-its own Decision 4 lists five questions it does not answer.
+its own Decision 4 lists the questions it has not yet answered.
 
 One further record is anticipated and deliberately not drafted: an **export format** for
 automated compliance reporting, which ADR-004 Decision 4 lists among its open questions. The root

@@ -76,7 +76,8 @@ What that means in practice:
 - signing (Decision 3) is *one* way to supply anchoring, not the only one — a monotonic counter in
   tamper-resistant hardware, a remote witness that receives digests as they are produced, or an
   operator-recorded checkpoint all qualify. What does not qualify is any state a log-rewriting
-  adversary can rewrite too.
+  adversary can rewrite too. Decision 7 specifies the anchor's contents, the provider interface,
+  the exclusions, and what a verifier reports.
 
 **Absent any anchoring mechanism, the claim reduces to internal chain consistency**, and that is
 what must be written in user-facing material. README's "tamper-proof" wording should be corrected
@@ -115,12 +116,14 @@ format required to leave room for a signature over the chain head.
 
 ### 4. Open questions, stated rather than defaulted
 
-These are unresolved. An implementation must not pick silently — and the first two are **blocking**:
-nothing may be stored before they are answered, because the first record written freezes both.
+An implementation must not settle any of these silently. Two of them were **blocking**: nothing
+may be stored before they are answered, because the first record written freezes both.
 
-- **The anchoring mechanism** (blocking, Decision 1) — what supplies the authentic anchor, how often
-  it advances, where it is held, and what a reader is told when it is absent or stale. Without an
-  answer, the only claim available is internal chain consistency.
+- **The anchoring mechanism** (blocking, Decision 1). **Resolved by Decision 7**: anchor contents,
+  the provider interface and eligibility, the exclusions, advancement, independent retention, absence
+  and staleness, the reader's monotonic position, and the verifier's verdicts. Decision 7 chooses no
+  single provider. A deployment that configures none has internal chain consistency only, and the
+  verifier reports exactly that.
 - **The canonical byte contract** (blocking, Decision 2) — field order, encoding, absent-optional
   rules, schema version, and digest encoding, specified precisely enough that two independent
   implementations hash identical bytes for identical records.
@@ -142,10 +145,10 @@ implementation that reports "valid" for the first three has not implemented Deci
 
 | Scenario | Expected verifier output |
 |---|---|
-| **Rewrite with recomputation** — a middle record is altered and every later digest recomputed | Mismatch against the anchor. Internal links alone verify, which is exactly why the anchor is required |
-| **Suffix truncation** — the last *n* records are deleted | Coverage short of the anchor's position: the prefix is internally consistent and demonstrably incomplete |
-| **Old log restored with its matching old anchor** — both rolled back together | Detected as **stale**, not valid: the anchor's position is behind the position the reader last observed, which is why an anchor carries a position and a reader must retain the highest one seen |
-| **Missing anchor** | "Internally consistent, unanchored" — never "verified" |
+| **Rewrite with recomputation** — record `k` is altered and every later digest recomputed; the anchor covers position `p` | `k ≤ p`: **Altered** (7.5, verdict 4). The recomputed `H_p` differs from the anchor's digest, even though every internal link checks out, which is why the anchor is required. `k > p`: the alteration cannot be detected. The report says coverage is `1 … p` and that records past `p` are only internally consistent (7.5, limits) |
+| **Suffix truncation** — the last *n* records are deleted, leaving last sequence `m`, with the anchor at `p` | `m < p`: **Incomplete** (7.5, verdict 5). Records `m+1 … p` are reported missing, and the prefix is reported internally consistent. `m ≥ p`: only records past the anchor were removed. This cannot be told apart from records never written, and the report says coverage is `1 … p` |
+| **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5, verdict 2). The anchor's `counter` or `position` is below the retained value, or a retained stream is missing. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
+| **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, verdict 8). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
 | **Restart** — a new stream instance begins (ADR-002 Decision 5) | A new chain, explicitly linked to the previous stream identity, with the discontinuity visible rather than closed up |
 
 The third scenario is the one that shows why an anchor must be more than a digest: a rollback of log
@@ -157,6 +160,194 @@ witness outside the device — distinguishes it from the truth.
 Until it is implemented and verified, ADR-002 Decision 3 stands unchanged: mddlog promises in-memory
 admission only, and power loss is outside every guarantee. This record's existence is not evidence of
 a capability, which is the same caution the index applies to every Proposed record.
+
+### 7. The anchor, its providers, and the monotonic position
+
+This decision answers the first blocking question of Decision 4. It specifies what an anchor states,
+what may hold one, how it advances, what a reader retains and what a verifier reports. It chooses
+**no single provider**: which provider a deployment uses is the integrator's decision, made against
+their own threat model. Nothing here requires a key or a signature (Decision 3). A provider may use
+credentials of its own, such as authenticated storage or a channel to a remote service. Those
+credentials belong to the provider and the host. They are not part of any mddlog record, and this
+record does not specify them.
+
+#### 7.1 Contents of an anchor
+
+An anchor is an **anchor claim**, which states what the log contained, plus a **provider stamp**,
+which states where and when the claim was accepted. All of the following fields are mandatory. A
+claim missing any of them is not an anchor, and a verifier treats the stream as unanchored (7.5).
+
+| Field | Meaning |
+|---|---|
+| `anchorFormat` | Version of this anchor layout. A verifier that does not know the version treats the anchor as absent, never as matching. |
+| `canonicalVersion` | Version of the canonical byte contract (Decision 2) under which `digest` was computed. A verifier recomputes under that version or reports that it cannot (7.5). It never substitutes another version. |
+| `streamId` | The stream instance identity of ADR-002 Decision 5, copied exactly. An anchor covers one stream instance and nothing else. |
+| `position` | The `sequence` of the last record covered. Sequences start at 1 (ADR-002 Decision 5), so `position ≥ 1`. The anchor covers records `1 … position` of that stream instance. |
+| `digest` | The chain digest `H_position` of Decision 2, in the representation Decision 2 fixes. |
+| `providerId` | Identifies the provider instance that accepted the claim, so a reader knows which retained state (7.4) applies. |
+| `counter` | Assigned by the provider, not by the log writer. It strictly increases across **every** anchor that provider instance accepts, across all streams. |
+| `acceptedTime` | When the provider accepted the claim, by the provider's clock if it has one. Otherwise an explicit "unavailable" value, as in ADR-002 Decision 5. It is used only for age staleness (7.3). |
+
+`streamId`, `position` and `digest` are the minimum of Decision 1. `canonicalVersion` is required
+because a digest has no meaning without the bytes it was computed over. The schema-version field of
+the canonical contract (issue #84) supplies the value. `counter` lets a rollback that crosses
+streams be detected (7.4). A per-stream position alone does not see a stream that has disappeared.
+
+Two anchors **conflict** when they have the same `providerId` and `streamId`, and either the same
+`position` with different `digest` values, or positions that decrease while `counter` increases.
+A conflict is an integrity finding (7.5), never a tie to resolve by choosing one anchor.
+
+#### 7.2 The anchor provider interface
+
+The provider sits in the adapter zone. It does I/O, so it cannot sit in the governed core
+(ADR-001). These operations are an interface contract, not C++ signatures. Issue #90 writes those.
+
+- **`advance(claim)`** offers a claim. The provider answers in one of three ways:
+  - **accepted**, with the stamp: `providerId`, `counter` and `acceptedTime`;
+  - **refused**, with a reason: `positionNotIncreasing` (the claim's position is not above the last
+    accepted position for that stream), `conflict` (the same position with a different digest) or
+    `malformed`;
+  - **unavailable**: the provider could not be reached or written to. This answer accepts nothing.
+- **`latest(streamId)`** returns the highest accepted anchor for that stream, **absent**, or
+  **unavailable**.
+- **`streams()`** returns every stream identity the provider has accepted an anchor for, each with its
+  highest anchor, or **unavailable**. A verifier uses this list to find streams that are missing from
+  the log entirely.
+
+A provider is **eligible** only if all of the following hold:
+
+1. **Independent custody.** The writer of the mutable log cannot rewrite or delete what the provider
+   has accepted, and cannot return the provider to an earlier state, using the access it uses to
+   write the log. A provider that this test would disqualify is not an anchor, whatever its name.
+2. **Monotonic acceptance.** The provider enforces the `positionNotIncreasing` and `conflict`
+   refusals itself. It does not depend on the caller to behave.
+3. **Faithful reads.** `latest` and `streams` return what the provider accepted, or **unavailable**.
+   They never return a value fabricated from the log.
+
+The record recognises three kinds of provider. None of them is the default.
+
+- **Tamper-resistant device storage**, such as a hardware monotonic counter paired with
+  write-protected or authenticated storage that holds the claim. The counter alone is **not** an
+  anchor. A counter can show that a rollback happened (7.4), but it holds no digest. A rewrite with
+  recomputation therefore goes undetected unless the claim itself is held in the protected storage.
+- **A remote witness**: an off-device service that receives claims as they advance and serves them
+  to readers. The witness also acts as the independent monotonic state of 7.4.
+- **An operator-recorded checkpoint**: an operator copies a claim into a record kept separately
+  from the device, such as a service record. The operator's record assigns the stamp. Checkpoints are
+  usually infrequent, so coverage often ends before the end of the log (7.3).
+
+**Excluded explicitly**, because a log-rewriting adversary can rewrite each of them as well:
+
+- a file, partition, region or object on the same medium, or under the same write authority, as the
+  log;
+- a "last digest" or "chain head" stored next to the log, or inside it;
+- process memory or any state the device restores together with the log;
+- a value derived from the log itself, such as a final digest recomputed at read time;
+- a device-local MAC or signature produced with a key the log writer can use. That option belongs to
+  signing (Decision 3), which this record defers.
+
+#### 7.3 Advancement, independent retention, absence and staleness
+
+- **What may be anchored.** An anchor's position never exceeds the highest record the storage
+  contract reports as **durably confirmed** (ADR-002 level 3; the storage contract is issue #86).
+  Without this rule, power loss after anchoring but before storage would turn into a false
+  truncation finding. Until that contract is accepted, no anchor may be advanced, because nothing is
+  durably confirmed.
+- **Frequency.** The integrator chooses a policy and declares it to the verifier as configuration,
+  not as a constant in the library. The policy has two bounds: a record bound `N` (advance once at
+  most `N` records lie past the current anchor) and an age bound `T` (advance once the current anchor
+  is older than `T` while newer records exist). The policy also requires an attempt **on orderly
+  close** of a stream instance, so that its final position is anchored before a restart starts a
+  new stream (ADR-002 Decision 5). How a new chain links to the previous stream is issue #87.
+- **The exposure window.** Records past the last accepted anchor are covered by internal consistency
+  only (Decision 1). `N`, `T` and the outcome of each `advance` together set how large that window
+  can grow. This record sets no default for `N` or `T`, because the right values depend on the
+  device's event rate and its risk file.
+- **Advancement never blocks admission.** `advance` runs in the adapter, after durable confirmation.
+  A refusal or an **unavailable** answer is reported through the audit health mechanism (ADR-002
+  Decision 3) and retried under the same policy. It is never retried by holding up the ring.
+  `positionNotIncreasing` or `conflict` on a fresh claim is not a transient failure. It means that
+  the log or the provider has diverged, and it is reported as an integrity fault.
+- **Independent retention.** Accepted anchors are retained by the provider, under eligibility
+  condition 1, for at least as long as the records they cover are retained. Retention and rotation
+  are issue #87. An anchor whose records have aged out may be dropped. A record retained longer than
+  its anchors falls back to internal consistency, and the verifier reports that.
+- **Absence.** No anchor exists for a stream, either because none was ever accepted or because the
+  anchor did not satisfy 7.1. The verifier reports the stream as **unanchored**.
+- **Unavailability.** The provider could not answer. The verifier reports **anchor unavailable**,
+  which has the same coverage as unanchored but a different cause, so the two are never merged.
+- **Staleness by position.** The anchor's position is below the last record present for that stream.
+  Coverage is `1 … position`, and the verifier reports the records past it as internally consistent
+  and unanchored. Every verdict that applies to an anchored stream states the anchor's position,
+  including the full one.
+- **Staleness by age.** The anchor's `acceptedTime` is older than the declared bound `T` relative to
+  the verification time. If `acceptedTime` is unavailable, the age is reported as unknown. Age
+  staleness **does not reduce coverage below the anchor's position**. It warns that the
+  advancement policy was not met, and it is reported alongside the coverage.
+
+#### 7.4 The monotonic position held by the reader or a witness
+
+A rollback of the log and its anchor together is internally coherent: the restored anchor matches
+the restored log. Only state that the rollback could not reach tells the restored pair apart from the
+real one. Decision 5's third scenario depends on that state, which this record calls the **retained
+position**:
+
+- **What is retained.** For each `providerId`: the highest `counter` accepted, and for each
+  `streamId`, the highest anchored `position` and the `digest` at that position.
+- **Who retains it.** Either the **reader**, meaning the verification tooling, kept off the device
+  and outside the log writer's authority, or an **independent witness**. A remote-witness provider
+  already holds this state. A tamper-resistant counter on the device holds `counter` but not the
+  per-stream part, so the reader must keep that part. State the device restores together with its
+  log is excluded for the same reason anchors on the log's medium are (7.2).
+- **When it is updated.** Only after a verification that finds neither a mismatch nor a conflict, and
+  only by raising values, never by lowering them. A failed verification leaves the retained position
+  unchanged, so a rollback that has been reported cannot be accepted silently afterwards.
+- **What it detects.** An anchor, or a `streams()` result, is **rolled back** when any of the
+  following holds:
+  - its `counter` is below the retained counter for that provider;
+  - its `position` is below the retained position for that stream;
+  - it has the same position as the retained position but a different digest;
+  - a stream the retained position records is missing from both the provider and the log.
+- **The first verification.** With no retained position, a joint rollback cannot be excluded. The
+  verifier says so: "rollback not excluded: no retained position". A rollback finding is never
+  implied by silence.
+
+#### 7.5 What a verifier reports
+
+The verifier reports each stream instance separately and never folds them into one "valid" result.
+A report states the following:
+
+- the coverage, as a sequence range: `1 … p` anchored, and `p+1 … m` internally consistent, where
+  `m` is the last record present;
+- the anchor's `providerId`, `counter`, `canonicalVersion` and `acceptedTime`;
+- the outcome of the retained-position check;
+- one **verdict** from the list below, the first that applies.
+
+1. **Inconsistent**: a chain link fails between two records present. The report names the first
+   failing sequence.
+2. **Rolled back**: the retained-position check of 7.4 fails.
+3. **Conflict**: two anchors for the stream conflict (7.1).
+4. **Altered**: the recomputed `H_p` differs from the anchor's `digest`. Some record at or before `p`
+   was changed, or a record was inserted or removed at or before `p`.
+5. **Incomplete**: the last record present has a sequence `m < p`. Records `m+1 … p` are missing. The
+   prefix is internally consistent but cannot be matched against `digest`, because `H_p` cannot be
+   computed.
+6. **Cannot verify**: the anchor's `canonicalVersion` or `anchorFormat` is unknown to the verifier.
+7. **Anchored**: `H_p` matches. The report states `p`, and lists records past `p` as internally
+   consistent and unanchored. When no retained position existed, it adds "rollback not excluded".
+8. **Unanchored** or **anchor unavailable**: "internally consistent, unanchored", together with the
+   cause.
+
+No verdict is called "verified" unless it is verdict 7, and verdict 7 always carries its position.
+The word never appears without the range it applies to.
+
+**Limits this record states rather than hides.** An alteration or truncation that affects only
+records **after** the last anchor cannot be detected. A rewriting adversary can reproduce internal
+consistency there, and a truncated suffix cannot be told apart from records never written. The
+exposure window of 7.3 bounds this limit. Nothing removes it. A verifier with no retained position
+cannot exclude a joint rollback of log and anchor. An eligible provider that is itself compromised
+defeats the mechanism. Choosing a provider fit for the device's threat model is part of the
+manufacturer's risk file, not the library's.
 
 ## Alternatives Considered
 
@@ -187,11 +378,14 @@ severity exists precisely so this choice can be made once, correctly.
 ### Negative
 - Chaining adds a per-record digest computation on the persistence path and a verification step for
   any reader; neither is free.
-- The detection property now requires an anchoring mechanism this record does not choose, so the
-  useful claim depends on a question still open — which is more honest than the previous draft and
-  strictly more work.
-- Leaving seven questions open (Decision 4), two of them blocking, means this record cannot be
-  implemented as it stands — it bounds the design rather than settling it.
+- The detection property depends on an anchor provider that Decision 7 specifies but does not
+  choose. A deployment gets only as much assurance as the provider it configures, and the exposure
+  window past the last anchor stays undetectable by construction.
+- Detecting a joint rollback of log and anchor requires state kept off the device (Decision 7.4).
+  The reader's tooling has to keep and protect that state, which is an operational burden outside
+  the library.
+- Six questions remain open (Decision 4), and the canonical byte contract is still blocking. This
+  record therefore cannot be implemented as it stands. It bounds the design rather than settling it.
 
 ### Risks and Mitigations
 - **The record is read as a plan rather than a boundary.** *Mitigation*: Status and Decision 6 both
@@ -213,6 +407,10 @@ severity exists precisely so this choice can be made once, correctly.
 - ADR-001 (this repository) — why key material and storage cannot be governed-zone concerns.
 - [MduX ADR-007: Evidence pipeline doctrine](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/docs/adr/ADR-007-evidence-pipeline-doctrine.md) — canonical, byte-stable serialization and the determinism failure modes Decision 2 inherits.
 - mddlog issue #5 — the explicit exclusion of persistent/cryptographically protected audit storage.
+- mddlog issues #84 (canonical byte contract and its schema version, which `canonicalVersion` cites),
+  #86 (storage and the meaning of durably confirmed, which bounds an anchor's position) and #87
+  (restart, rotation and retention, which bound how long anchors are kept). Decision 7 depends on
+  all three. #90 implements the provider interface and verifier specified there.
 
 ## Approval
 - **Decision Date**: not yet approved — drafted for review.
