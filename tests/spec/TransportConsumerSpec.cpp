@@ -6,10 +6,26 @@
 import std;
 import speclab;
 import mddlog.core.ring;
+import mddlog.core.auditevent;
+import mddlog.core.auditring;
+import mddlog.sinks.auditsink;
 import mddlog.adapter.logrecord;
 import mddlog.adapter.transportconsumer;
 
 namespace {
+
+// Browser transports (WebFront adoption, #72) sit on this consumer: no audit ring or audit
+// sink can be registered, and a transport callback can only receive diagnostic records.
+template <typename Ring>
+concept ConsumesRing = requires(mddlog::adapter::TransportConsumer& consumer, Ring& ring) { consumer.addRing(ring); }
+                       || requires(mddlog::adapter::TransportConsumer& consumer, Ring& ring) { consumer.addConsumerRing(ring); };
+template <typename Callback>
+concept RegistersTransport = requires(mddlog::adapter::TransportConsumer& consumer, Callback callback) { consumer.addTransport(callback); };
+
+static_assert(ConsumesRing<mddlog::core::RingLog<4>>);
+static_assert(!ConsumesRing<mddlog::core::AuditRing<4>>);
+static_assert(!RegistersTransport<std::shared_ptr<mddlog::sinks::AuditSink>>);
+static_assert(!RegistersTransport<std::function<void(const mddlog::core::AuditEvent&)>>);
 
 using mddlog::adapter::TransportConsumer;
 using mddlog::core::Admission;
