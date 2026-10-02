@@ -131,11 +131,11 @@ may be stored before they are answered, because the first record written freezes
 - **Power-loss atomicity** — what "durably confirmed" (ADR-002 level 3) means precisely: written,
   flushed, or acknowledged by the medium. Until this is answered, level 3 stays unclaimed.
 - **Retention and rotation** — how a bounded medium ages out old records without making the chain
-  unverifiable, and what a reader sees at the boundary. **Resolved by Decision 9**: the ledger
+  unverifiable, and what a reader sees at the boundary. **Resolved by Decision 10**: the ledger
   stream, prefix trims with a recorded starting digest, never trimming past the anchor, whole-stream
   and ledger retention, and the reader's report at each boundary.
 - **Chain state recovery** — where the last digest lives across a restart, and what a reader
-  concludes when it is missing or inconsistent. **Resolved by Decision 9**: no separate head store,
+  concludes when it is missing or inconsistent. **Resolved by Decision 10**: no separate head store,
   recovery by recomputation and continuity check, the link between successive ledgers, and the
   adapter's and reader's handling of absent and inconsistent state.
 - **Export format** — the "automated compliance report generation" README claims; likely a separate
@@ -153,8 +153,8 @@ implementation that reports "valid" for the first three has not implemented Deci
 | **Old log restored with its matching old anchor** — both rolled back together | With a retained position (7.4): **Rolled back** (7.5). The provider head is below the retained head, the stream's anchor is below its retained anchor, or a retained stream is missing without a retirement. Without a retained position: **Anchored** up to the old position, with "rollback not excluded: no retained position" stated. The verdict is never an unqualified pass |
 | **Missing anchor** | "Internally consistent, unanchored", never "verified" (7.5, **Unanchored**). An unavailable provider is reported separately as "anchor unavailable". A stale anchor limits coverage to its position (7.3) |
 | **Resumption after storage alteration** — the storage is altered while the adapter is stopped, and the adapter then restarts | Alteration at or before the last anchor `p`: the adapter's continuity check (7.3) fails. It advances nothing for the old stream, reports an integrity fault through audit health, and starts the new stream instance with the discontinuity visible. The verifier reports the old stream as **Altered** (7.5). Alteration only past `p`: the check passes, the adapter never anchors those reloaded records (7.3), and the verifier reports them as internally consistent and unanchored. The alteration is not detectable, which is the exposure-window limit of 7.5 |
-| **Restart** — a new stream instance begins (ADR-002 Decision 5) | A new chain. The new ledger cites the previous ledger's head, and each earlier stream ends at its last record, "closed" or "ended without close" (9.6). The discontinuity is visible, never closed up |
-| **Rotation** — the oldest records of a kept stream are removed | Coverage starts after the recorded trim position `q`, from the trim's digest (9.4). Records missing that no trim accounts for make the stream **Incomplete** (7.5) |
+| **Restart** — a new stream instance begins (ADR-002 Decision 5) | A new chain. The new ledger cites the previous ledger's head, and each earlier stream ends at its last record, "closed" or "ended without close" (10.6). The discontinuity is visible, never closed up |
+| **Rotation** — the oldest records of a kept stream are removed | Coverage starts after the recorded trim position `q`, from the trim's digest (10.4). Records missing that no trim accounts for make the stream **Incomplete** (7.5) |
 
 The third scenario is the one that shows why an anchor must be more than a digest: a rollback of log
 and anchor together is internally coherent, and only a monotonic position a reader remembers — or a
@@ -234,7 +234,7 @@ The provider sits in the adapter zone. It does I/O, so it cannot sit in the gove
     `malformed`;
   - **unavailable**: the provider could not be reached or written to. This answer accepts nothing.
 - **`retire(streamId, position)`** records that a stream's records have aged out under the retention
-  policy (Decision 9). `position` is the stream's highest accepted position. The provider answers
+  policy (Decision 10). `position` is the stream's highest accepted position. The provider answers
   **accepted** with a counter, **refused** (`conflict` if `position` is not the highest accepted
   position, or `unknownStream`), or **unavailable**. A **retirement** keeps the stream's
   `streamId`, its final `position` and `digest`, the counter of that final anchor, and the
@@ -262,8 +262,8 @@ A provider is **eligible** only if all of the following hold:
    stream's anchor only by replacing it with a retirement. A provider that cannot keep retirements
    may still serve as an anchor, but it must not drop anchors. Retirements are small: one per
    stream instance, the same size as an anchor. A later decision may define a compaction only if
-   the compaction keeps an aged-out stream distinguishable from a deleted one. Decision 9 defines
-   none (9.5).
+   the compaction keeps an aged-out stream distinguishable from a deleted one. Decision 10 defines
+   none (10.5).
 5. **Authority over `advance` and `retire`.** Only the adapter, inside the trust boundary, can
    invoke `advance` and `retire`. An adversary who can rewrite the log's storage cannot invoke them,
    either directly or by getting the adapter to relay a claim built from storage it has rewritten
@@ -306,7 +306,7 @@ The record recognises three kinds of provider. None of them is the default.
   is older than `T` while newer records exist). The policy also requires an attempt **on orderly
   close** of a stream instance, so that its final position is anchored before a restart starts a
   new stream (ADR-002 Decision 5). The ledger records the close and the link to the next session
-  (Decision 9).
+  (Decision 10).
 - **The exposure window.** Records past the last accepted anchor are covered by internal consistency
   only (Decision 1). `N`, `T` and the outcome of each `advance` together set how large that window
   can grow. This record sets no default for `N` or `T`, because the right values depend on the
@@ -318,18 +318,18 @@ The record recognises three kinds of provider. None of them is the default.
   the log or the provider has diverged, and it is reported as an integrity fault.
 - **Independent retention.** Accepted anchors are retained by the provider, under eligibility
   condition 1, for at least as long as the records they cover are retained. Retention and rotation
-  are Decision 9. When a stream's records age out, the adapter calls `retire`, and the retirement
+  are Decision 10. When a stream's records age out, the adapter calls `retire`, and the retirement
   replaces the anchor (7.2). The adapter calls it **after** the records are removed, never before,
   so an interrupted retention leaves the stream anchored rather than falsely retired. Absent a
   retirement, a stream that has disappeared is a finding, never expiry (7.4, 7.5). An expiry is
   legitimate only when an independently held retirement attests it.
-  A stream of which only a prefix has aged out is verified from its recorded trim (9.4).
+  A stream of which only a prefix has aged out is verified from its recorded trim (10.4).
 - **Claim construction and resumption.** An adapter builds a claim only from the chain state it
   computed itself while writing that stream instance's records. It never builds a claim from chain
   state read back from the mutable storage. An adapter that resumes from storage first checks
   continuity. It recomputes `H_p` from the stored records up to the provider's latest position `p`
   for that stream, and compares the result with the provider's digest. Resumption happens after a
-  restart, when chain state is recovered (9.3), or before a `retire`. The adapter performs
+  restart, when chain state is recovered (10.3), or before a `retire`. The adapter performs
   this check before any `advance`, and before any link that cites the old chain. If the digests
   differ, the adapter advances nothing, reports an integrity fault through audit health, and leaves
   the evidence untouched for the verifier. Records of an earlier stream instance past its last
@@ -337,7 +337,7 @@ The record recognises three kinds of provider. None of them is the default.
   stay internally consistent and unanchored. A restart starts a new stream instance in any case
   (ADR-002 Decision 5), so no live stream needs an anchor built from reloaded state.
 - **Authority to expire.** `retire` is the adapter's to call, under the retention policy only
-  (9.5), and within the same trust boundary as `advance` (7.2, condition 5). A retirement
+  (10.5), and within the same trust boundary as `advance` (7.2, condition 5). A retirement
   issued with that authority from outside the policy is indistinguishable from a legitimate expiry.
   That is the same limit as for `advance`, and it is stated in 7.5.
 - **Absence.** The provider holds neither an anchor nor a retirement for the stream, because none was
@@ -398,7 +398,7 @@ position**:
   history that was rewritten and then re-anchored at some `q > p_r`. This check protects the prefix
   up to `p_r` even when the authority of 7.2, condition 5, was compromised after that verification.
   It does not apply to a retired stream whose records are gone. A trim at or past `p_r` limits it as
-  9.4 states.
+  10.4 states.
 - **The first verification.** With no retained position, a joint rollback cannot be excluded. The
   verifier says so: "rollback not excluded: no retained position". A rollback finding is never
   implied by silence.
@@ -409,8 +409,8 @@ The verifier reports each stream instance separately and never folds them into o
 A report states the following:
 
 - the coverage, as a sequence range: `s … p` anchored, and `p+1 … m` internally consistent, where
-  `m` is the last record present and `s` is 1, or `q + 1` after a trim at `q` (9.4);
-- the boundaries the ledger records for the stream, as 9.6 states;
+  `m` is the last record present and `s` is 1, or `q + 1` after a trim at `q` (10.4);
+- the boundaries the ledger records for the stream, as 10.6 states;
 - the anchor's `providerId`, `counter`, `canonicalVersion` and `acceptedTime`;
 - the outcome of the retained-position check;
 - one **verdict** from the list below, the first that applies.
@@ -430,7 +430,7 @@ when several apply.
    reads the anchor. For an unusable anchor, the coverage is internal consistency only. For an
    unknown stream version there is no coverage at all, because the version fixes the digest. The
    report names the unknown version or the missing field. This is the only verdict for an unusable
-   anchor. It also applies when a trim removed records past the anchor's position (9.4), so that
+   anchor. It also applies when a trim removed records past the anchor's position (10.4), so that
    `H_p` cannot be recomputed, and the report names that cause.
 3. **Rolled back**: a check of 7.4 fails.
 4. **Conflict**: two anchors for the stream conflict (7.1).
@@ -447,7 +447,7 @@ when several apply.
    prefix is internally consistent but cannot be matched against `digest`, because `H_p` cannot be
    computed. A stream the provider holds an anchor for, and the log holds no record of, is
    Incomplete with `m = 0`. The same verdict applies when records are missing at the start of the
-   stream and no trim accounts for them (9.4, 9.6).
+   stream and no trim accounts for them (10.4, 10.6).
 8. **Anchored**: `H_p` matches. The report states `p`, and lists records past `p` as internally
    consistent and unanchored. When no retained position existed, it adds "rollback not excluded".
 9. **Unanchored** or **anchor unavailable**: "internally consistent, unanchored", together with the
@@ -619,8 +619,8 @@ reported as Inconsistent, naming the first failing record.
   regardless of, any unknown version (8.3).
 - **One initial value.** `H_0` is the same for every stream. Each chain is scoped by the `streamId`
   inside every record. A link from a new stream instance to the previous one is carried by ledger
-  records (Decision 9), never by changing `H_0`. A trim replaces `H_0` with a recorded `H_q` only
-  as a starting point for verification (9.4).
+  records (Decision 10), never by changing `H_0`. A trim replaces `H_0` with a recorded `H_q` only
+  as a starting point for verification (10.4).
 - **Hashed as stored.** A verifier hashes the record bytes as stored. It never hashes a re-encoding
   of the decoded fields. This is what keeps records of an older version verifiable (8.5).
 - **Representation.** Inside the chain input, and wherever a digest is stored next to its record,
@@ -762,7 +762,7 @@ detailTruncated  00                                                       ; fals
 H_4 = 12d523bdf4082156aecfb31c96af83a80054383470b9b06f7e6b5be447c42b07
 ```
 
-### 9. Restart, chain state recovery, rotation and retention
+### 10. Restart, chain state recovery, rotation and retention
 
 This decision answers two open questions of Decision 4: retention and rotation, and chain state
 recovery. It also specifies how successive stream instances are linked. It depends on the storage
@@ -772,7 +772,7 @@ define it. Nothing here allows a record to be stored before #86 is answered (Dec
 The rule that governs the whole decision: **a boundary is recorded before it happens, and a reader
 reports it as a boundary.** No restart, removal or loss is ever presented as continuity.
 
-#### 9.1 The ledger stream
+#### 10.1 The ledger stream
 
 Each log keeps a **ledger**: a stream whose records describe the log itself rather than device
 activity. The ledger records which streams were opened and closed, which records were removed, and
@@ -805,7 +805,7 @@ what the adapter found at a restart.
   coverage of a data stream comes from that stream's own anchors only. Without this rule, citing a
   reloaded digest in an anchored ledger would launder the exposure window, which 7.3 forbids.
 
-#### 9.2 Ledger records
+#### 10.2 Ledger records
 
 Every ledger record has `phase = Executed` unless the table says otherwise. `actor`,
 `requirementRef` and `riskRef` are empty. `time` is the host-supplied time. `detail` is free text
@@ -815,12 +815,12 @@ the record's meaning. A digest in `correlationId` is the 64-character lowercase 
 
 | `action` | `target` | `sourceSequence` | `correlationId` | Meaning |
 |---|---|---|---|---|
-| `mddlog.ledger.origin` | this ledger's `streamId` | absent | empty | Record 1. The adapter found no earlier ledger in the log (9.3). |
-| `mddlog.ledger.predecessor` | the earlier ledger's `streamId` | its last position `n` that checks | `H_n`, or empty when no position checks | Record 1. `Executed`: the earlier ledger was recovered and checks (9.3). `Failed`: it does not check up to its last record, and the fields cite the last position that does; absent and empty if none does. |
+| `mddlog.ledger.origin` | this ledger's `streamId` | absent | empty | Record 1. The adapter found no earlier ledger in the log (10.3). |
+| `mddlog.ledger.predecessor` | the earlier ledger's `streamId` | its last position `n` that checks | `H_n`, or empty when no position checks | Record 1. `Executed`: the earlier ledger was recovered and checks (10.3). `Failed`: it does not check up to its last record, and the fields cite the last position that does; absent and empty if none does. |
 | `mddlog.stream.recovered` | an earlier stream's `streamId` | its last position `m` that checks | `H_m`, or empty | Written at start, once for each stream the earlier ledger opened whose records the log still holds. `Executed` or `Failed`, as for the predecessor. |
 | `mddlog.stream.open` | the opened stream's `streamId` | absent | empty | The adapter accepted the stream. Written before any record of that stream is stored. |
 | `mddlog.stream.close` | the closed stream's `streamId` | its last position `m` | `H_m` | Orderly close, written after record `m` is durably confirmed and after the anchor attempt of 7.3. |
-| `mddlog.stream.trim` | the trimmed stream's `streamId` | the last position `q` to be removed | `H_q` | Records `1 … q` are about to be removed (9.4). `q` equal to the stream's last position means the whole stream (9.5). |
+| `mddlog.stream.trim` | the trimmed stream's `streamId` | the last position `q` to be removed | `H_q` | Records `1 … q` are about to be removed (10.4). `q` equal to the stream's last position means the whole stream (10.5). |
 | `mddlog.ledger.close` | this ledger's `streamId` | absent | empty | Orderly end of the session, after every stream it opened is closed. |
 
 **Validating ledger records.** A ledger record is a valid `AuditEvent`, but a valid `AuditEvent` is
@@ -854,10 +854,10 @@ meaning) without introducing another canonical format.
 2. Before the first record of a stream is stored: its `open` record.
 3. At orderly close of a stream: its last record, then the anchor attempt (7.3), then `close`.
 4. Before any removal: the `trim` record. Then the removal. For a whole stream that the provider
-   has anchored, then `retire` (7.2, 9.5). The order keeps an interruption on the safe side: a
+   has anchored, then `retire` (7.2, 10.5). The order keeps an interruption on the safe side: a
    recorded trim whose removal did not happen, never a removal with no trim.
 
-#### 9.3 Restart and chain state recovery
+#### 10.3 Restart and chain state recovery
 
 A restart always starts new stream instances, for the producers and for the ledger (ADR-002
 Decision 5). No stream instance is ever continued after a restart. The previous instances end where
@@ -869,7 +869,7 @@ their last durably confirmed record ends.
   store, and none is trusted. An implementation may cache a head, but only as a hint, and it
   recomputes the head before any use.
 - **How state is recovered.** For each stream to be recovered, the adapter recomputes the chain from
-  the stored records, starting from `H_0` or from the stream's last `trim` digest (9.4), and
+  the stored records, starting from `H_0` or from the stream's last `trim` digest (10.4), and
   compares each result with the stored digest. For a stream with an anchor, it then performs the
   continuity check of 7.3. The recovered state of a stream is its last position up to which every
   stored digest matches, provided the continuity check passes. If the check fails, no position of
@@ -891,7 +891,7 @@ their last durably confirmed record ends.
   decision for the host, outside the library. Until then, a full medium is handled by the storage
   contract (#86), never by deleting evidence.
 
-#### 9.4 Rotation: removing a prefix
+#### 10.4 Rotation: removing a prefix
 
 A bounded medium removes the oldest records of a stream that is still kept. A removal always takes
 a **prefix**: records `1 … q`, never a range in the middle. How storage groups records for removal
@@ -908,7 +908,7 @@ complete removal, and `k ≤ q` after an interrupted one.
   could reach `H_p` short of breaking SHA-256.
 - **Never past the anchor.** When a provider is configured, the adapter trims a stream that keeps
   records only up to that stream's latest accepted anchor: `q ≤ p`. Removing a whole ended stream is
-  retention, not rotation (9.5). With `q = p`, the trim record's digest is compared directly with
+  retention, not rotation (10.5). With `q = p`, the trim record's digest is compared directly with
   the anchor's, and a match yields **Anchored** at `p` with no anchored record left in the log.
   Trimming past `p` would remove the only records from which `H_p` can be recomputed, and would turn
   an anchored stream into an unverifiable one. If the anchor cannot advance, the stream cannot be
@@ -918,7 +918,7 @@ complete removal, and `k ≤ q` after an interrupted one.
   been accepted for the stream, there is no `p`, and rotation removes nothing from that stream. When
   the provider is unavailable, rotation may rely only on an accepted anchor whose position and
   digest the adapter already holds from its own `advance` (7.3). Otherwise it waits. Removing a
-  whole ended stream follows 9.5.
+  whole ended stream follows 10.5.
 - **Room to record the trim.** The trim record must be durably confirmed before space is freed, so a
   full medium could prevent the very record that frees it. The storage contract (#86) must keep the
   capacity this requires, or an equivalent strategy, without deleting evidence silently and without
@@ -934,7 +934,7 @@ complete removal, and `k ≤ q` after an interrupted one.
   stream is Inconsistent. A trim record whose records are all still present is reported as a removal
   that did not happen, and the stream is verified from `H_0`, with `H_q` also checked.
 
-#### 9.5 Retention: removing whole streams and ledgers
+#### 10.5 Retention: removing whole streams and ledgers
 
 - **A whole stream.** A stream that has ended, by orderly close or by restart, may be removed
   entirely, whether or not it was ever anchored: a trim with `q` equal to its last position `m`,
@@ -958,7 +958,7 @@ complete removal, and `k ≤ q` after an interrupted one.
 - **Compaction at the provider.** 7.2, condition 4, lets this decision define a compaction of
   retirements. It defines none. A provider keeps every retirement.
 
-#### 9.6 What a reader reports at boundaries
+#### 10.6 What a reader reports at boundaries
 
 The report of 7.5 is per stream instance. In addition, it states each boundary the ledger records,
 and whether the ledger records citing it are anchored or only internally consistent. A matched
@@ -973,17 +973,17 @@ means that no record was lost between the last stored record and the restart.
 | **Chain state inconsistent** | The `Failed` records are reported with what they cite. Each affected stream receives its own 7.5 verdict, recomputed by the reader. A `predecessor` or `recovered` record in `Executed` form whose citation the reader cannot reproduce means the evidence changed after the restart, and the report says so. |
 | **Rotation** | "Records `1 … q` removed under retention", with the ledger position of the trim. Coverage starts at `q + 1` (7.5). Records missing between `q + 1` and the first record present make the stream **Incomplete**. |
 | **Prefix missing without a trim** | **Incomplete**: records `1 … k−1` are missing and no trim accounts for them. The chain cannot start, so no anchor can be checked. |
-| **Interrupted removal** | Leftover records `k … q`, checked against the trim's `H_q` (9.4), or a trim not carried out. |
+| **Interrupted removal** | Leftover records `k … q`, checked against the trim's `H_q` (10.4), or a trim not carried out. |
 | **Retention of a whole stream** | **Retired** (7.5), with the trim's `m` and `H_m`. If the trim's `q` equals the retirement's position, the two digests are compared. Records `p+1 … m` are reported as removed without anchor. Without a provider, or for a stream the provider never anchored: "removed under retention, never anchored" from the trim record, with no finding. A stream gone with neither trim nor retirement is a finding under 7.4 and 7.5. |
 | **Trim past the anchor** | With a provider configured, a trim with `q > p` that leaves records of the stream is a finding: `H_p` can no longer be recomputed. The stream is **Cannot verify** with that cause (7.5), and records `q+1 … m` are internally consistent only. |
 
 **Validation cases an implementation must cover.** Rotation with `q < p`, with `q = p`, and the
 refusal of `q > p`; rotation with no accepted anchor and with an unavailable provider; a full
 medium before the trim is written; an interruption after the trim is confirmed, before and during
-removal; whole-stream removal for each answer of `latest` (9.5); producer admission refusing
+removal; whole-stream removal for each answer of `latest` (10.5); producer admission refusing
 `mddlog.ledger.origin`, `mddlog.ledger.predecessor` and another `mddlog.` action without consuming
 a sequence, while admitting an ordinary action, and the adapter building ledger records through its
-own path; and each malformed ledger record listed in 9.2.
+own path; and each malformed ledger record listed in 10.2.
 
 **Limits this decision states.** The ledger lives in the mutable log. Its records are only as
 trustworthy as the ledger's own coverage, and a rewriting adversary can forge ledger records past
@@ -1028,7 +1028,7 @@ severity exists precisely so this choice can be made once, correctly.
   the library.
 - Every change to the record format is a new contract version (8.5), and a verifier keeps every
   version that stored records use. The format can grow, but never in place.
-- The ledger (Decision 9) adds records and a durable-confirmation wait at every stream opening,
+- The ledger (Decision 10) adds records and a durable-confirmation wait at every stream opening,
   close, trim and restart. A bounded medium also cannot trim past an anchor that fails to advance.
   The storage contract (#86) then decides what a full medium does.
 - Three questions remain open (Decision 4). Both blocking ones are answered (Decisions 7 and 8), but
@@ -1067,7 +1067,7 @@ severity exists precisely so this choice can be made once, correctly.
 - mddlog issues #84 (canonical byte contract and its contract version, specified by Decision 8 and
   cited by `canonicalVersion`),
   #86 (storage and the meaning of durably confirmed, which bounds an anchor's position and orders the
-  ledger's writes) and #87 (restart, rotation and retention, specified by Decision 9). Decisions 7
+  ledger's writes) and #87 (restart, rotation and retention, specified by Decision 10). Decisions 7
   and 9 depend on all three. #90 implements the provider interface and verifier specified there.
 
 ## Approval
