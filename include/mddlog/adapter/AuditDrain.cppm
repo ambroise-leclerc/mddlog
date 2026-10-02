@@ -146,6 +146,24 @@ public:
             return AuditRingRegistration::DuplicateStream;
         }
         streamIds.emplace_back(ring.identity());
+        try {
+            addSource(ring);
+        } catch (...) {
+            // An unregistered ring must not keep its identity reserved, or a retry is refused.
+            streamIds.pop_back();
+            throw;
+        }
+        return AuditRingRegistration::Registered;
+    }
+
+    /** @brief Replace the audit sink; null means an observable missing-sink configuration. */
+    void setSink(sinks::AuditSinkPtr replacement) noexcept {
+        sink = std::move(replacement);
+    }
+
+private:
+    template <std::size_t Capacity>
+    void addSource(core::AuditRing<Capacity>& ring) {
         ringList.push_back({[&ring, pendingFailure = false](sinks::AuditSink& auditSink, AuditHealth& signal) mutable {
                                 AuditDrainResult  result;
                                 const std::size_t available = ring.drain().size();
@@ -203,14 +221,9 @@ public:
                                 const auto write = ring.admittedCount();
                                 return write >= read ? write - read : std::uint64_t{0};
                             }});
-        return AuditRingRegistration::Registered;
     }
 
-    /** @brief Replace the audit sink; null means an observable missing-sink configuration. */
-    void setSink(sinks::AuditSinkPtr replacement) noexcept {
-        sink = std::move(replacement);
-    }
-
+public:
     /** @brief Attempt one bounded snapshot per ring and acknowledge only accepted events. */
     [[nodiscard]] AuditDrainResult drainOnce() {
         if (!sink) {
