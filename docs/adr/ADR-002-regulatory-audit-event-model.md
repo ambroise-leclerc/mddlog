@@ -368,9 +368,9 @@ level is the attachment point for that future ADR.
   queue, and issue #5 does not currently scope them.
 - The record grows several identifier fields, each with a capacity that must be chosen; too small
   refuses legitimate values (ADR-001 Decision 2), too large wastes fixed footprint.
-- The README's "tamper-proof... cryptographic signatures" and "automated compliance report
-  generation" remain `(planned)` after this ADR — it only fixes what a future signing/export ADR
-  would operate on.
+- The README's former "tamper-proof... cryptographic signatures" and "automated compliance report
+  generation" were not delivered by this ADR. The README no longer makes either claim; ADR-004
+  bounds what may be claimed and defers signing, key management and export (its Decision 11).
 
 ### Risks and Mitigations
 - **"Bypasses filtering" is read as "cannot be tested or redirected".** *Mitigation*: bypassing

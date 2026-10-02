@@ -26,13 +26,15 @@ ADR-001 defines the bounded, allocation-free core and the zone boundary. ADR-002
 record and its delivery contract on top of it, and promises in-memory admission only. ADR-003 goes
 the other direction — what an existing application needs before it can adopt any of this, with
 WebFront as the concrete consumer — and ADR-004 holds the storage and tamper-evidence questions
-ADR-002 deferred, in a state of "bounded, not settled": it exists to keep the claims honest while
-its own Decision 4 lists the questions it has not yet answered.
+ADR-002 deferred. It is bounded and specified but not implemented, and it stays Proposed until the
+maintainer's milestone A acceptance review: it keeps the claims honest, and Decision 11 lists what it
+defers.
 
-One further record is anticipated and deliberately not drafted: an **export format** for
-automated compliance reporting, which ADR-004 Decision 4 lists among its open questions. The root
-`README.md` no longer presents reporting as a delivered feature. An export format is read by tools
-this project does not control and should not be sketched before there is something to export.
+Further records are anticipated and deliberately not drafted: signing with key management
+(custody, provisioning, rotation), an **export format**, and **compliance reports**, which ADR-004
+Decision 11 records as deferred work with the reason for each. The root `README.md` presents none of
+them as a delivered feature. An export format is read by tools this project does not control and
+should not be sketched before there is something to export.
 
 ## Relationship to MduX
 

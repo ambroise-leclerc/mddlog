@@ -1,16 +1,19 @@
 # ADR-004: Audit persistence and tamper evidence
 
 ## Status
-Proposed — **the least developed of the four records.** It exists to bound what may be claimed while
-the design is open, and to hold the open questions in one place. Several decisions below are
-deliberately left unanswered and marked as such; do not read an unanswered question as a permissive
-default.
+Proposed — **bounded and specified, not implemented, and not accepted.** Every question of
+Decision 4 is resolved by a numbered decision or deferred by Decision 11 with its reason. The record
+is ready for the milestone A acceptance review (`ADR-004-milestone-a-review.md`, #88). **Acceptance
+is the maintainer's decision**; preparing the review, closing #88 or merging this text does not
+amount to it. No part of the design is implemented, so do not read this record as a capability.
 
 ## Context
 
-`README.md` promises, under Audit Trail Features, "Tamper-proof records with cryptographic
-signatures" and, under Medical Device Compliance, "Regulatory Reporting: Automated compliance report
-generation" — both marked `(planned)`. Nothing implements either.
+An earlier `README.md` promised "Tamper-proof records with cryptographic signatures" and
+"Regulatory Reporting: Automated compliance report generation", both marked `(planned)`. Neither was
+implemented, and the README no longer makes either promise: it lists durable storage, tamper
+evidence and recovery as planned and points here. Decision 1 states what may be claimed instead, and
+Decision 11 records signatures and reporting as later work.
 
 ADR-002 Decision 3 defines a three-level delivery contract — admitted, handed off, durably confirmed
 — and states that **no backend offers level 3 today**, leaving that level in the contract purely so a
@@ -26,7 +29,7 @@ Two constraints from the earlier records shape everything here:
 - **The word matters.** "Tamper-proof" claims prevention. Nothing a logging library can do prevents
   someone with write access to the medium from altering or deleting records. What is achievable is
   **tamper-evident**: alteration or truncation becomes detectable after the fact. This record adopts
-  the second word and recommends the README be corrected to match before anything here ships.
+  the second word, and the README has been corrected to match.
 
 ## Medical Device Considerations
 
@@ -80,8 +83,24 @@ What that means in practice:
   the exclusions, and what a verifier reports.
 
 **Absent any anchoring mechanism, the claim reduces to internal chain consistency**, and that is
-what must be written in user-facing material. README's "tamper-proof" wording should be corrected
-independently of whether this record is accepted.
+what must be written in user-facing material.
+
+**Wording for README, documentation, comments and reports.** The claim is bounded on both sides:
+
+- *Allowed*: "tamper-evident relative to an authentic anchor held independently of the log"; "a
+  verifier reports the coverage `1 … p`, and what lies beyond it as internally consistent only";
+  "internally consistent, unanchored"; "alteration or truncation within the anchored range is
+  detected".
+- *Not allowed*: "tamper-proof", "tamper-resistant", "immutable", "cannot be altered", "prevents
+  alteration or deletion", "unforgeable", "verified" without the anchor and coverage that make it so.
+- *Not allowed, authorship*: a chain over canonical bytes involves no key. It shows that a sequence
+  is internally consistent, not **who** wrote it, and it is not non-repudiation, a signature or
+  evidence of origin. Only a later, key-bound mechanism (Decision 11) could support such a claim,
+  and that is not provided here.
+- Neither the chain nor the anchor establishes that a record is *true*. They show that what was
+  stored is what the anchor covers.
+
+A new claim outside the first list needs an ADR amendment first.
 
 ### 2. Hash chaining over a canonical serialization is the minimum mechanism
 
@@ -142,8 +161,11 @@ may be stored before they are answered, because the first record written freezes
   concludes when it is missing or inconsistent. **Resolved by Decision 10**: no separate head store,
   recovery by recomputation and continuity check, the link between successive ledgers, and the
   adapter's and reader's handling of absent and inconsistent state.
-- **Export format** — the "automated compliance report generation" README claims; likely a separate
-  record again, since an export format is read by tools nobody here controls.
+- **Export format** — the "automated compliance report generation" an earlier README claimed.
+  **Deferred by Decision 11**, with its reason: a separate record, since an export format is read by
+  tools nobody here controls. Nothing stored depends on it, and the backend does not include it.
+- **Signing, key custody, provisioning and rotation** (Decision 3). **Deferred by Decision 11**.
+  Listed here so that no question is left open by omission.
 
 ### 5. Validation scenarios any implementation must answer
 
@@ -1291,6 +1313,26 @@ the ledger's last anchor, exactly as for any stream. A power loss and a delibera
 last records look the same after an abrupt end. Trimming past a retained checkpoint gives up that
 checkpoint's protection.
 
+### 11. Deferred work: not included, even implicitly, in the initial backend
+
+Each item below is **outside** this record and outside the initial backend (#89 to #93). None is
+settled by silence, and none may be added to the backend without its own record. Each is attached to
+epic #11 until the maintainer opens a lot for it; no lot exists yet, and this record does not invent
+issue numbers.
+
+| Deferred work | Why it is not decided here | What this record already leaves for it | Attachment |
+|---|---|---|---|
+| **Signatures** over a chain head | A signature needs a private key on the device, and the answers about where it lives and what a compromise does are not logging questions (Decision 3). A wrong answer is worse than a missing one. | Room outside the canonical bytes and the chain input (8.6); the head statement's contents (8.6, 7.1); signing as one possible anchor provider (Decision 1, 7.2) | Later record under epic #11; needs the key decisions below first |
+| **Key management**: custody and storage | Depends on the target's secure element, hardware and threat model, which differ per manufacturer and are the manufacturer's risk file's concern (Medical Device Considerations) | Nothing in the core or the storage contract holds a key (ADR-001) | Later record under epic #11 |
+| **Key provisioning** | Needs a manufacturing and enrolment process that this library does not own | None. No provisioning interface is specified | Later record under epic #11 |
+| **Key rotation and compromise handling** | Needs a rule for what an old signature means after a key changes, and for how a verifier learns of a revocation | A new contract version, never an in-place change (8.5) | Later record under epic #11 |
+| **Export format** | Read by tools nobody here controls; sketching it before there is stored data to export fixes a format twice | The canonical bytes and layout are versioned (8.1, 9.4); the verifier's verdicts and coverage are defined (7.5) | Later record under epic #11 |
+| **Compliance reports** | A report states a claim about conformity to a regulation, which only the manufacturer can make. The library supplies evidence, never conformity. Needs the export format first | The verifier's coverage and limits (7.5) are the evidence a report could cite | Later record under epic #11, after the export format |
+
+Until each exists, README and documentation present none of them as delivered or implied. A
+deployment that needs authorship or non-repudiation has no mechanism here and must supply its own,
+outside the library, under its own risk file.
+
 ## Alternatives Considered
 
 ### 1. Signed records from the start, no separate chaining step (Rejected for now)
@@ -1350,10 +1392,13 @@ disqualify the backend.
   Producer streams that need space then stay full, and are refused at the call site (9.6).
 - The ledger's reserve (9.6) takes a share of the medium that grows with its segment count. With
   64 KiB segments, it is about 1.2 % of the medium, plus a few segments.
-- Only the export format remains open (Decision 4), and nothing stored depends on it. The record
-  stays Proposed until its acceptance review (#88): it bounds the design and specifies it, but no
-  part of it is implemented. This
-  record therefore cannot be implemented as it stands. It bounds the design rather than settling it.
+- Signing, key management, provisioning and rotation, the export format and compliance reports are
+  deferred (Decision 11). The initial backend therefore offers **no authorship evidence** and **no
+  reporting**. Nothing stored depends on any of them, but a deployment that needs them must wait for
+  a later record or provide its own.
+- The record stays Proposed until the maintainer decides at the milestone A review. It specifies the
+  design, but no part of it is implemented, and its acceptance is a decision the closing of #88 does
+  not carry.
 
 ### Risks and Mitigations
 - **The record is read as a plan rather than a boundary.** *Mitigation*: Status and Decision 6 both
@@ -1394,4 +1439,7 @@ disqualify the backend.
 ## Approval
 - **Decision Date**: not yet approved — drafted for review.
 - **Approved By**: pending (project maintainer).
-- **Review Date**: when Decision 4's open questions are answered, which is a precondition for any implementation work.
+- **Review Date**: the milestone A acceptance review. Decision 4's questions are all resolved or
+  deferred with their reason (Decision 11), which was the precondition. The review file is
+  `ADR-004-milestone-a-review.md`. Acceptance is a precondition for any persistent implementation
+  (#89 to #93), and it is the maintainer's to give.
