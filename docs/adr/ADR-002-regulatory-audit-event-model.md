@@ -1,10 +1,25 @@
 # ADR-002: Regulatory audit-event model, separate from application logging
 
 ## Status
-Proposed — drafted for maintainer review, not yet acted on.
+Accepted — Decisions 1–6 are the audit contract the codebase is expected to conform to. They are
+implemented by #56 (`AuditEvent` and bounded admission), #57 (audit-only hand-off and health), #58
+(`logAudit()` migration and removal of `LogLevel::Audit`), #59 (scenario and boundary validation)
+and #94 (stream-identity enforcement and external-consumer review), under epic #9. Scenario,
+boundary and consumer evidence is recorded in [the validation report](../audit-scenario-validation.md).
 
-Scenario and boundary evidence for #59 is recorded in
-[the validation report](../audit-scenario-validation.md). It does not change this status.
+Accepted with these stated limits, which acceptance does not lift:
+
+- only levels 1 (admitted) and 2 (handed off) of Decision 3 are offered; level 3, durable
+  confirmation, belongs to ADR-004 (epic #11), and power loss remains outside every guarantee;
+- the `Lifecycle` and `Operator` categories have no runtime call site in any known consumer; their
+  vocabularies are host-defined (Decision 6);
+- the optional monotonic value of Decision 5 is not carried: ordering within a stream rests on the
+  sequence, and civil time is an attribute;
+- stream uniqueness is enforced per consumer adapter only; across adapters, processes and boot
+  sessions it remains the host's obligation (Decision 5).
+
+Acceptance alone does not establish validation of a particular build or deployment (see
+Consequences and Approval).
 
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
@@ -128,7 +143,8 @@ against ADR-001 Decision 2: `logAudit()` today takes unconstrained `std::string_
 `action`, `actor` and `target` become identifier-kind fields that **refuse** an over-long value
 rather than storing part of it. A caller passing a 4 KiB `eventType` gets a refused event, not a
 truncated one — and calling that "lossless" would be exactly the kind of wording this record is
-supposed to avoid. So the migration owes three things the implementing issue must supply:
+supposed to avoid. So the migration owes three things the implementing issue must supply (supplied by #58 and #59;
+see the migration guide and the validation report):
 
 - **A stated grammar and limit per identifier field** (permitted bytes and maximum length), chosen
   from what real call sites pass rather than guessed, and documented as a public constraint — a
@@ -302,7 +318,9 @@ claims A's events and B's events have a defined relative order; only that no eve
 The provisional category set — `Lifecycle`, `Configuration`, `Access`, `RiskControl`, `Operator` —
 is **drafted, not requirements-derived**. It must be validated against the three scenarios the
 maintainer's review asks for (critical action with a distinct execution result; saturation then
-consumer failure; clock correction and restart) before this ADR moves to Accepted. MduX's own
+consumer failure; clock correction and restart) before this ADR moves to Accepted. #59 validated it
+against those scenarios, and #94 against the known external consumers; `Lifecycle` and `Operator`
+remain without a runtime call site, a gap accepted and stated in Status. MduX's own
 `AuditCategory` was scoped to that project's actual use rather than invented speculatively.
 
 And the limit that matters most: an `AuditEvent` type existing does not mean mddlog operates an
@@ -377,6 +395,9 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - ADR-001 (this repository) — the bounded ring, the refuse-new overflow policy, and the field-kind truncation rules this ADR relies on.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review.
-- **Approved By**: pending (project maintainer).
-- **Review Date**: before any work on persistent or cryptographically-sealed audit storage begins, and after the three validation scenarios in Decision 6 are documented.
+- **Decision Date**: 2026-10-02, after #56–#59 were merged and #94 completed epic #9.
+- **Approved By**: ambroise-leclerc (project maintainer).
+- **Review Date**: 2026-10-02. The three validation scenarios of Decision 6 are documented in the
+  validation report. Review again before ADR-004 attaches durable confirmation (level 3), when a
+  runtime consumer first uses `Lifecycle` or `Operator`, or if capacities or the identifier grammar
+  change.

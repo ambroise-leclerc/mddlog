@@ -1,7 +1,7 @@
 # ADR-002 scenario validation for #59
 
-ADR-002 remains **Proposed**. This report evaluates the implemented audit core and the
-current call sites; it does not record maintainer acceptance. `tests/spec/AuditScenarioSpec.cpp`
+This report evaluates the implemented audit core and the current call sites. ADR-002 was
+accepted on 2026-10-02 on the basis of this evidence and its stated limits; see its Status. `tests/spec/AuditScenarioSpec.cpp`
 is executable evidence for the bounded record and memory admission contract.
 
 ## Category and identifier review
@@ -23,8 +23,7 @@ hazard reference. The old default `IEC_62304` is not a per-event requirement ref
 Free text with spaces, non-ASCII bytes, or excess length cannot be copied into an
 identifier: choose a stable code and place the description in `detail`. The admission
 result identifies the refused field; only `detail` may shorten, with a flag. #58
-applied this mapping to the public logger APIs. ADR-002 acceptance remains a
-separate maintainer decision.
+applied this mapping to the public logger APIs.
 
 The initial grammar is ASCII letters, digits, `_`, `.`, `:`, `/`, `-` for every
 identifier. `action`, `target`, and `streamId` are required. Exact limits in bytes are
@@ -53,7 +52,7 @@ and WebFront [`3027d33`](https://github.com/ambroise-leclerc/WebFront/commit/302
   other. WebFront emits no audit events.
 - **Residual gap.** No external runtime call site exercises `Lifecycle` or `Operator`; their
   vocabularies remain host-defined. The categories stay as proposed, and this gap is recorded
-  for the ADR-002 review rather than closed by assumption.
+  as an accepted limit of ADR-002 rather than closed by assumption.
 - **Stream identity.** `AuditSinkAdapter::addRing()` now refuses an invalid or already
   registered identity, so two rings aggregated by one adapter can no longer share
   `(streamId, sequence)` space, and a recreated producer must take a new identity.
@@ -99,5 +98,5 @@ Implementation evidence: #56 supplies the bounded record and ring; #57 supplies
 consumption and health. This issue supplies scenario and boundary tests plus the
 correlation capacity correction. #58 subsequently migrated `logAudit()` and removed
 `LogLevel::Audit`. The external-consumer review and stream-identity enforcement above complete the
-remaining #9 criteria. ADR-002 acceptance remains a separate maintainer decision. The tests establish the behavior of the exercised implementation,
+remaining #9 criteria. The tests establish the behavior of the exercised implementation,
 not field suitability for deployments or a production validation claim.
