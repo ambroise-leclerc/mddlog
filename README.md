@@ -61,8 +61,8 @@ The public `logAudit(AuditInput)` API introduced in #58 uses the same admission 
 For a diagnostic logger, see [basic_usage.cpp](examples/basic_usage.cpp). For draining governed records to sinks, see the [governed-core migration guide](docs/migration/governed-core.md).
 
 For independently enabled diagnostic groups and synchronous text callbacks, use
-`mddlog.adapter.textlogger`. The [WebFront facade guide](docs/migration/webfront-facade.md)
-describes its rendering contract and the tested reference bridge for WebFront adoption.
+`mddlog.adapter.textlogger`. The [text logger guide](docs/migration/text-logger.md) describes its
+rendering contract.
 
 ## Regulatory context and evidence
 
@@ -79,7 +79,7 @@ The [evidence note](docs/governed-evidence.md) states exactly what the module gr
 ### Delivery and roadmap
 
 - **Implemented and accepted:** bounded audit admission, per-stream sequence, explicit refusal, and in-memory sink hand-off with health reporting ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md); [epic #9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
-- **Implemented and accepted:** application integration with WebFront: synchronized sink registry, bounded transport consumer, diagnostic facade and emission context ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); [epic #10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
+- **Implemented and accepted:** application integration building blocks: synchronized sink registry, bounded transport consumer and diagnostic text logger, with WebFront as the reference consumer verified in its own repository ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); [epic #10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Planned:** durable storage, tamper evidence, and recovery semantics ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); [epic #11](https://github.com/ambroise-leclerc/mddlog/issues/11)).
 
 ## Build and verify

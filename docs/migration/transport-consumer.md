@@ -29,8 +29,8 @@ releases the self-handle lookup cell without incrementing failure counters.
 
 Threads that start after consumption, such as connection threads, cannot register rings
 late. Register a fixed pool of producer rings first, hand each to one thread at a time under
-a mutex, and return it when the thread exits. WebFront's adoption (#72) follows this pattern;
-see `webfront-facade.md`.
+a mutex, and return it when the thread exits. WebFront's adoption (#72) follows this pattern
+in WebFront's own repository.
 
-This implements the transport portion of ADR-003 (accepted on 2026-10-02); WebFront's facade is
-issue #69.
+This implements the transport portion of ADR-003 (accepted on 2026-10-02). The diagnostic text
+adapter is described in `text-logger.md`.
