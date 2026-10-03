@@ -384,74 +384,80 @@ const speclab::Register durableConfirmation{
             .Execute();
     }};
 
-const speclab::Register rotation{"A stream spans numbered segments, synced before each rotation, and a record is never split", "integration", [] {
-                                     return speclab::Test("audit-storage-segments")
-                                         .Then("records continue across segments with no gap and the header names the first sequence",
-                                               [] {
-                                                   speclab::core::Checks checks;
-                                                   auto                  rig = makeRig();
-                                                   rig->start(1000);  // no policy sync: only the rotation syncs
-                                                   const std::uint64_t total    = (2 * perSegment(160)) + 1;
-                                                   std::uint64_t       accepted = 0;
-                                                   for (std::uint64_t k = 1; k <= total; ++k)
-                                                       accepted += rig->sink->accept(makeEvent(streamName, k, 160)) ? 1U : 0U;
-                                                   checks.expect(accepted == total, "all handed off");
-                                                   const auto listing = *rig->medium.segments();
-                                                   checks.expect(listing.size() == 3, "three segments");
-                                                   std::uint64_t expectedFirst = 1;
-                                                   std::uint32_t expectedIndex = 0;
-                                                   bool          headers       = true;
-                                                   bool          fits          = true;
-                                                   for (const auto& info : listing) {
-                                                       const auto bytes = rig->medium.bytesOf(info.segment);
-                                                       const auto scan  = scanSegment(bytes);
-                                                       headers          = headers && scan.header && scan.header->segmentIndex == expectedIndex
-                                                                 && scan.header->firstSequence == expectedFirst && scan.trailingBytes == 0;
-                                                       fits           = fits && bytes.size() <= 2048;
-                                                       expectedFirst += scan.records.size();
-                                                       ++expectedIndex;
-                                                   }
-                                                   checks.expect(headers, "indices 0.., firstSequence follows the last record, no trailing bytes");
-                                                   checks.expect(fits, "no segment exceeds its declared size");
-                                                   const auto stored = checkStored(rig->medium, streamName);
-                                                   checks.expect(stored.stored == total && stored.allOk, "one chain across the segments");
-                                                   checks.expect(rig->medium.confirmedOf(listing.front().segment)
-                                                                     == rig->medium.bytesOf(listing.front().segment).size(),
-                                                                 "the first segment was confirmed up to its end before the next opened");
-                                                   checks.raise();
-                                               })
-                                         .Then("an instance is not continued: a stream identity the medium already holds is refused",
-                                               [] {
-                                                   speclab::core::Checks checks;
-                                                   auto                  rig = makeRig();
-                                                   rig->start(1);
-                                                   (void)rig->sink->accept(makeEvent(streamName, 1));
-                                                   rig->sink->close();
-                                                   rig->medium.restart(Unconfirmed::Dropped);
-                                                   auto again = PersistingAuditSink::create(rig->medium, Rig::config(1));
-                                                   checks.expect(again.has_value()
-                                                                     && std::ranges::find((*again)->recovery().streamsHeld, std::string{streamName})
-                                                                            != (*again)->recovery().streamsHeld.end(),
-                                                                 "the startup check lists the instance the medium holds");
-                                                   checks.expect(!(*again)->accept(makeEvent(streamName, 2)),
-                                                                 "a restart starts a new instance, never continues the old one");
-                                                   checks.expect((*again)->health().counters.streamIdentityInUse == 1, "counted");
-                                                   checks.expect((*again)->accept(makeEvent("device-42/boot-8", 1)), "a new identity is accepted");
-                                                   checks.expect(checkStored(rig->medium, streamName).stored == 1, "the old instance is untouched");
-                                                   checks.raise();
-                                               })
-                                         .Then("a stream beyond the declared maximum is refused",
-                                               [] {
-                                                   speclab::core::Checks checks;
-                                                   auto                  rig = makeRig();
-                                                   rig->start(1);
-                                                   checks.expect(rig->sink->accept(makeEvent(streamName, 1)), "first stream");
-                                                   checks.expect(!rig->sink->accept(makeEvent("device-42/other", 1)), "second stream, S = 1");
-                                                   checks.expect(rig->sink->health().counters.streamLimitRefused == 1, "counted");
-                                                   checks.raise();
-                                               })
-                                         .Execute();
-                                 }};
+const speclab::Register rotation{
+    "A stream spans numbered segments, synced before each rotation, and a record is never split",
+    "integration",
+    [] {
+        return speclab::Test("audit-storage-segments")
+            .Then("records continue across segments with no gap and the header names the first sequence",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      rig->start(1000);  // no policy sync: only the rotation syncs
+                      const std::uint64_t total    = (2 * perSegment(160)) + 1;
+                      std::uint64_t       accepted = 0;
+                      for (std::uint64_t k = 1; k <= total; ++k)
+                          accepted += rig->sink->accept(makeEvent(streamName, k, 160)) ? 1U : 0U;
+                      checks.expect(accepted == total, "all handed off");
+                      const auto listing = *rig->medium.segments();
+                      checks.expect(listing.size() == 3, "three segments");
+                      std::uint64_t expectedFirst = 1;
+                      std::uint32_t expectedIndex = 0;
+                      bool          headers       = true;
+                      bool          fits          = true;
+                      for (const auto& info : listing) {
+                          const auto bytes = rig->medium.bytesOf(info.segment);
+                          const auto scan  = scanSegment(bytes);
+                          headers          = headers && scan.header && scan.header->segmentIndex == expectedIndex && scan.header->firstSequence == expectedFirst
+                                    && scan.trailingBytes == 0;
+                          fits           = fits && bytes.size() <= 2048;
+                          expectedFirst += scan.records.size();
+                          ++expectedIndex;
+                      }
+                      checks.expect(headers, "indices 0.., firstSequence follows the last record, no trailing bytes");
+                      checks.expect(fits, "no segment exceeds its declared size");
+                      const auto stored = checkStored(rig->medium, streamName);
+                      checks.expect(stored.stored == total && stored.allOk, "one chain across the segments");
+                      checks.expect(rig->medium.confirmedOf(listing.front().segment) == rig->medium.bytesOf(listing.front().segment).size(),
+                                    "the first segment was confirmed up to its end before the next opened");
+                      checks.raise();
+                  })
+            .Then("an instance is not continued: a stream identity the medium already holds is refused",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      rig->start(1);
+                      (void)rig->sink->accept(makeEvent(streamName, 1));
+                      rig->sink->close();
+                      rig->medium.restart(Unconfirmed::Dropped);
+                      auto again = PersistingAuditSink::create(rig->medium, Rig::config(1));
+                      checks.expect(again.has_value()
+                                        && std::ranges::find((*again)->recovery().streamsHeld, std::string{streamName})
+                                               != (*again)->recovery().streamsHeld.end(),
+                                    "the startup check lists the instance the medium holds");
+                      checks.expect(!(*again)->accept(makeEvent(streamName, 2)), "a restart starts a new instance, never continues the old one");
+                      checks.expect((*again)->health().counters.streamIdentityInUse == 1, "counted");
+                      checks.expect((*again)->accept(makeEvent("device-42/boot-8", 1)), "a new identity is accepted");
+                      checks.expect(checkStored(rig->medium, streamName).stored == 1, "the old instance is untouched");
+                      checks.raise();
+                  })
+            .Then("a stream beyond the declared maximum is refused",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      rig->start(1);
+                      checks.expect(rig->sink->accept(makeEvent(streamName, 1)), "first stream");
+                      checks.expect(!rig->sink->accept(makeEvent("device-42/other", 1)), "second stream, S = 1");
+                      checks.expect(rig->sink->health().counters.streamLimitRefused == 1, "counted");
+                      auto failing = makeRig();
+                      failing->start(1);
+                      failing->medium.inject({.operation = Operation::Append, .ordinal = 1, .effect = Effect::Fail});
+                      checks.expect(!failing->sink->accept(makeEvent(streamName, 1)), "the first stream fails");
+                      checks.expect(failing->sink->accept(makeEvent("device-42/other", 1)), "a failed instance no longer counts against S");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 
 const speclab::Register fullState{
     "A stream that needs a segment when only the reserve is free is full, not failed, and continues without a gap",

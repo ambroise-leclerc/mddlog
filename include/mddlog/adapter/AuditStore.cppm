@@ -376,7 +376,11 @@ public:
                 counters.streamIdentityInUse.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
-            if (streams.size() >= config.maxProducerStreams) {
+            // S bounds the instances open at once: one that failed has ended and no longer counts (9.6).
+            const auto open = std::ranges::count_if(streams, [](const auto& entry) {
+                return entry.second.state != StreamStorageState::Failed;
+            });
+            if (static_cast<std::size_t>(open) >= config.maxProducerStreams) {
                 counters.streamLimitRefused.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
