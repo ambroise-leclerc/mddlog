@@ -25,9 +25,9 @@ instances separately, so a discontinuity is never presented as continuity.
 
 Inconsistent state is written in its `Failed` form, citing the last position that checks, and
 reported through `health().integrity`. A ledger with a malformed record checks only up to the
-record before it. Ledgers whose `predecessor` citations form a cycle are inconsistent too: record 1
-then cites one of them in `Failed` form, never `origin`, which is written only when the log holds no
-ledger. Records are never repaired, rewritten or reordered, and
+record before it. Ledgers on a cycle of `predecessor` citations are inconsistent too, even when another
+ledger cites into the cycle. When every ledger is cited, record 1 cites one of them in `Failed`
+form: `origin` is written only when the log holds no ledger. Records are never repaired, rewritten or reordered, and
 retention never removes records of a stream recovery found inconsistent.
 
 ## Closing

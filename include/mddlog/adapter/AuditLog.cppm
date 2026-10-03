@@ -458,7 +458,7 @@ enum class IntegrityFaultKind : std::uint8_t {
     CloseCitationMismatch,
     /** @brief Two ledgers are cited by no other. */
     LedgersFork,
-    /** @brief Ledgers are present and every one is cited by another: their `predecessor` citations form a cycle, so none is the newest (10.3). */
+    /** @brief The ledger's chain of `predecessor` citations comes back to it: the ledgers on the cycle are inconsistent (10.3). */
     LedgerCitationCycle,
     /** @brief The log holds records of a stream no ledger opened. */
     StreamNotOpened,
@@ -517,8 +517,8 @@ struct PendingRetirement {
 struct ChainStateRecovery {
     std::map<std::string, RecoveredStream, std::less<>> held;
     /**
-     * @brief The ledger record 1 will cite: the newest ledger; under a fork the uncited one whose identity sorts last; under a citation cycle the ledger whose
-     * identity sorts last. Empty only when the log holds no ledger.
+     * @brief The ledger record 1 will cite: the newest ledger; under a fork the uncited one whose identity sorts last; when every ledger is cited, so all lie
+     * on cycles, the ledger whose identity sorts last. Empty only when the log holds no ledger.
      */
     std::optional<std::string> predecessor;
     bool                       fork  = false;
@@ -592,9 +592,13 @@ public:
     [[nodiscard]] const std::vector<std::string>& uncitedLedgers() const noexcept {
         return uncited;
     }
-    /** @brief Ledgers are present and none is uncited: their `predecessor` citations form a cycle (10.3). */
+    /** @brief Some ledgers' `predecessor` citations form a cycle (10.3), whether or not another ledger is uncited. */
     [[nodiscard]] bool citationCycle() const noexcept {
-        return !ledgerList.empty() && uncited.empty();
+        return !inCycle.empty();
+    }
+    /** @brief The ledgers on a cycle of `predecessor` citations, sorted. A ledger whose chain only leads into a cycle is not one of them. */
+    [[nodiscard]] const std::vector<std::string>& cycleMembers() const noexcept {
+        return inCycle;
     }
     /**
      * @brief The highest position any valid `close` or `recovered` record cites for a stream, and where it is recorded. A trim below it is not the removal of
@@ -662,6 +666,7 @@ private:
             if (!cited.contains(ledgerImage.id))
                 uncited.push_back(ledgerImage.id);
         }
+        findCycles();
         std::set<std::string> opened;
         for (const LedgerImage& ledgerImage : ledgerList) {
             opened.insert(ledgerImage.opened.begin(), ledgerImage.opened.end());
@@ -673,6 +678,26 @@ private:
             if (!isLedger(id) && !opened.contains(id) && !stream.records.empty())
                 unopened.push_back(id);
         }
+    }
+
+    /** @brief Follow each ledger's chain of citations; a ledger met again on the current path closes a cycle, and the ledgers from it on are its members. */
+    void findCycles() {
+        std::set<std::string> done;
+        std::set<std::string> members;
+        for (const LedgerImage& start : ledgerList) {
+            std::vector<std::string> path;
+            const LedgerImage*       cursor = &start;
+            while (cursor != nullptr && !done.contains(cursor->id)) {
+                if (const auto again = std::ranges::find(path, cursor->id); again != path.end()) {
+                    members.insert(again, path.end());
+                    break;
+                }
+                path.push_back(cursor->id);
+                cursor = cursor->predecessor.has_value() ? ledger(cursor->predecessor->target) : nullptr;
+            }
+            done.insert(path.begin(), path.end());
+        }
+        inCycle.assign(members.begin(), members.end());
     }
 
     [[nodiscard]] static std::optional<LedgerImage> readLedger(const std::string& id, const StreamImage& stream) {
@@ -774,6 +799,7 @@ private:
     std::vector<LedgerImage>                             ledgerList;
     std::map<std::string, StreamEvaluation, std::less<>> evaluated;
     std::vector<std::string>                             uncited;
+    std::vector<std::string>                             inCycle;
     std::vector<std::string>                             unopened;
     std::vector<std::pair<std::string, std::uint64_t>>   reservedOutside;
 };
@@ -917,15 +943,17 @@ namespace detail {
             out.held[id].consistent = false;
         }
     }
+    if (log.citationCycle()) {
+        out.cycle = true;
+        for (const auto& id : log.cycleMembers()) {
+            fault(IntegrityFaultKind::LedgerCitationCycle, id);
+            out.held[id].consistent = false;
+        }
+    }
     if (!uncited.empty()) {
         out.predecessor = *std::ranges::max_element(uncited);
-    } else if (log.citationCycle()) {
-        // Ledgers are present, so this is never absent state: writing `origin` would claim no earlier ledger exists (10.3).
-        out.cycle = true;
-        for (const LedgerImage& ledgerImage : log.ledgers()) {
-            fault(IntegrityFaultKind::LedgerCitationCycle, ledgerImage.id);
-            out.held[ledgerImage.id].consistent = false;
-        }
+    } else if (!log.ledgers().empty()) {
+        // Every ledger is cited, so they all lie on cycles. Ledgers are present: writing `origin` would claim no earlier ledger exists (10.3).
         out.predecessor = std::ranges::max(log.ledgers(), {}, &LedgerImage::id).id;
     }
 

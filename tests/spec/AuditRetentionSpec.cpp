@@ -973,6 +973,19 @@ const speclab::Register removalRecords{
                       checks.expect(log.ledger("ledger/1") != nullptr && log.ledger("ledger/1")->wellFormed(), "the ledger stays well formed");
                       checks.raise();
                   })
+            .Then("a trim appended whose sync fails is reported as recorded, and nothing is removed",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(rig->config(), false), "started with no provider");
+                      (void)rig->feed(streamP, 1, (2 * perSegment()) + 1, big);
+                      rig->medium.inject({.operation = Operation::Sync, .ordinal = rig->medium.calls(Operation::Sync) + 1, .effect = Effect::Fail});
+                      const auto result = rig->sink->trimPrefix(streamP);
+                      checks.expect(result.outcome == RetentionOutcome::NotConfirmed && result.segmentsReclaimed == 0, "not confirmed, nothing reclaimed");
+                      checks.expect(result.trimmedThrough == 2 * perSegment() && trimsOf(*rig, "ledger/1") == 1,
+                                    "the trim reached the medium, and the result says so");
+                      checks.raise();
+                  })
             .Then(
                 "a ledger that holds the only trim of a stream still held is not removed, and goes once a newer trim covers it",
                 [] {

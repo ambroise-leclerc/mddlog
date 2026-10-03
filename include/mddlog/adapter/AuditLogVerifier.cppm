@@ -58,7 +58,7 @@ enum class BoundaryKind : std::uint8_t {
     NoEarlierHistoryKnown,
     /** @brief Two ledgers are cited by no other. */
     LedgersFork,
-    /** @brief Every ledger is cited by another: the `predecessor` citations form a cycle and no ledger is the newest. */
+    /** @brief The ledger lies on a cycle of `predecessor` citations, whether or not another ledger is uncited. */
     LedgerCitationCycle,
     /** @brief The log holds records of a stream no ledger opened. */
     StreamNotOpenedByAnyLedger,
@@ -405,10 +405,8 @@ private:
             for (const auto& id : log.uncitedLedgers())
                 out.notes.push_back(makeBoundaryNote(BoundaryKind::LedgersFork, id));
         }
-        if (log.citationCycle()) {
-            for (const LedgerImage& ledgerImage : log.ledgers())
-                out.notes.push_back(makeBoundaryNote(BoundaryKind::LedgerCitationCycle, ledgerImage.id));
-        }
+        for (const auto& id : log.cycleMembers())
+            out.notes.push_back(makeBoundaryNote(BoundaryKind::LedgerCitationCycle, id));
         for (const auto& id : log.streamsNoLedgerOpened())
             out.notes.push_back(makeBoundaryNote(BoundaryKind::StreamNotOpenedByAnyLedger, id));
         for (const auto& [id, sequence] : log.reservedOutsideLedger()) {

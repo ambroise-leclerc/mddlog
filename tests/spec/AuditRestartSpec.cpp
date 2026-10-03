@@ -646,6 +646,30 @@ const speclab::Register citationCycles{
                       checks.expect(hasFault(restart.faults, IntegrityFaultKind::LedgerCitationCycle, "ledger/0"), "an integrity fault is reported");
                       checks.raise();
                   })
+            .Then("a cycle that an uncited ledger cites into: its members are inconsistent, and record 1 still cites the uncited ledger",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig  = makeRig();
+                      const auto            cite = [&](std::string_view id, std::string_view earlier) {
+                          std::vector<AuditEvent> events{ledgerEvent(LedgerEntry::predecessor(earlier, false, std::nullopt, std::nullopt), id, 1)};
+                          (void)forgeSegment(rig->medium, id, events);
+                      };
+                      cite("ledger/a", "ledger/b");
+                      cite("ledger/b", "ledger/c");
+                      cite("ledger/c", "ledger/b");
+                      const auto before = readLog(*rig);
+                      checks.expect(before.has(BoundaryKind::LedgerCitationCycle, "ledger/b") && before.has(BoundaryKind::LedgerCitationCycle, "ledger/c"),
+                                    "the reader states the cycle's members");
+                      checks.expect(!before.has(BoundaryKind::LedgerCitationCycle, "ledger/a"), "not the ledger that only cites into it");
+                      checks.expect(rig->start(), "started");
+                      const RestartReport& restart = rig->sink->restart();
+                      checks.expect(hasFault(restart.faults, IntegrityFaultKind::LedgerCitationCycle, "ledger/b")
+                                        && hasFault(restart.faults, IntegrityFaultKind::LedgerCitationCycle, "ledger/c")
+                                        && !hasFault(restart.faults, IntegrityFaultKind::LedgerCitationCycle, "ledger/a"),
+                                    "a fault for each member, and only for them");
+                      checks.expect(restart.firstRecord == LedgerRecordKind::Predecessor && restart.predecessor == "ledger/a", "record 1 cites ledger/a");
+                      checks.raise();
+                  })
             .Execute();
     }};
 

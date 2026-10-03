@@ -1464,10 +1464,10 @@ private:
             if (const auto done = sessionTrims.find(target); done != sessionTrims.end() && done->second.first >= q) {
                 trimSequence = done->second.second;  // already recorded and confirmed this start: the ledger's trims stay increasing (10.2)
             } else {
-                if (!writeLedger(LedgerEntry::streamTrim(target, q, *digest)))
-                    return refuse(RetentionOutcome::NotConfirmed);
-                if (!ledgerConfirmed())
-                    return refuse(RetentionOutcome::NotConfirmed, q);
+                const std::uint64_t ledgerBefore = ledger->appended;
+                // A trim appended but not confirmed may still survive on the medium: the result says it was recorded.
+                if (!writeLedger(LedgerEntry::streamTrim(target, q, *digest)) || !ledgerConfirmed())
+                    return refuse(RetentionOutcome::NotConfirmed, ledger->appended != ledgerBefore ? q : 0);
                 trimSequence                      = ledger->appended;
                 sessionTrims[std::string{target}] = {q, trimSequence};
                 counters.trimsRecorded.fetch_add(1, std::memory_order_relaxed);
