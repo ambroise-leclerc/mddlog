@@ -9,8 +9,11 @@ boundary and consumer evidence is recorded in [the validation report](../audit-s
 
 Accepted with these stated limits, which acceptance does not lift:
 
-- only levels 1 (admitted) and 2 (handed off) of Decision 3 are offered; level 3, durable
-  confirmation, belongs to ADR-004 (epic #11), and power loss remains outside every guarantee;
+- only levels 1 (admitted) and 2 (handed off) of Decision 3 are covered by this acceptance; level 3,
+  durable confirmation, belongs to ADR-004 (epic #11), whose persistence adapter now attaches it
+  (#91 to #93, see [its validation report](../audit-persistence-validation.md)). Level 3 holds only on
+  a storage medium that meets ADR-004 Decision 9, which the integrator establishes; elsewhere power
+  loss remains outside every guarantee;
 - the `Lifecycle` and `Operator` categories have no runtime call site in any known consumer; their
   vocabularies are host-defined (Decision 6);
 - the optional monotonic value of Decision 5 is not carried: ordering within a stream rests on the
@@ -184,9 +187,11 @@ about what happens afterwards. Replace it with three explicitly separated levels
    what the call's return value reports, and it is the only level this ADR promises.
 2. **Handed off** — a consumer took the event and acknowledged it. Reported asynchronously, not by
    the producing call.
-3. **Durably confirmed** — a storage backend confirmed it survives restart. **No backend offers this
-   today**; the level exists in the contract so that a future persistence ADR has somewhere to
-   attach it, and so that nothing in the meantime can be read as promising it.
+3. **Durably confirmed** — a storage backend confirmed it survives restart. ADR-004 attaches this
+   level: its persisting sink publishes a durable position only when a medium that meets ADR-004
+   Decision 9 answered a `sync` as durable. The library ships no such medium, only an in-memory test
+   double; whether a real medium qualifies is the integrator's to establish. Until then, nothing here
+   can be read as promising this level.
 
 Three consequences follow, and they are the substance of this decision:
 
@@ -196,8 +201,8 @@ Three consequences follow, and they are the substance of this decision:
 - **Post-admission losses have a reporting channel.** Anything lost after admission — a consumer
   that fails, a sink that throws — is counted and surfaced through a dedicated audit-health signal,
   not through the producing call's return value and never through a bare `catch (...)`.
-- **Power loss is explicitly outside every guarantee** while persistence is deferred. In-memory
-  admission survives nothing.
+- **Power loss is explicitly outside every guarantee** of levels 1 and 2. In-memory admission
+  survives nothing; only level 3, on an eligible medium, survives a restart.
 
 **Worked scenario — ring full, then consumer unavailable.** (a) Steady state: `record()` returns
 `Admitted`; the host observes a stable refusal counter. (b) The consumer stalls; the buffer fills;
@@ -379,8 +384,8 @@ level is the attachment point for that future ADR.
   `setMinLevel()` is not the same as being unobservable — an in-memory recording sink still sees
   every audit event, which is what issue #5's regression table needs.
 - **The three-level delivery contract is read as three delivered guarantees.** *Mitigation*: only
-  level 1 is promised; level 3 has no backend at all today, and Decision 3 says so in the same
-  paragraph that introduces it.
+  level 1 is promised by the call; level 3 holds only on a medium that meets ADR-004 Decision 9,
+  which the library does not ship, and Decision 3 says so in the same paragraph that introduces it.
 - **The category set is wrong because it was guessed.** *Mitigation*: Decision 6 makes validation
   against three concrete scenarios a precondition for Accepted status, not a follow-up.
 - **A host treats a refusal as a risk-control decision.** *Mitigation*: the Medical Device
@@ -400,6 +405,7 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - **Decision Date**: 2026-10-02, after #56–#59 were merged and #94 completed epic #9.
 - **Approved By**: ambroise-leclerc (project maintainer).
 - **Review Date**: 2026-10-02. The three validation scenarios of Decision 6 are documented in the
-  validation report. Review again before ADR-004 attaches durable confirmation (level 3), when a
-  runtime consumer first uses `Lifecycle` or `Operator`, or if capacities or the identifier grammar
-  change.
+  validation report. ADR-004 now attaches durable confirmation (level 3); its evidence is in the
+  [persistence validation report](../audit-persistence-validation.md), and reviewing it is the
+  review this record called for. Review again when a runtime consumer first uses `Lifecycle` or
+  `Operator`, or if capacities or the identifier grammar change.

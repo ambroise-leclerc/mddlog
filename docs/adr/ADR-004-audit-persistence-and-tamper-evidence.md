@@ -1,11 +1,13 @@
 # ADR-004: Audit persistence and tamper evidence
 
 ## Status
-Accepted — milestone A, 2026-10-03. **The design is accepted; nothing is implemented.** Decisions 1
-and 7 to 11 are the design of record for the persistence work of epic #11 (#89 to #93), and
-Decision 11 lists what that work does not include. Acceptance is distinct from implementation and
-from validation evidence: no part of this record is a capability until the lots that realize it are
-merged and verified, so do not read it as one.
+Accepted — milestone A, 2026-10-03. **The design is accepted.** Decisions 1 and 7 to 11 are the
+design of record for the persistence work of epic #11, and Decision 11 lists what that work does not
+include. The lots #89 to #92 implement it, and #93 records the end-to-end evidence and its limits in
+[the persistence validation report](../audit-persistence-validation.md). Acceptance of this design is
+distinct from accepting that evidence: reviewing the evidence is a separate decision of the
+maintainer, and until it is taken the implementation is not a validated capability. Neither ever
+makes the log tamper-proof, proves who wrote a record, or certifies anything.
 
 ## Context
 
