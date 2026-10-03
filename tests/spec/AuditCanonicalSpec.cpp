@@ -269,9 +269,32 @@ const speclab::Register chainAndVerifier{
                           v2[1]   = 2;
                           AuditChainVerifier v{streamName};
                           checks.expect(v.check(v2, digests[0]) == ChainFinding::UnsupportedVersion, "an unknown stream version cannot be verified");
+                          checks.expect(v.cannotVerify() && !v.failedAt(), "an unknown version alone is Cannot verify");
                           AuditChainVerifier w{streamName};
                           checks.expect(w.check(stored[0], digests[0]) == ChainFinding::Ok && w.check(v2, digests[1]) == ChainFinding::VersionChange,
                                         "a version change inside a stream is inconsistent");
+                      }
+                      {
+                          // 8.3: version 0 and a version change are found even when the stream's version is unknown.
+                          auto v2   = stored[0];
+                          v2[1]     = 2;
+                          auto v3   = stored[1];
+                          v3[1]     = 3;
+                          auto zero = stored[1];
+                          zero[0]   = 0;
+                          zero[1]   = 0;
+                          AuditChainVerifier a{streamName};
+                          checks.expect(a.check(v2, digests[0]) == ChainFinding::UnsupportedVersion && a.check(v3, digests[1]) == ChainFinding::VersionChange,
+                                        "2 then 3 is a version change, not a second Cannot verify");
+                          checks.expect(a.failedAt() == 2 && !a.cannotVerify(), "the first inconsistent record is named, and Inconsistent wins");
+                          AuditChainVerifier b{streamName};
+                          checks.expect(b.check(v2, digests[0]) == ChainFinding::UnsupportedVersion && b.check(zero, digests[1]) == ChainFinding::Malformed
+                                            && b.failedAt() == 2,
+                                        "2 then 0 is malformed");
+                          AuditChainVerifier c{streamName};
+                          checks.expect(c.check(v2, digests[0]) == ChainFinding::UnsupportedVersion
+                                            && c.check(v2, digests[1]) == ChainFinding::UnsupportedVersion && c.cannotVerify() && !c.failedAt(),
+                                        "the same unknown version throughout stays Cannot verify");
                       }
                       {
                           auto extra = stored[1];

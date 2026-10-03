@@ -120,8 +120,11 @@ enum class ChainFinding : std::uint8_t {
  * @brief Reader-side check of stored records of one stream instance, in storage order.
  *
  * It hashes the bytes as stored, never a re-encoding of the decoded fields (8.4). Stops advancing
- * at the first finding other than Ok: later calls keep returning the first failure's position
- * through failedAt(), and no further record is accepted.
+ * at the first Inconsistent finding: later calls keep returning it, failedAt() names its record,
+ * and no further record is accepted. UnsupportedVersion (Cannot verify) is not such a finding: an
+ * unknown stream version only means the records cannot be decoded or hashed, so the version bytes
+ * of every later record are still inspected, and a version 0 or a version change found there is
+ * Inconsistent and takes precedence (8.3). failedAt() then counts the records skipped before it.
  */
 class AuditChainVerifier {
 public:
@@ -139,10 +142,12 @@ public:
         if (failed)
             return firstFinding;
         const ChainFinding finding = evaluate(bytes, storedDigest);
-        if (finding != ChainFinding::Ok) {
+        if (finding == ChainFinding::UnsupportedVersion) {
+            ++unverified;
+        } else if (finding != ChainFinding::Ok) {
             failed       = true;
             firstFinding = finding;
-            failedSeq    = position + 1;
+            failedSeq    = position + unverified + 1;
         }
         return finding;
     }
@@ -154,7 +159,11 @@ public:
     [[nodiscard]] constexpr const Sha256Digest& headDigest() const noexcept {
         return head;
     }
-    /** @brief The expected sequence of the first failing record, once a finding other than Ok occurred. */
+    /** @brief True once an unknown stream version left records undecoded: the verdict is Cannot verify unless an Inconsistent finding exists. */
+    [[nodiscard]] constexpr bool cannotVerify() const noexcept {
+        return unverified != 0 && !failed;
+    }
+    /** @brief The expected sequence of the first Inconsistent record, once such a finding occurred. */
     [[nodiscard]] constexpr std::optional<std::uint64_t> failedAt() const noexcept {
         return failed ? std::optional<std::uint64_t>{failedSeq} : std::nullopt;
     }
@@ -193,6 +202,7 @@ private:
     std::uint64_t                                 position;
     Sha256Digest                                  head;
     std::uint16_t                                 streamVersion = 0;
+    std::uint64_t                                 unverified    = 0;
     bool                                          failed        = false;
     ChainFinding                                  firstFinding  = ChainFinding::Ok;
     std::uint64_t                                 failedSeq     = 0;
