@@ -11,45 +11,54 @@ export namespace mddlog::adapter {
 inline constexpr std::uint16_t canonicalContractVersion = 1;
 
 /** @brief Largest canonical record of version 1: every field at its AuditEvent capacity (8.2). */
-inline constexpr std::size_t canonicalMaxSize =
-    2                                                    // contract version
-    + 2 + core::auditStreamCapacity                      // streamId
-    + 8                                                  // sequence
-    + 1 + 1                                              // category, phase
-    + 1 + 8                                              // time
-    + 2 + core::auditActionCapacity                      // action
-    + 2 + core::auditActorCapacity                       // actor
-    + 2 + core::auditTargetCapacity                      // target
-    + 2 + core::auditReferenceCapacity                   // requirementRef
-    + 2 + core::auditReferenceCapacity                   // riskRef
-    + 2 + core::auditCorrelationCapacity                 // correlationId
-    + 1 + 8                                              // sourceSequence
-    + 2 + core::auditDetailCapacity                      // detail
-    + 1;                                                 // detailTruncated
+inline constexpr std::size_t canonicalMaxSize = 2                                     // contract version
+                                                + 2 + core::auditStreamCapacity       // streamId
+                                                + 8                                   // sequence
+                                                + 1 + 1                               // category, phase
+                                                + 1 + 8                               // time
+                                                + 2 + core::auditActionCapacity       // action
+                                                + 2 + core::auditActorCapacity        // actor
+                                                + 2 + core::auditTargetCapacity       // target
+                                                + 2 + core::auditReferenceCapacity    // requirementRef
+                                                + 2 + core::auditReferenceCapacity    // riskRef
+                                                + 2 + core::auditCorrelationCapacity  // correlationId
+                                                + 1 + 8                               // sourceSequence
+                                                + 2 + core::auditDetailCapacity       // detail
+                                                + 1;                                  // detailTruncated
 
 // The i64 time field takes the nanosecond count as RawTime holds it, with no conversion (8.2).
-static_assert(std::is_same_v<std::chrono::nanoseconds::rep, std::int64_t>,
+// Width and signedness, not type identity: int64_t is `long` on Linux but nanoseconds::rep is `long long`.
+static_assert(std::is_signed_v<std::chrono::nanoseconds::rep> && sizeof(std::chrono::nanoseconds::rep) == sizeof(std::int64_t),
               "canonical contract version 1 requires 64-bit signed nanoseconds");
 
 namespace detail {
 
 [[nodiscard]] constexpr std::uint8_t categoryByte(core::AuditCategory value) noexcept {
     switch (value) {
-        case core::AuditCategory::Lifecycle: return 0x01;
-        case core::AuditCategory::Configuration: return 0x02;
-        case core::AuditCategory::Access: return 0x03;
-        case core::AuditCategory::RiskControl: return 0x04;
-        case core::AuditCategory::Operator: return 0x05;
+        case core::AuditCategory::Lifecycle:
+            return 0x01;
+        case core::AuditCategory::Configuration:
+            return 0x02;
+        case core::AuditCategory::Access:
+            return 0x03;
+        case core::AuditCategory::RiskControl:
+            return 0x04;
+        case core::AuditCategory::Operator:
+            return 0x05;
     }
     return 0x00;  // not a valid enum byte; the encoder refuses it
 }
 
 [[nodiscard]] constexpr std::uint8_t phaseByte(core::AuditPhase value) noexcept {
     switch (value) {
-        case core::AuditPhase::Requested: return 0x01;
-        case core::AuditPhase::Confirmed: return 0x02;
-        case core::AuditPhase::Executed: return 0x03;
-        case core::AuditPhase::Failed: return 0x04;
+        case core::AuditPhase::Requested:
+            return 0x01;
+        case core::AuditPhase::Confirmed:
+            return 0x02;
+        case core::AuditPhase::Executed:
+            return 0x03;
+        case core::AuditPhase::Failed:
+            return 0x04;
     }
     return 0x00;
 }
@@ -178,10 +187,10 @@ struct DecodedAuditRecord {
 };
 
 struct CanonicalReadResult {
-    CanonicalReadStatus status  = CanonicalReadStatus::Malformed;
-    DecodedAuditRecord  record  = {};
+    CanonicalReadStatus status = CanonicalReadStatus::Malformed;
+    DecodedAuditRecord  record = {};
     /** @brief Version bytes when at least two bytes exist, else 0; meaningful for any status. */
-    std::uint16_t       version = 0;
+    std::uint16_t version = 0;
 };
 
 /** @brief Version of a stored record, or 0 when fewer than two bytes exist (8.3 step 1). */
@@ -220,7 +229,7 @@ public:
         if (in.size() - used < 2)
             return false;
         const std::size_t count = (std::size_t{in[used]} << 8) | in[used + 1];
-        used += 2;
+        used                   += 2;
         if (count > capacity || (required && count == 0) || in.size() - used < count)
             return false;
         for (std::size_t i = 0; i < count; ++i)
@@ -259,18 +268,18 @@ private:
     }
 
     using detail::Reader;
-    Reader                r{bytes.subspan(2)};
-    DecodedAuditRecord    d;
-    d.version = result.version;
-    std::uint8_t cat   = 0;
-    std::uint8_t pha   = 0;
-    std::uint8_t timeP = 0;
-    std::uint8_t srcP  = 0;
-    std::uint8_t trunc = 0;
+    Reader             r{bytes.subspan(2)};
+    DecodedAuditRecord d;
+    d.version               = result.version;
+    std::uint8_t  cat       = 0;
+    std::uint8_t  pha       = 0;
+    std::uint8_t  timeP     = 0;
+    std::uint8_t  srcP      = 0;
+    std::uint8_t  trunc     = 0;
     std::uint64_t timeValue = 0;
     std::uint64_t srcValue  = 0;
-    if (!r.string(d.streamId, core::auditStreamCapacity, true, true) || !r.u64(d.sequence) || d.sequence == 0 || !r.u8(cat) || !r.u8(pha)
-        || !r.u8(timeP) || timeP > 1 || (timeP == 1 && !r.u64(timeValue)) || !r.string(d.action, core::auditActionCapacity, true, true)
+    if (!r.string(d.streamId, core::auditStreamCapacity, true, true) || !r.u64(d.sequence) || d.sequence == 0 || !r.u8(cat) || !r.u8(pha) || !r.u8(timeP)
+        || timeP > 1 || (timeP == 1 && !r.u64(timeValue)) || !r.string(d.action, core::auditActionCapacity, true, true)
         || !r.string(d.actor, core::auditActorCapacity, true, false) || !r.string(d.target, core::auditTargetCapacity, true, true)
         || !r.string(d.requirementRef, core::auditReferenceCapacity, true, false) || !r.string(d.riskRef, core::auditReferenceCapacity, true, false)
         || !r.string(d.correlationId, core::auditCorrelationCapacity, true, false) || !r.u8(srcP) || srcP > 1 || (srcP == 1 && !r.u64(srcValue))
@@ -278,19 +287,39 @@ private:
         return result;
 
     switch (cat) {
-        case 0x01: d.category = core::AuditCategory::Lifecycle; break;
-        case 0x02: d.category = core::AuditCategory::Configuration; break;
-        case 0x03: d.category = core::AuditCategory::Access; break;
-        case 0x04: d.category = core::AuditCategory::RiskControl; break;
-        case 0x05: d.category = core::AuditCategory::Operator; break;
-        default: return result;
+        case 0x01:
+            d.category = core::AuditCategory::Lifecycle;
+            break;
+        case 0x02:
+            d.category = core::AuditCategory::Configuration;
+            break;
+        case 0x03:
+            d.category = core::AuditCategory::Access;
+            break;
+        case 0x04:
+            d.category = core::AuditCategory::RiskControl;
+            break;
+        case 0x05:
+            d.category = core::AuditCategory::Operator;
+            break;
+        default:
+            return result;
     }
     switch (pha) {
-        case 0x01: d.phase = core::AuditPhase::Requested; break;
-        case 0x02: d.phase = core::AuditPhase::Confirmed; break;
-        case 0x03: d.phase = core::AuditPhase::Executed; break;
-        case 0x04: d.phase = core::AuditPhase::Failed; break;
-        default: return result;
+        case 0x01:
+            d.phase = core::AuditPhase::Requested;
+            break;
+        case 0x02:
+            d.phase = core::AuditPhase::Confirmed;
+            break;
+        case 0x03:
+            d.phase = core::AuditPhase::Executed;
+            break;
+        case 0x04:
+            d.phase = core::AuditPhase::Failed;
+            break;
+        default:
+            return result;
     }
     if (timeP == 1)
         d.time = core::RawTime::available(std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{static_cast<std::int64_t>(timeValue)}});

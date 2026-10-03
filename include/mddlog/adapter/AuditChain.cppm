@@ -22,7 +22,7 @@ inline constexpr Sha256Digest chainInitialValue{};
 
 /** @brief A digest as 64 lowercase hexadecimal characters, the only textual form (8.4). */
 [[nodiscard]] constexpr std::array<char, 2 * sha256DigestSize> digestToHex(const Sha256Digest& digest) noexcept {
-    constexpr std::string_view digits = "0123456789abcdef";
+    constexpr std::string_view             digits = "0123456789abcdef";
     std::array<char, 2 * sha256DigestSize> text{};
     for (std::size_t i = 0; i < digest.size(); ++i) {
         text[2 * i]     = digits[digest[i] >> 4];
@@ -91,10 +91,10 @@ public:
     }
 
 private:
-    bool                                               validStream;
-    core::InlineString<core::auditStreamCapacity>      stream;
-    std::uint64_t                                      position = 0;
-    Sha256Digest                                       head     = chainInitialValue;
+    bool                                          validStream;
+    core::InlineString<core::auditStreamCapacity> stream;
+    std::uint64_t                                 position = 0;
+    Sha256Digest                                  head     = chainInitialValue;
 };
 
 /** @brief What a reader found at one stored record (ADR-004 8.3 and 8.4, ahead of the 7.5 verdicts). */

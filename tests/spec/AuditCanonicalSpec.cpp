@@ -22,31 +22,29 @@ struct Vector {
 };
 
 // Extracted from the byte blocks of ADR-004 8.7 (V1 to V4), not retyped.
-constexpr std::array<Vector, 4> vectors{{
-    {.canonicalHex =
-        "000100106465766963652d34322f626f6f742d37000000000000000102030118867251f555cd15001074686572617079"
-        "2e726174652e73657400116f70657261746f723a6e757273652d3037000e70756d702f6368616e6e656c2d41000b5245"
-        "512d414c4d2d303132000552432d313700076f702d303030310100000000000000290018726174652031322e35206d4c"
-        "2f6820636f6e6669726d656400",
-     .digestHex = "5384ec4133d6baab7790b48a0fa0c8eb3d249e37d9487a886aa47b09803b9055"},
-    {.canonicalHex =
-        "000100106465766963652d34322f626f6f742d370000000000000002010100000c6465766963652e7374617274000000"
-        "096465766963652d343200000000000000000000",
-     .digestHex = "dd894a8130712adfc820f13daf1bc72f68ba701d7bf4f6cbd2b8ff31f5591fd8"},
-    {.canonicalHex =
-        "000100106465766963652d34322f626f6f742d37000000000000000304040100000000000000000009616c61726d2e61"
-        "636b0000000f616c61726d2f6f63636c7573696f6e0000000552432d30330000010000000000000000009f6161616161"
-        "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
-        "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
-        "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
-        "6161616161616161616101",
-     .digestHex = "0a870f567b1cb9781ebde3d8bdc9d388d463ee6c38fe660256cf36e9da147027"},
-    {.canonicalHex =
-        "000100106465766963652d34322f626f6f742d370000000000000004030201ffffffffffffffff000d73657373696f6e"
-        "2e6c6f67696e000b7376633a75706461746572000973657373696f6e2f3300000000000001ffffffffffffffff0002c3"
-        "a900",
-     .digestHex = "12d523bdf4082156aecfb31c96af83a80054383470b9b06f7e6b5be447c42b07"},
-}};
+constexpr std::array<Vector, 4> vectors{
+    {
+     {.canonicalHex = "000100106465766963652d34322f626f6f742d37000000000000000102030118867251f555cd15001074686572617079"
+                         "2e726174652e73657400116f70657261746f723a6e757273652d3037000e70756d702f6368616e6e656c2d41000b5245"
+                         "512d414c4d2d303132000552432d313700076f702d303030310100000000000000290018726174652031322e35206d4c"
+                         "2f6820636f6e6669726d656400",
+         .digestHex    = "5384ec4133d6baab7790b48a0fa0c8eb3d249e37d9487a886aa47b09803b9055"},
+     {.canonicalHex = "000100106465766963652d34322f626f6f742d370000000000000002010100000c6465766963652e7374617274000000"
+                         "096465766963652d343200000000000000000000",
+         .digestHex    = "dd894a8130712adfc820f13daf1bc72f68ba701d7bf4f6cbd2b8ff31f5591fd8"},
+     {.canonicalHex = "000100106465766963652d34322f626f6f742d37000000000000000304040100000000000000000009616c61726d2e61"
+                         "636b0000000f616c61726d2f6f63636c7573696f6e0000000552432d30330000010000000000000000009f6161616161"
+                         "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
+                         "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
+                         "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
+                         "6161616161616161616101",
+         .digestHex    = "0a870f567b1cb9781ebde3d8bdc9d388d463ee6c38fe660256cf36e9da147027"},
+     {.canonicalHex = "000100106465766963652d34322f626f6f742d370000000000000004030201ffffffffffffffff000d73657373696f6e"
+                         "2e6c6f67696e000b7376633a75706461746572000973657373696f6e2f3300000000000001ffffffffffffffff0002c3"
+                         "a900",
+         .digestHex    = "12d523bdf4082156aecfb31c96af83a80054383470b9b06f7e6b5be447c42b07"},
+     }
+};
 
 [[nodiscard]] constexpr std::uint8_t nibble(char c) noexcept {
     return static_cast<std::uint8_t>(c <= '9' ? c - '0' : c - 'a' + 10);
@@ -75,22 +73,24 @@ constexpr std::array<Vector, 4> vectors{{
     AuditEvent event;
     switch (vector) {
         case 1:
-            (void)event.assign({.category       = AuditCategory::Configuration,
-                                .phase          = AuditPhase::Executed,
-                                .time           = RawTime::available(std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{1767225600123456789}}),
-                                .action         = "therapy.rate.set",
-                                .actor          = "operator:nurse-07",
-                                .target         = "pump/channel-A",
+            (void)event.assign({.category = AuditCategory::Configuration,
+                                .phase    = AuditPhase::Executed,
+                                .time     = RawTime::available(std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{1767225600123456789}}),
+                                .action   = "therapy.rate.set",
+                                .actor    = "operator:nurse-07",
+                                .target   = "pump/channel-A",
                                 .requirementRef = "REQ-ALM-012",
                                 .riskRef        = "RC-17",
                                 .correlationId  = "op-0001",
                                 .sourceSequence = 41,
                                 .detail         = "rate 12.5 mL/h confirmed"},
-                               streamName, 1);
+                               streamName,
+                               1);
             break;
         case 2:
             (void)event.assign({.category = AuditCategory::Lifecycle, .phase = AuditPhase::Requested, .action = "device.start", .target = "device-42"},
-                               streamName, 2);
+                               streamName,
+                               2);
             break;
         case 3: {
             // 159 bytes 'a' then U+00E9: 161 bytes offered, admission cuts before the two-byte sequence.
@@ -104,7 +104,8 @@ constexpr std::array<Vector, 4> vectors{{
                                 .riskRef        = "RC-03",
                                 .sourceSequence = 0,
                                 .detail         = detail},
-                               streamName, 3);
+                               streamName,
+                               3);
             break;
         }
         default:
@@ -116,7 +117,8 @@ constexpr std::array<Vector, 4> vectors{{
                                 .target         = "session/3",
                                 .sourceSequence = std::numeric_limits<std::uint64_t>::max(),
                                 .detail         = "\xC3\xA9"},
-                               streamName, 4);
+                               streamName,
+                               4);
             break;
     }
     return event;
@@ -125,7 +127,7 @@ constexpr std::array<Vector, 4> vectors{{
 // FIPS 180-4 known answer, evaluated at compile time so the digest cannot depend on a toolchain's
 // runtime: "abc".
 constexpr std::array<std::uint8_t, 3> abc{'a', 'b', 'c'};
-constexpr auto abcHex = digestToHex(sha256(abc));
+constexpr auto                        abcHex = digestToHex(sha256(abc));
 static_assert(std::string_view{abcHex.data(), abcHex.size()} == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 of 'abc'");
 
 const speclab::Register canonicalVectors{
@@ -195,14 +197,15 @@ const speclab::Register chainAndVerifier{
                       checks.expect(chain.chainedThrough() == 0 && chain.headDigest() == chainInitialValue, "state unchanged");
                       checks.expect(chain.append(eventFor(1)).has_value(), "the right event is still accepted");
                       AuditChain invalid{"has space"};
-                      checks.expect(!invalid.valid() && invalid.append(eventFor(1)).error() == ChainRefusal::WrongStream, "invalid stream identity chains nothing");
+                      checks.expect(!invalid.valid() && invalid.append(eventFor(1)).error() == ChainRefusal::WrongStream,
+                                    "invalid stream identity chains nothing");
                       checks.raise();
                   })
             .Then("decoding reads back every field, provenance included",
                   [] {
                       speclab::core::Checks checks;
-                      const auto            raw     = fromHex(vectors[2].canonicalHex);
-                      const auto            read    = decodeCanonical(raw);
+                      const auto            raw  = fromHex(vectors[2].canonicalHex);
+                      const auto            read = decodeCanonical(raw);
                       checks.expect(read.status == CanonicalReadStatus::Ok && read.record.sequence == 3 && read.record.detail.size() == 159
                                         && read.record.detailTruncated && read.record.sourceSequence == std::uint64_t{0}
                                         && read.record.time.availability() == mddlog::core::TimeAvailability::Available
@@ -216,7 +219,7 @@ const speclab::Register chainAndVerifier{
                   })
             .Then("tampering, removal, reordering and version faults are each found",
                   [] {
-                      speclab::core::Checks checks;
+                      speclab::core::Checks                    checks;
                       std::array<std::vector<std::uint8_t>, 4> stored;
                       std::array<Sha256Digest, 4>              digests;
                       for (std::size_t k = 0; k < 4; ++k) {
@@ -252,10 +255,11 @@ const speclab::Register chainAndVerifier{
                       }
                       {
                           auto zero = stored[0];
-                          zero[0] = 0;
-                          zero[1] = 0;
+                          zero[0]   = 0;
+                          zero[1]   = 0;
                           AuditChainVerifier v{streamName};
-                          checks.expect(v.check(zero, digests[0]) == ChainFinding::Malformed && v.check(std::span<const std::uint8_t>{}, digests[0]) == ChainFinding::Malformed,
+                          checks.expect(v.check(zero, digests[0]) == ChainFinding::Malformed
+                                            && v.check(std::span<const std::uint8_t>{}, digests[0]) == ChainFinding::Malformed,
                                         "version 0 is malformed, whatever the reader knows");
                       }
                       {
@@ -270,12 +274,13 @@ const speclab::Register chainAndVerifier{
                       {
                           auto extra = stored[1];
                           extra.push_back(0);
-                          auto bad = stored[0];
+                          auto bad            = stored[0];
                           bad[2 + 2 + 16 + 8] = 0x09;  // category outside its table
                           AuditChainVerifier v{streamName};
                           checks.expect(v.check(bad, digests[0]) == ChainFinding::Malformed, "an enum byte outside its table is malformed");
                           checks.expect(decodeCanonical(extra).status == CanonicalReadStatus::Malformed, "bytes after field 15 are malformed");
-                          checks.expect(decodeCanonical(std::span{stored[0]}.first(stored[0].size() - 1)).status == CanonicalReadStatus::Malformed, "bytes ending early are malformed");
+                          checks.expect(decodeCanonical(std::span{stored[0]}.first(stored[0].size() - 1)).status == CanonicalReadStatus::Malformed,
+                                        "bytes ending early are malformed");
                       }
                       checks.raise();
                   })
