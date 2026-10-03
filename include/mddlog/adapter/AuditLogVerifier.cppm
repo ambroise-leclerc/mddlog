@@ -269,13 +269,11 @@ private:
 
         switch (ev.disposition) {
             case StreamDisposition::PrefixMissing:
-                out.report = ev.failedAt.has_value() ? unanchoredPrefix(ev, Verdict::Inconsistent, VerdictCause::None, ev.failedAt)
-                                                     : unanchoredPrefix(ev, Verdict::Incomplete, VerdictCause::PrefixMissingWithoutTrim, std::nullopt);
+                out.report = missingStart(log, ev, *stream, anchors, VerdictCause::PrefixMissingWithoutTrim);
                 note(BoundaryKind::PrefixMissingWithoutTrim, ev.firstPresent);
                 break;
             case StreamDisposition::GapAfterTrim:
-                out.report = ev.failedAt.has_value() ? unanchoredPrefix(ev, Verdict::Inconsistent, VerdictCause::None, ev.failedAt)
-                                                     : unanchoredPrefix(ev, Verdict::Incomplete, VerdictCause::RecordsMissingAfterTrim, std::nullopt);
+                out.report = missingStart(log, ev, *stream, anchors, VerdictCause::RecordsMissingAfterTrim);
                 note(BoundaryKind::RemovedUnderRetention, trim.position);
                 note(BoundaryKind::RecordsMissingAfterTrim, trim.position + 1, ev.firstPresent - 1);
                 break;
@@ -318,6 +316,22 @@ private:
                 notes.push_back(makeBoundaryNote(BoundaryKind::LedgerRecordMalformed, ev.id, fault.sequence));
         }
         return out;
+    }
+
+    /**
+     * @brief Records are missing at the start and nothing accounts for them, so the chain cannot start (10.6). The checks of 7.5 that do not rest on the
+     * missing records still run, in their order: a rollback, a conflict or an alteration is reported before Incomplete, which states the missing boundary.
+     */
+    [[nodiscard]] static StreamReport
+    missingStart(const LogAnalysis& log, const StreamEvaluation& ev, const StreamImage& stream, AnchorVerifier& anchors, VerdictCause missing) {
+        if (stream.records.empty())
+            return unanchoredPrefix(ev, Verdict::Incomplete, missing, std::nullopt);
+        const auto   rest    = std::span<const StoredRecord>{stream.records}.subspan(1);
+        StreamReport report  = anchors.verify(ev.id, rest, ev.start, log.image().layoutOf(stream));
+        report.firstRetained = ev.firstPresent;
+        if (report.verdict == Verdict::Incomplete && report.cause == VerdictCause::PrefixMissingWithoutTrim)
+            report.cause = missing;
+        return report;
     }
 
     /** @brief The trim is still recorded and no segment was reclaimed: the stream is verified from H_0 and the trim's digest is checked too (10.4). */

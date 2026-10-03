@@ -415,6 +415,7 @@ struct Walk {
         case StreamDisposition::TrimNotOnSegmentBoundary:
             // The chain cannot start: the first record's stored digest stands in for its predecessor's, and nothing before it is vouched for.
             if (!records.empty()) {
+                ev.start             = {.afterSequence = k, .afterDigest = records.front().digest, .vouched = false};
                 ev.walkStartPosition = k;
                 ev.walkStartDigest   = records.front().digest;
                 walked               = records.subspan(1);
@@ -471,7 +472,10 @@ enum class IntegrityFaultKind : std::uint8_t {
     RecordsMissing,
     /** @brief A recorded trim's digest differs from the one the records reproduce, or an interrupted removal does not reach it. */
     TrimDigestMismatch,
-    /** @brief The stream's records are in a version the library cannot decode: nothing was recomputed. */
+    /**
+     * @brief The stream's records are in a version the library cannot decode, or the log could not be read in full (an unreadable segment, or one in a layout
+     * version this reader does not know, may hold its records, 9.4): its complete state cannot be established.
+     */
     Unverifiable,
     /** @brief The provider refused a fresh claim as `positionNotIncreasing` or `conflict`: the log or the provider has diverged (7.3). */
     AnchorDiverged,
@@ -816,6 +820,70 @@ namespace detail {
 
 }  // namespace detail
 
+namespace detail {
+
+/**
+ * @brief The provider's streams against the log (10.3, 10.5): anchored evidence that has gone is a fault, and a retirement an earlier start left owed is
+ * queued only on the word of a ledger an anchor covers, for a trim that reaches the anchor and every position the ledgers cite.
+ */
+inline void checkProviderStreams(const LogAnalysis& log, AnchorProvider& provider, bool imageComplete, ChainStateRecovery& out) {
+    const auto fault = [&](IntegrityFaultKind kind, std::string stream, std::uint64_t position = 0) {
+        out.faults.push_back({.kind = kind, .stream = std::move(stream), .position = position});
+    };
+    const StreamsAnswer listing = provider.streams();
+    if (const auto* all = std::get_if<ProviderListing>(&listing)) {
+        for (const StreamEntry& entry : all->entries) {
+            const Anchor&           anchor  = std::holds_alternative<Anchor>(entry) ? std::get<Anchor>(entry) : std::get<Retirement>(entry).finalAnchor;
+            const bool              retired = std::holds_alternative<Retirement>(entry);
+            const StreamEvaluation* ev      = log.evaluation(anchor.streamId);
+            const bool              held    = ev != nullptr && ev->inImage;
+            const bool              trimmed = ev != nullptr && ev->trim.has_value();
+            if (!held && !trimmed) {
+                if (!retired)
+                    fault(IntegrityFaultKind::AnchoredEvidenceGone, anchor.streamId, anchor.position);
+                continue;
+            }
+            if (held || retired)
+                continue;
+            // What the log could not read may still hold records of the stream: a removal cannot be called complete.
+            if (!imageComplete) {
+                fault(IntegrityFaultKind::Unverifiable, anchor.streamId, anchor.position);
+                continue;
+            }
+            // Removed under a trim and still anchored: the retirement is owed (7.3, 10.5), but only on the word of a ledger an anchor covers.
+            const TrimRecord& trim = *ev->trim;
+            // The trim must account for every record the anchor covers, or a rewritten ledger could induce a retirement (7.2, condition 5).
+            if (trim.position < anchor.position || (trim.position == anchor.position && trim.digest != anchor.digest)) {
+                fault(IntegrityFaultKind::AnchoredEvidenceGone, anchor.streamId, anchor.position);
+                continue;
+            }
+            // A whole-stream trim has `q = m` (10.5). A ledger that cites a later position shows this trim was a rotation, and the records after it went
+            // with no trim: never a reason to retire.
+            if (const auto cited = log.highestCitedPosition(anchor.streamId); cited.has_value() && cited->position > trim.position) {
+                fault(IntegrityFaultKind::RecordsMissing, anchor.streamId, trim.position + 1);
+                continue;
+            }
+            const LedgerImage* recording = log.ledger(trim.ledger);
+            bool               covered   = false;
+            if (recording != nullptr) {
+                const LatestAnswer ledgerAnswer = provider.latest(trim.ledger);
+                if (const Anchor* ledgerAnchor = anchorIn(ledgerAnswer);
+                    ledgerAnchor != nullptr && ledgerAnchor->usable() && ledgerAnchor->position >= trim.ledgerSequence) {
+                    const StreamEvaluation* ledgerEv = log.evaluation(trim.ledger);
+                    const auto              got      = ledgerEv != nullptr ? ledgerEv->recomputedDigestAt(ledgerAnchor->position) : std::nullopt;
+                    covered                          = got.has_value() && *got == ledgerAnchor->digest;
+                }
+            }
+            if (covered)
+                out.pendingRetirements.push_back({.stream = anchor.streamId, .position = anchor.position});
+            else
+                fault(IntegrityFaultKind::RetirementNotAuthorized, anchor.streamId, trim.position);
+        }
+    }
+}
+
+}  // namespace detail
+
 /**
  * @brief Recover chain state from the stored records (10.3): for every stream, the last position up to which every stored digest matches, and, where the
  * provider holds an anchor, the continuity check of 7.3.
@@ -828,6 +896,8 @@ namespace detail {
     const auto         fault = [&](IntegrityFaultKind kind, std::string stream, std::uint64_t position = 0) {
         out.faults.push_back({.kind = kind, .stream = std::move(stream), .position = position});
     };
+    // A segment the reader cannot read, or cannot tie to a stream, may hold records of any stream (9.4): no stream's end is then known.
+    const bool imageComplete = !log.image().unreadable() && !log.image().unknownLayoutVersion().has_value();
 
     for (const auto& [id, ev] : log.streams()) {
         if (!ev.inImage)
@@ -843,7 +913,7 @@ namespace detail {
             sound = false;
             fault(IntegrityFaultKind::ChainDigestMismatch, id, ev.failedAt.value_or(0));
         }
-        if (ev.cannotVerify) {
+        if (ev.cannotVerify || !imageComplete) {
             sound = false;
             fault(IntegrityFaultKind::Unverifiable, id);
         }
@@ -970,53 +1040,8 @@ namespace detail {
     }
 
     // The provider's view: streams it holds that the log neither holds nor accounts for with a trim are anchored evidence that has gone.
-    if (provider != nullptr) {
-        const StreamsAnswer listing = provider->streams();
-        if (const auto* all = std::get_if<ProviderListing>(&listing)) {
-            for (const StreamEntry& entry : all->entries) {
-                const Anchor&           anchor  = std::holds_alternative<Anchor>(entry) ? std::get<Anchor>(entry) : std::get<Retirement>(entry).finalAnchor;
-                const bool              retired = std::holds_alternative<Retirement>(entry);
-                const StreamEvaluation* ev      = log.evaluation(anchor.streamId);
-                const bool              held    = ev != nullptr && ev->inImage;
-                const bool              trimmed = ev != nullptr && ev->trim.has_value();
-                if (!held && !trimmed) {
-                    if (!retired)
-                        fault(IntegrityFaultKind::AnchoredEvidenceGone, anchor.streamId, anchor.position);
-                    continue;
-                }
-                if (held || retired)
-                    continue;
-                // Removed under a trim and still anchored: the retirement is owed (7.3, 10.5), but only on the word of a ledger an anchor covers.
-                const TrimRecord& trim = *ev->trim;
-                // The trim must account for every record the anchor covers, or a rewritten ledger could induce a retirement (7.2, condition 5).
-                if (trim.position < anchor.position || (trim.position == anchor.position && trim.digest != anchor.digest)) {
-                    fault(IntegrityFaultKind::AnchoredEvidenceGone, anchor.streamId, anchor.position);
-                    continue;
-                }
-                // A whole-stream trim has `q = m` (10.5). A ledger that cites a later position shows this trim was a rotation, and the records after it went
-                // with no trim: never a reason to retire.
-                if (const auto cited = log.highestCitedPosition(anchor.streamId); cited.has_value() && cited->position > trim.position) {
-                    fault(IntegrityFaultKind::RecordsMissing, anchor.streamId, trim.position + 1);
-                    continue;
-                }
-                const LedgerImage* recording = log.ledger(trim.ledger);
-                bool               covered   = false;
-                if (recording != nullptr) {
-                    const LatestAnswer ledgerAnswer = provider->latest(trim.ledger);
-                    if (const Anchor* ledgerAnchor = detail::anchorIn(ledgerAnswer);
-                        ledgerAnchor != nullptr && ledgerAnchor->usable() && ledgerAnchor->position >= trim.ledgerSequence) {
-                        const StreamEvaluation* ledgerEv = log.evaluation(trim.ledger);
-                        const auto              got      = ledgerEv != nullptr ? ledgerEv->recomputedDigestAt(ledgerAnchor->position) : std::nullopt;
-                        covered                          = got.has_value() && *got == ledgerAnchor->digest;
-                    }
-                }
-                if (covered)
-                    out.pendingRetirements.push_back({.stream = anchor.streamId, .position = anchor.position});
-                else
-                    fault(IntegrityFaultKind::RetirementNotAuthorized, anchor.streamId, trim.position);
-            }
-        }
-    }
+    if (provider != nullptr)
+        detail::checkProviderStreams(log, *provider, imageComplete, out);
     return out;
 }
 

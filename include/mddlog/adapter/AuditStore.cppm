@@ -104,7 +104,10 @@ enum class StorageConfigError : std::uint8_t {
     MediumTooSmall,
     /** @brief The ledger's stream identity is one AuditEvent rejects. */
     InvalidLedgerStream,
-    /** @brief The medium already holds a stream instance with the ledger's identity: a restart starts a new ledger (10.1). */
+    /**
+     * @brief The medium already holds a stream instance with the ledger's identity, or a ledger in the log names it, even for a stream whose records were
+     * removed: a restart starts a new ledger (10.1).
+     */
     LedgerIdentityInUse
 };
 
@@ -517,10 +520,16 @@ public:
         auto recovered = checkMediumAtStart(medium);
         if (config.ledger.has_value() && std::ranges::find(recovered.streamsHeld, config.ledger->streamId) != recovered.streamsHeld.end())
             return std::unexpected{StorageConfigError::LedgerIdentityInUse};
+        std::optional<LogAnalysis> log;
+        if (config.ledger.has_value()) {
+            log.emplace(LogAnalysis::read(medium));
+            if (std::ranges::binary_search(namedIdentities(*log), config.ledger->streamId, std::less<>{}))
+                return std::unexpected{StorageConfigError::LedgerIdentityInUse};
+        }
         // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the constructor is private, so make_shared cannot reach it.
         std::shared_ptr<PersistingAuditSink> sink{new PersistingAuditSink(medium, std::move(config), reserve, std::move(recovered))};
-        if (sink->config.ledger.has_value())
-            sink->startLedger();
+        if (log.has_value())
+            sink->startLedger(*log);
         return sink;
     }
 
@@ -1228,17 +1237,16 @@ private:
      * Nothing is repaired, rewritten or reordered: an inconsistent state is written as the `Failed` form, citing the last position that checks, and reported
      * through health. A ledger that cannot write its start is failed, and no producer event is stored.
      */
-    void startLedger() {
+    void startLedger(const LogAnalysis& log) {
         ledger                    = std::make_unique<Stream>(config.ledger.value_or(LedgerConfig{}).streamId);
         ledger->isLedger          = true;
         restartInfo.ledgerEnabled = true;
         publish(*ledger);
 
-        const LogAnalysis        log      = LogAnalysis::read(medium);
         const ChainStateRecovery recovery = recoverChainState(log, provider());
-        rememberNamedIdentities(log);
-        restartInfo.faults = recovery.faults;
-        restartInfo.fork   = recovery.fork;
+        namedByLedgers                    = namedIdentities(log);
+        restartInfo.faults                = recovery.faults;
+        restartInfo.fork                  = recovery.fork;
         recordFaults(recovery.faults);
 
         LedgerEntry first = LedgerEntry::origin(ledger->id);
@@ -1276,11 +1284,16 @@ private:
         }
     }
 
-    /** @brief Every identity a ledger in the log names, as a ledger, an opened, closed, trimmed or recovered stream: none may start a new instance (10.3). */
-    void rememberNamedIdentities(const LogAnalysis& log) {
+    /**
+     * @brief Every identity a ledger in the log names, as a ledger, a predecessor, an opened, closed, trimmed or recovered stream, sorted: none may start a new
+     * instance, the ledger's included (10.1, 10.3).
+     */
+    [[nodiscard]] static std::vector<std::string> namedIdentities(const LogAnalysis& log) {
         std::set<std::string, std::less<>> names;
         for (const LedgerImage& ledgerImage : log.ledgers()) {
             names.insert(ledgerImage.id);
+            if (ledgerImage.predecessor.has_value())
+                names.insert(ledgerImage.predecessor->target);
             names.insert(ledgerImage.opened.begin(), ledgerImage.opened.end());
             for (const auto& [stream, close] : ledgerImage.closes)
                 names.insert(stream);
@@ -1289,7 +1302,7 @@ private:
             for (const Citation& citation : ledgerImage.recovered)
                 names.insert(citation.target);
         }
-        namedByLedgers.assign(names.begin(), names.end());
+        return {names.begin(), names.end()};
     }
 
     [[nodiscard]] bool closeOne(Stream& stream) {

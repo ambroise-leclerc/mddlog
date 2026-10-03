@@ -1086,6 +1086,54 @@ const speclab::Register removalRecords{
                                     "Incomplete: anchored records went with no trim");
                       checks.raise();
                   })
+            .Then("a segment in an unknown layout version may hold the stream's end: its readable records are never removed and nothing is retired",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "started");
+                      const std::uint64_t m = (2 * perSegment()) + 1;
+                      (void)rig->feed(streamP, 1, m, big);
+                      checks.expect(rig->sink->closeStream(streamP), "closed and anchored at m");
+                      rig->sink->close();
+                      auto unknown = encodeSegmentOpening(streamP, 3, m + 1);
+                      unknown[5]   = 9;  // a layout version this reader does not know
+                      (void)rig->medium.open({.streamId = streamP, .segmentIndex = 3, .firstSequence = m + 1, .bytes = unknown});
+                      const auto segmentsBefore = segmentsOf(rig->medium, streamP).size();
+                      checks.expect(reportOf(readLog(*rig), streamP)->report.verdict == Verdict::CannotVerify, "the reader cannot verify P");
+                      checks.expect(rig->start(), "restarted");
+                      checks.expect(hasFaultOf(rig->sink->restart().faults, IntegrityFaultKind::Unverifiable, streamP), "recovery reports P unverifiable");
+                      checks.expect(rig->sink->removeStream(streamP).outcome == RetentionOutcome::StreamInconsistent, "the removal is refused");
+                      checks.expect(segmentsOf(rig->medium, streamP).size() == segmentsBefore && rig->provider.retires == 0,
+                                    "no segment removed, nothing retired");
+                      checks.raise();
+                  })
+            .Then("a missing prefix does not hide a rollback the provider and the retained checkpoint still show",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "started");
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, (2 * segFrames) + 1, big);
+                      (void)rig->sink->advanceAnchor(streamP);
+                      const auto oldState = rig->provider.inner.snapshot();
+                      (void)rig->feed(streamP, (2 * segFrames) + 2, 3, big);
+                      checks.expect(rig->sink->closeStream(streamP), "closed and anchored further");
+                      RetainedPosition retained;
+                      checks.expect(reportOf(readLog(*rig, retained), streamP)->report.verdict == Verdict::Anchored, "anchored, and the position is retained");
+                      RetainedPosition fresh;
+                      checks.expect(rig->medium.reclaim(segmentsOf(rig->medium, streamP).front().ref), "someone removes the first segment");
+                      const auto  plainLog = readLog(*rig, fresh);
+                      const auto* plain    = reportOf(plainLog, streamP);
+                      checks.expect(plain->report.verdict == Verdict::Incomplete && plain->report.cause == VerdictCause::PrefixMissingWithoutTrim
+                                        && plain->report.anchor.has_value() && !plain->report.anchoredThrough,
+                                    "without a rollback: Incomplete, and the anchor is in the report");
+                      rig->provider.inner.restore(oldState);
+                      const auto  report = readLog(*rig, retained);
+                      const auto* stream = reportOf(report, streamP);
+                      checks.expect(stream->report.verdict == Verdict::RolledBack, "the rollback is still reported");
+                      checks.expect(report.has(BoundaryKind::PrefixMissingWithoutTrim, streamP), "and the missing prefix is stated separately");
+                      checks.raise();
+                  })
             .Then("relieve() reads the log and recovers chain state once while its attempts change nothing",
                   [] {
                       speclab::core::Checks checks;

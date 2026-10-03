@@ -20,7 +20,8 @@ rotation is not bounded by an anchor (ADR-004 10.4).
 opened and the log still holds. Each record is durably confirmed before the next is written.
 `restart()` says what was written. A restart never continues an old stream: producers must use new
 stream identities, and their sequences begin at 1 again. An identity that a ledger in the log
-names, even one whose records were removed, is refused (`streamIdentityInUse`). A reader reports the old and the new
+names, even one whose records were removed, is refused (`streamIdentityInUse`), and so is a
+new ledger identity a ledger in the log names (`LedgerIdentityInUse`). A reader reports the old and the new
 instances separately, so a discontinuity is never presented as continuity.
 
 Inconsistent state is written in its `Failed` form, citing the last position that checks, and
@@ -28,7 +29,10 @@ reported through `health().integrity`. A ledger with a malformed record checks o
 record before it. Ledgers on a cycle of `predecessor` citations are inconsistent too, even when another
 ledger cites into the cycle. When every ledger is cited, record 1 cites one of them in `Failed`
 form: `origin` is written only when the log holds no ledger. Records are never repaired, rewritten or reordered, and
-retention never removes records of a stream recovery found inconsistent.
+retention never removes records of a stream recovery found inconsistent. A log that cannot be
+read in full, because a segment is unreadable or in a layout version this reader does not know,
+leaves every stream unverifiable (`Unverifiable`): nothing is removed and no owed retirement is
+relayed, since that segment may hold any stream's last records.
 
 ## Closing
 
@@ -68,7 +72,9 @@ wrote or removed something.
 others. The 7.5 verdict of each stream and ledger is unchanged: only `Anchored` is "verified", and
 always with its range. A removed stream is Incomplete rather than Retired when the provider retired
 it past its highest trim (`RetirementBeyondTrim`) or a ledger cites a position past that trim
-(`RecordsMissingAfterTrim`).
+(`RecordsMissingAfterTrim`). Records missing at the start do not stop the other checks of 7.5: a
+rollback, a conflict or an alteration is still reported first, and the missing prefix is stated as
+a boundary.
 
 ## Limits
 

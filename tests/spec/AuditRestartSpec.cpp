@@ -698,26 +698,47 @@ const speclab::Register malformedPredecessor{"A predecessor with a malformed rec
                                                      .Execute();
                                              }};
 
-const speclab::Register identityReuse{"An identity a ledger names never starts a new instance, even after its records were removed", "integration", [] {
-                                          return speclab::Test("audit-restart-identity-reuse")
-                                              .Then("a removed stream's identity is refused at the next start, so its trims are never read as a new instance's",
-                                                    [] {
-                                                        speclab::core::Checks checks;
-                                                        auto                  rig = makeRig();
-                                                        checks.expect(rig->start(), "first start");
-                                                        (void)rig->feed(streamP, 1, 3);
-                                                        checks.expect(rig->sink->closeStream(streamP), "closed");
-                                                        checks.expect(rig->sink->removeStream(streamP).outcome == RetentionOutcome::Removed,
-                                                                      "removed as a whole");
-                                                        rig->sink->close();
-                                                        checks.expect(rig->start(), "second start");
-                                                        checks.expect(!rig->sink->accept(makeEvent(streamP, 1)), "the identity is refused");
-                                                        checks.expect(rig->sink->health().counters.streamIdentityInUse == 1,
-                                                                      "and counted as an identity in use");
-                                                        checks.expect(rig->sink->accept(makeEvent(streamQ, 1)), "a new identity is accepted");
-                                                        checks.raise();
-                                                    })
-                                              .Execute();
-                                      }};
+const speclab::Register identityReuse{
+    "An identity a ledger names never starts a new instance, even after its records were removed",
+    "integration",
+    [] {
+        return speclab::Test("audit-restart-identity-reuse")
+            .Then("a removed stream's identity is refused at the next start, so its trims are never read as a new instance's",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "first start");
+                      (void)rig->feed(streamP, 1, 3);
+                      checks.expect(rig->sink->closeStream(streamP), "closed");
+                      checks.expect(rig->sink->removeStream(streamP).outcome == RetentionOutcome::Removed, "removed as a whole");
+                      rig->sink->close();
+                      checks.expect(rig->start(), "second start");
+                      checks.expect(!rig->sink->accept(makeEvent(streamP, 1)), "the identity is refused");
+                      checks.expect(rig->sink->health().counters.streamIdentityInUse == 1, "and counted as an identity in use");
+                      checks.expect(rig->sink->accept(makeEvent(streamQ, 1)), "a new identity is accepted");
+                      checks.raise();
+                  })
+            .Then("nor does it become a new ledger's identity",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "first start");
+                      (void)rig->feed(streamP, 1, 3);
+                      checks.expect(rig->sink->closeStream(streamP), "closed");
+                      checks.expect(rig->sink->removeStream(streamP).outcome == RetentionOutcome::Removed, "removed as a whole");
+                      rig->sink->close();
+                      rig->sink.reset();
+                      StorageConfig reused = rig->config();
+                      LedgerConfig  ledger;
+                      ledger.streamId = std::string{streamP};
+                      reused.ledger   = ledger;
+                      reused.provider = &rig->provider;
+                      const auto made = PersistingAuditSink::create(rig->medium, std::move(reused));
+                      checks.expect(!made.has_value() && made.error() == StorageConfigError::LedgerIdentityInUse, "refused: ledger/1 names it");
+                      checks.expect(segmentsOf(rig->medium, streamP).empty(), "and nothing was written under it");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 
 }  // namespace

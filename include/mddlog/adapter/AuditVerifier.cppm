@@ -41,6 +41,11 @@ struct StoredLayout {
 struct StreamStart {
     std::uint64_t afterSequence = 0;
     Sha256Digest  afterDigest   = chainInitialValue;
+    /**
+     * @brief False when records before the ones given are missing and nothing accounts for them (10.6): record `afterSequence` is present, its stored digest
+     * stands in as `afterDigest`, and nothing vouches for it. The checks that do not rest on that value still run, and the verdict is at best Incomplete.
+     */
+    bool vouched = true;
 };
 
 /** @brief The verdicts of 7.5, in the order in which the first that applies is reported. */
@@ -330,7 +335,7 @@ public:
         std::optional<Sha256Digest> digestAtAnchor;
         std::optional<Sha256Digest> digestAtCheckpoint;
         const auto                  noteStart = [&](std::uint64_t position, std::optional<Sha256Digest>& slot) {
-            if (position != 0 && position == start.afterSequence)
+            if (start.vouched && position != 0 && position == start.afterSequence)
                 slot = start.afterDigest;
         };
         noteStart(anchorPosition, digestAtAnchor);
@@ -382,7 +387,7 @@ public:
             return finish(report, Verdict::CannotVerify, cause);
         }
         const bool recordsPresent = recordCount != 0;
-        if (effective.has_value() && start.afterSequence > effective->position && (recordsPresent || !retiredStream))
+        if (start.vouched && effective.has_value() && start.afterSequence > effective->position && (recordsPresent || !retiredStream))
             return finish(report, Verdict::CannotVerify, VerdictCause::TrimPastAnchor);
 
         // 3. Rolled back: a retained-position check fails (7.4).
@@ -404,6 +409,10 @@ public:
             return finish(report, Verdict::Altered, VerdictCause::AnchorDigestMismatch);
         if (checkpointApplies && checkpoint <= present && digestAtCheckpoint.has_value() && *digestAtCheckpoint != before->digest)
             return finish(report, Verdict::Altered, VerdictCause::RetainedCheckpointMismatch);
+
+        // A start nothing vouches for: records at the start are missing, so nothing better than Incomplete applies, and the anchor stays in the report.
+        if (!start.vouched)
+            return finish(report, Verdict::Incomplete, VerdictCause::PrefixMissingWithoutTrim);
 
         // 6. Retired: the stream aged out under retention and the log holds none of it. Not a finding.
         if (retiredStream && !recordsPresent)
@@ -459,7 +468,8 @@ public:
      * Public so that the log reader (mddlog.adapter.auditlog) applies the same structural rule to the records it walks from a trim; it reads only the layout.
      */
     [[nodiscard]] static std::optional<std::uint64_t> firstBoundaryBreak(const StoredLayout& layout, const StreamStart& start) noexcept {
-        std::uint64_t                expected = start.afterSequence + 1;
+        // An unvouched start is the first record present, which the layout's first segment holds.
+        std::uint64_t                expected = start.vouched ? start.afterSequence + 1 : start.afterSequence;
         std::optional<std::uint32_t> previous;
         for (const SegmentBoundary& segment : layout.segments) {
             if ((previous.has_value() && segment.segmentIndex != *previous + 1) || segment.firstSequence != expected)
