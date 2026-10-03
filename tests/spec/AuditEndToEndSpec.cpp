@@ -35,7 +35,8 @@ constexpr std::string_view pumpNew = "device-42/boot-8/pump";
  * outside the medium. Each start() is a new adapter start with new stream identities, as ADR-002 Decision 5 requires.
  */
 struct Device {
-    explicit Device(std::size_t capacity = 24, bool eligible = true) : medium(std::make_unique<InMemoryStorageMedium>(capacity, eligible)) {}
+    explicit Device(std::size_t capacity = 24, bool eligible = true)
+        : medium(std::make_unique<InMemoryStorageMedium>(capacity, eligible)), segmentCount(capacity) {}
     Device(const Device&)            = delete;
     Device& operator=(const Device&) = delete;
     Device(Device&&)                 = delete;
@@ -51,7 +52,7 @@ struct Device {
         adapter = std::make_unique<AuditSinkAdapter>();
         StorageConfig config;
         config.segmentSize        = segmentBytes;
-        config.segmentCount       = 24;
+        config.segmentCount       = segmentCount;
         config.maxProducerStreams = 2;
         config.sync.recordBound   = 1;
         LedgerConfig ledger;
@@ -126,6 +127,8 @@ struct Device {
     std::string                                  detail;
     std::uint64_t                                next    = 1;
     std::size_t                                  session = 0;
+    /** @brief N declared to the sink: the capacity of the medium the device was built with. */
+    std::size_t segmentCount;
 };
 
 /** @brief A copy of one stream's report, so that it outlives the log report it came from; an empty report when the stream is not listed. */
