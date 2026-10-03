@@ -29,7 +29,10 @@ constexpr std::string_view streamName = "device-42/boot-7";
 
 /** @brief Records of the given detail size that fit in one 2048-byte segment of the test configuration. */
 [[nodiscard]] std::uint64_t perSegment(std::size_t detailSize) {
-    const auto frame   = recordFrameSize(CanonicalRecord::encode(makeEvent(streamName, 1, detailSize))->size());
+    const auto encoded = CanonicalRecord::encode(makeEvent(streamName, 1, detailSize));
+    if (!encoded)
+        return 0;
+    const auto frame   = recordFrameSize(encoded->size());
     const auto opening = encodeSegmentOpening(streamName, 0, 1).size();
     return (2048 - opening) / frame;
 }
@@ -44,15 +47,15 @@ struct Rig {
         out.segmentCount       = 12;
         out.maxProducerStreams = 1;
         out.sync.recordBound   = recordBound;
-        out.clock              = [this] {
-            return now;
-        };
-        out.reportLoss = [this](std::uint64_t count) {
-            losses.push_back(count);
-        };
         return out;
     }
     void start(StorageConfig declared) {
+        declared.clock = [this] {
+            return now;
+        };
+        declared.reportLoss = [this](std::uint64_t count) {
+            losses.push_back(count);
+        };
         auto made = PersistingAuditSink::create(medium, std::move(declared));
         sink      = *made;
     }
@@ -62,7 +65,7 @@ struct Rig {
 
     InMemoryStorageMedium                 medium;
     std::shared_ptr<PersistingAuditSink>  sink;
-    std::chrono::steady_clock::time_point now{};
+    std::chrono::steady_clock::time_point now;
     std::vector<std::uint64_t>            losses;
 };
 
@@ -709,7 +712,7 @@ const speclab::Register powerCuts{
                               }
                           }
                       }
-                      checks.expect(cutsRun == 3U * 3U * 6U * 3U * 4U, "every operation, effect, ordinal, partial length and loss policy ran");
+                      checks.expect(cutsRun == std::size_t{3} * 3 * 6 * 3 * 4, "every operation, effect, ordinal, partial length and loss policy ran");
                       checks.expect(chains, "the surviving prefix always chains");
                       checks.expect(within, "no durable position or claim ever exceeded what the medium holds");
                       checks.raise();

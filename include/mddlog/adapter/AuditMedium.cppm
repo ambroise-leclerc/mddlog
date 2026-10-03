@@ -6,6 +6,11 @@ import std;
 
 export namespace mddlog::adapter {
 
+namespace detail {
+/** @brief What erased flash reads as. */
+inline constexpr std::uint8_t erasedByte = 0xFF;
+}  // namespace detail
+
 /** @brief An opaque name for one segment on a medium, valid until the segment is reclaimed. */
 using SegmentRef = std::uint64_t;
 
@@ -110,7 +115,7 @@ public:
     }
     /** @brief Number of calls of `operation` so far, to choose an ordinal. */
     [[nodiscard]] std::size_t calls(Operation operation) const noexcept {
-        return callCount[static_cast<std::size_t>(operation)];
+        return callCount.at(static_cast<std::size_t>(operation));
     }
     [[nodiscard]] bool poweredOff() const noexcept {
         return dead;
@@ -134,10 +139,10 @@ public:
                 case Unconfirmed::Kept:
                     break;
                 case Unconfirmed::Half:
-                    segment.data.resize(confirmed + loose / 2);
+                    segment.data.resize(confirmed + (loose / 2));
                     break;
                 case Unconfirmed::Erased:
-                    std::fill(segment.data.begin() + static_cast<std::ptrdiff_t>(confirmed), segment.data.end(), std::uint8_t{0xFF});
+                    std::fill(segment.data.begin() + static_cast<std::ptrdiff_t>(confirmed), segment.data.end(), detail::erasedByte);
                     break;
             }
             segment.confirmed = segment.data.size();
@@ -289,7 +294,7 @@ private:
     };
 
     [[nodiscard]] std::optional<Fault> next(Operation operation) {
-        const std::size_t ordinal = ++callCount[static_cast<std::size_t>(operation)];
+        const std::size_t ordinal = ++callCount.at(static_cast<std::size_t>(operation));
         for (const auto& fault : faults) {
             if (fault.operation == operation && fault.ordinal == ordinal)
                 return fault;

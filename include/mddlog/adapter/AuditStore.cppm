@@ -78,7 +78,7 @@ enum class StorageConfigError : std::uint8_t {
         return 0;
     const std::size_t perSegment = (segmentSize - maxSegmentOpeningSize) / maxRecordFrameSize;
     const std::size_t frames     = segmentCount + maxProducerStreams + 3;
-    return (frames + perSegment - 1) / perSegment + 1;
+    return ((frames + perSegment - 1) / perSegment) + 1;
 }
 
 /** @brief What the startup check found, and where (9.6, "Recovery findings"). */
@@ -155,7 +155,8 @@ struct RecoveryReport {
                 report.findings.push_back(unlocatedFinding(RecoveryFindingKind::NoValidHeader, info.segment));
                 break;
             case SegmentStatus::Readable:
-                instances[scan.header->streamId].push_back({.segment = info.segment, .size = info.size, .index = scan.header->segmentIndex});
+                if (scan.header)
+                    instances[scan.header->streamId].push_back({.segment = info.segment, .size = info.size, .index = scan.header->segmentIndex});
                 break;
         }
     }
@@ -248,7 +249,7 @@ private:
             continue;
         }
         const SegmentScan scan = scanSegment(*bytes);
-        if (scan.status != SegmentStatus::Readable || scan.header->streamId != streamId)
+        if (scan.status != SegmentStatus::Readable || !scan.header || scan.header->streamId != streamId)
             continue;
         found.push_back({.index = scan.header->segmentIndex, .buffer = out.buffers.size()});
         out.buffers.push_back(std::move(*bytes));
@@ -467,7 +468,7 @@ private:
         std::uint64_t                         durable     = 0;
         Sha256Digest                          durableDigest{};
         std::size_t                           unsynced = 0;
-        std::chrono::steady_clock::time_point oldestUnsynced{};
+        std::chrono::steady_clock::time_point oldestUnsynced;
         bool                                  syncUnsupported = false;
         std::vector<std::uint8_t>             lastCanonical;
     };
