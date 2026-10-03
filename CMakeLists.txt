@@ -229,6 +229,9 @@ target_sources(mddlog
         include/mddlog/adapter/AuditChain.cppm
         include/mddlog/adapter/AuditAnchor.cppm
         include/mddlog/adapter/AuditVerifier.cppm
+        include/mddlog/adapter/AuditLayout.cppm
+        include/mddlog/adapter/AuditMedium.cppm
+        include/mddlog/adapter/AuditStore.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
         include/mddlog/mddlog.cppm
