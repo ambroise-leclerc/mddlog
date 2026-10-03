@@ -1,10 +1,10 @@
 # mddlog — C++23 logging for medical device software
 
-**mddlog** is an experimental C++23 modules library for diagnostic logging and bounded, in-memory audit events in medical device software and other regulated embedded systems. It gives developers explicit admission results, per-producer event ordering, and a separately reviewable core. The repository also publishes the design decisions and scoped verification evidence behind those choices.
+**mddlog** is an experimental C++23 modules library for diagnostic logging, bounded in-memory audit events, and an audit persistence adapter whose durability depends on the storage medium and whose tamper evidence is relative to an independent anchor, in medical device software and other regulated embedded systems. It gives developers explicit admission results, per-producer event ordering, and a separately reviewable core. The repository also publishes the design decisions and scoped verification evidence behind those choices.
 
-[Architecture decisions](docs/adr/README.md) · [Governed-core evidence](docs/governed-evidence.md) · [Audit admission guide](docs/migration/audit-admission.md) · [Examples](examples/) · [Releases](https://github.com/ambroise-leclerc/mddlog/releases)
+[Architecture decisions](docs/adr/README.md) · [Governed-core evidence](docs/governed-evidence.md) · [Audit admission guide](docs/migration/audit-admission.md) · [Audit persistence validation](docs/audit-persistence-validation.md) · [Examples](examples/) · [Releases](https://github.com/ambroise-leclerc/mddlog/releases)
 
-> **Evaluation status:** mddlog is not certified or independently validated for use in a medical device. In-memory admission and hand-off are not durable audit storage. Manufacturers must assess the library in their own system, risk management, software lifecycle, and quality management processes.
+> **Evaluation status:** mddlog is not certified or independently validated for use in a medical device. In-memory admission and hand-off are not durable audit storage. The audit persistence adapter confirms durability only on a storage medium that meets the contract of ADR-004 Decision 9, which the integrator must establish for that medium, and detects tampering only against an anchor held outside the log. Manufacturers must assess the library in their own system, risk management, software lifecycle, and quality management processes.
 
 ## Why this project exists
 
@@ -16,6 +16,7 @@ A diagnostic message, an admitted audit event, and a durable record answer diffe
 | Runtime audit core (`mddlog::core`) | `AuditEvent` and bounded `AuditRing`; exact identifiers, category/phase, optional requirement and risk references, stream identity, and assigned sequence | Admission means the event is in memory; a full ring refuses new events |
 | Public audit API (`mddlog::mddlog`) | `SimpleLogger::logAudit(AuditInput)` and `Log::logAudit(AuditInput)` return the ring admission result after `setAuditRing()` | A bound ring must outlive its logger binding; `Log::shutdown()` clears the binding |
 | Audit hand-off (`mddlog::mddlog`) | `AuditSinkAdapter` forwards events to an `AuditSink`, reports hand-off health, and acknowledges accepted events | Sink acceptance does not establish durable storage; downstream loss must be reported by the host |
+| Audit persistence (`mddlog::mddlog`) | `PersistingAuditSink` stores canonical, hash-chained records in append-only segments through a `StorageMedium`, confirms them durably, keeps a ledger across restarts, and offers rotation and retention; `LogVerifier` reports a verdict per stream against an anchor provider and a retained position | Tamper evidence is relative to an independent anchor, never tamper-proof; nothing is signed; the library ships only in-memory test doubles for the medium and the provider |
 | Diagnostic adapter (`mddlog::mddlog`) | `SimpleLogger`, `LogRecord`, `ConsoleSink`, and the `Log` convenience facade | Its asynchronous queue allocates and is unbounded; it is not the governed path |
 
 The audit ring has **one producer and one consumer**. The host supplies a distinct stream identity for each producer instance and boot session, and owns its response to refusal, hand-off failure, and power loss. See the [admission and delivery contract](docs/migration/audit-admission.md).
@@ -74,13 +75,14 @@ The following standards describe processes and responsibilities for medical devi
 | [ISO 14971:2019](https://www.iso.org/standard/72704.html), risk management for medical devices | Optional `riskRef` and `requirementRef` identifiers on `AuditEvent`; explicit refusal and hand-off results | Hazard analysis, risk controls, effectiveness checks, and risk management records |
 | [ISO 13485:2016](https://committee.iso.org/standard/59752.html), medical device quality management systems | Reviewable changes and documented design decisions | Quality management system, document control, and record retention |
 
-The [evidence note](docs/governed-evidence.md) states exactly what the module graph, source, allocation-symbol, and exception-symbol checks cover and where their conclusions stop. The [scenario evidence](docs/audit-scenario-validation.md) describes tested audit-field and action-transition cases. These are engineering checks, not a certification dossier.
+The [evidence note](docs/governed-evidence.md) states exactly what the module graph, source, allocation-symbol, and exception-symbol checks cover and where their conclusions stop. The [scenario evidence](docs/audit-scenario-validation.md) describes tested audit-field and action-transition cases, and the [persistence validation report](docs/audit-persistence-validation.md) maps each ADR-004 validation scenario to its tests and states the limits they do not lift. These are engineering checks, not a certification dossier.
 
 ### Delivery and roadmap
 
 - **Implemented and accepted:** bounded audit admission, per-stream sequence, explicit refusal, and in-memory sink hand-off with health reporting ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md); [epic #9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Implemented and accepted:** application integration building blocks: synchronized sink registry, bounded transport consumer and diagnostic text logger, with WebFront as the reference consumer verified in its own repository ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); [epic #10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
-- **Planned:** durable storage, tamper evidence, and recovery semantics ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); [epic #11](https://github.com/ambroise-leclerc/mddlog/issues/11)).
+- **Implemented, evidence under review:** durable confirmation on an eligible medium, tamper evidence relative to an independent anchor, restart, rotation and retention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); [epic #11](https://github.com/ambroise-leclerc/mddlog/issues/11); [validation report](docs/audit-persistence-validation.md)). Accepting that evidence is a separate review decision.
+- **Deferred:** signing and key management, and an export format ([ADR-004 Decision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
 ## Build and verify
 
