@@ -104,6 +104,8 @@ enum class ChainFinding : std::uint8_t {
     Ok,
     /** @brief Malformed: short, version 0, or a field rule failed. Reported as Inconsistent. */
     Malformed,
+    /** @brief The verifier was built with a stream identity AuditEvent rejects: a caller fault, not a finding about the records. */
+    InvalidVerifier,
     /** @brief Version differs from the stream's. Reported as Inconsistent, known version or not. */
     VersionChange,
     /** @brief The stream's version is not implemented here; nothing was decoded. Cannot verify. */
@@ -133,12 +135,20 @@ public:
 
     /** @brief Start after a recorded position, as a trimmed prefix does (8.4, 10.4). */
     constexpr AuditChainVerifier(std::string_view streamId, std::uint64_t afterSequence, const Sha256Digest& afterDigest) noexcept
-        : position(afterSequence), head(afterDigest) {
-        (void)stream.assignExact(streamId);
+        : validStream(core::AuditEvent::validStreamId(streamId)), position(afterSequence), head(afterDigest) {
+        if (validStream)
+            (void)stream.assignExact(streamId);
+    }
+
+    /** @brief False when the stream identity is one AuditEvent rejects; check() then reports InvalidVerifier. */
+    [[nodiscard]] constexpr bool valid() const noexcept {
+        return validStream;
     }
 
     /** @brief Check the next stored record against its stored digest, in 8.3's order. */
     [[nodiscard]] constexpr ChainFinding check(std::span<const std::uint8_t> bytes, const Sha256Digest& storedDigest) noexcept {
+        if (!validStream)
+            return ChainFinding::InvalidVerifier;
         if (failed)
             return firstFinding;
         const ChainFinding finding = evaluate(bytes, storedDigest);
@@ -198,6 +208,7 @@ private:
         return ChainFinding::Ok;
     }
 
+    bool                                          validStream;
     core::InlineString<core::auditStreamCapacity> stream;
     std::uint64_t                                 position;
     Sha256Digest                                  head;

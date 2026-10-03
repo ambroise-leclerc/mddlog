@@ -248,6 +248,9 @@ const speclab::Register chainAndVerifier{
                                         "a removed record breaks the order");
                       }
                       {
+                          AuditChainVerifier bad{std::string(mddlog::core::auditStreamCapacity + 1, 'a')};
+                          checks.expect(!bad.valid() && bad.check(stored[0], digests[0]) == ChainFinding::InvalidVerifier && !bad.failedAt(),
+                                        "an invalid stream identity is a verifier fault, not a stream finding");
                           AuditChainVerifier v{"other/stream"};
                           checks.expect(v.check(stored[0], digests[0]) == ChainFinding::StreamMismatch, "another stream is found");
                       }
