@@ -263,6 +263,7 @@ const speclab::Register coverageStates{
                       checks.expect(report.verdict == Verdict::Inconsistent && report.chainFinding == ChainFinding::DigestMismatch
                                         && report.failedAt == std::uint64_t{3},
                                     "Inconsistent, naming record 3");
+                      checks.expect(report.lastPresent == 2, "records 1 and 2 still count as internally consistent");
                       checks.raise();
                   })
             .Then("a deleted suffix covered by the anchor is Incomplete",

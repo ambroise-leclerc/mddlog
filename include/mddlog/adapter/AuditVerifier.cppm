@@ -301,13 +301,13 @@ public:
                 break;
             }
         }
+        report.lastPresent = chain.verifiedThrough();
         if (const auto failed = chain.failedAt(); failed.has_value()) {
             report.failedAt = failed;
             return finish(report, Verdict::Inconsistent, VerdictCause::None);
         }
         if (chain.cannotVerify())
             return finish(report, Verdict::CannotVerify, VerdictCause::UnsupportedStreamVersion);
-        report.lastPresent          = chain.verifiedThrough();
         const std::uint64_t present = report.lastPresent;
 
         // The anchor the verdicts below rest on: the latest anchor, or a retirement's final anchor.
@@ -442,8 +442,8 @@ private:
         return before.has_value() || retained->head(all->providerId).has_value() ? RetainedOutcome::Passed : RetainedOutcome::NoneRetained;
     }
 
-    /** @brief Two anchors of one provider and stream conflict: the same position with different digests, or a position that falls while the counter rises
-     * (7.1). */
+    /** @brief Two anchors of one provider and stream conflict: the same position with different digests, a position that falls while the counter rises,
+     * or one counter shared by two positions (7.1). */
     [[nodiscard]] static bool conflictsWithListing(const Anchor& current, const StreamsAnswer& listing) {
         const auto* all = std::get_if<ProviderListing>(&listing);
         if (all == nullptr)
@@ -454,6 +454,8 @@ private:
                 return false;
             if (other.position == current.position)
                 return other.digest != current.digest;
+            if (other.counter == current.counter)
+                return true;
             return (other.position < current.position) == (other.counter > current.counter);
         });
     }
