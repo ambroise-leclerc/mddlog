@@ -253,7 +253,7 @@ const speclab::Register configuration{
                   [] {
                       speclab::core::Checks checks;
                       auto                  rig      = makeRig();
-                      auto                  declared = rig->config();
+                      auto                  declared = Rig::config();
                       declared.segmentCount          = 7;  // 2 frames per segment: N + S + 3 = 11 frames, 6 segments, plus one is the reserve alone
                       const auto refused             = PersistingAuditSink::create(rig->medium, declared);
                       checks.expect(!refused && refused.error() == StorageConfigError::MediumTooSmall, "N equal to the reserve is refused");
@@ -265,16 +265,16 @@ const speclab::Register configuration{
                   [] {
                       speclab::core::Checks checks;
                       auto                  rig      = makeRig();
-                      auto                  declared = rig->config();
+                      auto                  declared = Rig::config();
                       declared.segmentSize           = 937;
                       checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::SegmentTooSmall, "937 < 125 + 813");
-                      declared                    = rig->config();
+                      declared                    = Rig::config();
                       declared.maxProducerStreams = 0;
                       checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::NoProducerStreams, "S of 0");
-                      declared                  = rig->config();
+                      declared                  = Rig::config();
                       declared.sync.recordBound = 0;
                       checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::InvalidSyncPolicy, "record bound 0");
-                      declared               = rig->config();
+                      declared               = Rig::config();
                       declared.sync.ageBound = std::chrono::nanoseconds::zero();
                       checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::InvalidSyncPolicy, "age bound 0");
                       checks.expect(rig->medium.calls(Operation::Open) == 0 && rig->medium.calls(Operation::Append) == 0, "nothing was written");
@@ -325,7 +325,7 @@ const speclab::Register durableConfirmation{
                   [] {
                       speclab::core::Checks checks;
                       auto                  rig      = makeRig();
-                      auto                  declared = rig->config(100);
+                      auto                  declared = Rig::config(100);
                       declared.sync.ageBound         = std::chrono::seconds{10};
                       rig->start(declared);
                       (void)rig->sink->accept(makeEvent(streamName, 1));
@@ -428,7 +428,7 @@ const speclab::Register rotation{"A stream spans numbered segments, synced befor
                                                    (void)rig->sink->accept(makeEvent(streamName, 1));
                                                    rig->sink->close();
                                                    rig->medium.restart(Unconfirmed::Dropped);
-                                                   auto again = PersistingAuditSink::create(rig->medium, rig->config(1));
+                                                   auto again = PersistingAuditSink::create(rig->medium, Rig::config(1));
                                                    checks.expect(again.has_value()
                                                                      && std::ranges::find((*again)->recovery().streamsHeld, std::string{streamName})
                                                                             != (*again)->recovery().streamsHeld.end(),
@@ -462,7 +462,7 @@ const speclab::Register fullState{
                   [] {
                       speclab::core::Checks checks;
                       auto                  rig      = makeRig();
-                      auto                  declared = rig->config(1);
+                      auto                  declared = Rig::config(1);
                       declared.maxProducerStreams    = 2;
                       declared.segmentCount          = 12;  // reserve for S=2: ceil((12+2+3)/2)+1 = 10, so two segments are free for producers
                       rig->start(declared);
@@ -677,7 +677,7 @@ cutAt(Operation operation, std::size_t ordinal, Effect effect, std::size_t parti
     rig->medium.restart(policy);
     out.stored            = checkStored(rig->medium, streamName);
     out.claimWithinStored = !claim || (claim->position <= out.stored.stored && claim->digest == chainDigestAt(claim->position, detail));
-    auto       restarted  = PersistingAuditSink::create(rig->medium, rig->config(1));
+    auto       restarted  = PersistingAuditSink::create(rig->medium, Rig::config(1));
     const auto report     = (*restarted)->recovery();
     out.recoveryFindings  = report.findings.size();
     for (const auto& finding : report.findings)
