@@ -24,6 +24,7 @@ import mddlog.core.auditring;
 import mddlog.adapter.logrecord;
 import mddlog.adapter.ringdrain;
 import mddlog.adapter.auditdrain;
+import mddlog.adapter.auditchain;
 import mddlog.adapter.logger;
 import mddlog.sinks.sink;
 import mddlog.sinks.auditsink;
@@ -34,10 +35,17 @@ export namespace mddlog {
 // NOLINTBEGIN(misc-unused-using-decls): these using-declarations ARE the module's exported API; nothing
 // in this interface unit uses them, only importers do.
 // Re-export core types
+using adapter::AuditChain;
+using adapter::AuditChainVerifier;
 using adapter::AuditDrainResult;
 using adapter::AuditDrainStatus;
 using adapter::AuditHealthSnapshot;
 using adapter::AuditRingRegistration;
+using adapter::CanonicalRecord;
+using adapter::canonicalContractVersion;
+using adapter::ChainFinding;
+using adapter::ChainRefusal;
+using adapter::encodeCanonical;
 using adapter::AuditSinkAdapter;
 using adapter::RingSinkAdapter;
 using core::AuditCategory;

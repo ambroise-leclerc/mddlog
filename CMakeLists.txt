@@ -224,6 +224,9 @@ target_sources(mddlog
         include/mddlog/adapter/RingDrain.cppm
         include/mddlog/adapter/TransportConsumer.cppm
         include/mddlog/adapter/AuditDrain.cppm
+        include/mddlog/adapter/Sha256.cppm
+        include/mddlog/adapter/AuditCanonical.cppm
+        include/mddlog/adapter/AuditChain.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
         include/mddlog/mddlog.cppm
