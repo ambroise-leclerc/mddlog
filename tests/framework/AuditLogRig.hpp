@@ -42,7 +42,7 @@ inline constexpr std::size_t segmentBytes = 2048;
     return head;
 }
 
-/** @brief An anchor provider that can fail only its `retire`, to stop an operation between a removal and its retirement. */
+/** @brief An anchor provider that can fail only its `retire`, to stop an operation between a removal and its retirement. It counts the calls it receives. */
 class FlakyProvider final : public AnchorProvider {
 public:
     explicit FlakyProvider(std::string identity) : inner(std::move(identity)) {}
@@ -58,6 +58,7 @@ public:
         return inner.retire(streamId, position);
     }
     [[nodiscard]] LatestAnswer latest(std::string_view streamId) override {
+        ++latests;
         return inner.latest(streamId);
     }
     [[nodiscard]] StreamsAnswer streams() override {
@@ -68,6 +69,7 @@ public:
     bool                   failRetire = false;
     std::size_t            advances   = 0;
     std::size_t            retires    = 0;
+    std::size_t            latests    = 0;
 };
 
 /**

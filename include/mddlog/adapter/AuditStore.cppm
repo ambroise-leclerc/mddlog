@@ -368,7 +368,10 @@ struct StorageCounters {
     std::uint64_t invalidStream = 0;
     /** @brief Events refused because S producer streams were already open. */
     std::uint64_t streamLimitRefused = 0;
-    /** @brief Events refused because the medium already holds an instance of that identity: a restart must start a new instance (ADR-002 Decision 5). */
+    /**
+     * @brief Events refused because the medium already holds an instance of that identity, or, with a ledger, because a ledger in the log names it: a restart
+     * must start a new instance (ADR-002 Decision 5), and a removed stream's trims would otherwise be read as the new instance's.
+     */
     std::uint64_t streamIdentityInUse = 0;
     /** @brief Events accepted but never confirmed when an instance failed, reported as losses after admission (9.6). */
     std::uint64_t notDurableAtFailure = 0;
@@ -385,7 +388,7 @@ struct StorageCounters {
     std::uint64_t streamsRemoved    = 0;
     /** @brief Retirements the provider accepted (10.5). */
     std::uint64_t retirements = 0;
-    /** @brief Retention operations that wrote nothing and removed nothing, whatever the reason (10.4). */
+    /** @brief Retention operations that removed nothing, whatever the reason (10.4). RetentionResult::trimmedThrough says whether a trim was still recorded. */
     std::uint64_t retentionRefused = 0;
     std::uint64_t anchorsAccepted  = 0;
     /** @brief Refusals of a fresh claim, which mean the log or the provider diverged (7.3). */
@@ -416,11 +419,17 @@ enum class RetentionOutcome : std::uint8_t {
     ProviderUnavailable,
     /** @brief No segment ends at or before the bound (10.4), or nothing is left to trim. */
     NothingToTrim,
-    /** @brief The trim record could not be durably confirmed: nothing was removed (9.3). */
+    /** @brief The trim record could not be durably confirmed, or the medium answers Unsupported so it never can: nothing was removed (9.3). */
     NotConfirmed,
-    /** @brief The ledger's anchor could not be advanced past the trim, so a retirement could not be authorized later (7.2, 10.5). */
+    /**
+     * @brief The ledger's anchor could not be advanced past the trim, so a retirement could not be authorized later (7.2, 10.5). The trim is recorded and
+     * nothing was removed: a reader reports a removal that did not happen.
+     */
     LedgerNotAnchored,
-    /** @brief The ledger rules of 10.5 are not met: a stream it opened remains, or no newer ledger cites it. */
+    /**
+     * @brief The ledger rules of 10.5 are not met: a stream it opened remains, or no newer ledger cites it. Also while the ledger holds the highest trim of a
+     * stream the log still holds, or of a removed stream whose retirement is still owed: removing it would erase the only record of that removal.
+     */
     LedgerStillNeeded,
     MediumUnreadable,
     /** @brief The trim was confirmed but the medium did not reclaim every segment: the removal is interrupted (10.4). */
@@ -429,7 +438,7 @@ enum class RetentionOutcome : std::uint8_t {
 
 struct RetentionResult {
     RetentionOutcome outcome = RetentionOutcome::NothingToTrim;
-    /** @brief The trim's position `q`, when a trim was recorded. */
+    /** @brief The trim's position `q`, when a trim was recorded, even when nothing was then removed (NotConfirmed after the write, LedgerNotAnchored). */
     std::uint64_t trimmedThrough    = 0;
     std::size_t   segmentsReclaimed = 0;
     /** @brief The provider accepted the retirement of a whole stream. False when none was needed, or when it is still owed (10.5). */
@@ -552,7 +561,8 @@ public:
         }
         auto it = streams.find(id);
         if (it == streams.end()) {
-            if (std::ranges::binary_search(startup.streamsHeld, id) || (ledger != nullptr && ledger->id == id)) {
+            if (std::ranges::binary_search(startup.streamsHeld, id) || std::ranges::binary_search(namedByLedgers, id, std::less<>{})
+                || (ledger != nullptr && ledger->id == id)) {
                 counters.streamIdentityInUse.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
@@ -610,12 +620,21 @@ public:
             const auto beyond = refreshFree();
             return beyond.has_value() && *beyond > 0;
         };
+        // One reading of the log and one recovery serve every attempt that changes nothing; an attempt that writes or removes anything invalidates them.
+        std::optional<LogState> cache;
+        const auto              attempt = [&](std::string_view target, bool whole) {
+            const std::uint64_t   ledgerBefore = ledger->appended;
+            const RetentionResult result       = retain(target, whole, &cache);
+            if (result.segmentsReclaimed != 0 || ledger->appended != ledgerBefore)
+                cache.reset();
+            return result.segmentsReclaimed;
+        };
         std::vector<std::string> order;
         {
-            const LogAnalysis log = LogAnalysis::read(medium);
-            for (const LedgerImage* item : log.ledgersOldestFirst()) {
+            const LogState& state = current(cache);
+            for (const LedgerImage* item : state.log.ledgersOldestFirst()) {
                 for (const auto& stream : item->opened) {
-                    if (log.image().find(stream) != nullptr && std::ranges::find(order, stream) == order.end())
+                    if (state.log.image().find(stream) != nullptr && std::ranges::find(order, stream) == order.end())
                         order.push_back(stream);
                 }
             }
@@ -624,29 +643,25 @@ public:
             for (const auto& stream : order) {
                 if (roomLeft())
                     return reclaimed;
-                const RetentionResult result = trimPrefix(stream);
-                reclaimed                   += result.segmentsReclaimed;
+                reclaimed += attempt(stream, false);
             }
         }
         if (config.retention.removeEnded) {
             for (const auto& stream : order) {
                 if (roomLeft())
                     return reclaimed;
-                reclaimed += removeStream(stream).segmentsReclaimed;
+                reclaimed += attempt(stream, true);
             }
             // A ledger goes only once every stream it opened has gone and a newer ledger cites it (10.5).
             std::vector<std::string> oldLedgers;
-            {
-                const LogAnalysis log = LogAnalysis::read(medium);
-                for (const LedgerImage* item : log.ledgersOldestFirst()) {
-                    if (ledger == nullptr || item->id != ledger->id)
-                        oldLedgers.push_back(item->id);
-                }
+            for (const LedgerImage* item : current(cache).log.ledgersOldestFirst()) {
+                if (item->id != ledger->id)
+                    oldLedgers.push_back(item->id);
             }
             for (const auto& id : oldLedgers) {
                 if (roomLeft())
                     return reclaimed;
-                reclaimed += removeStream(id).segmentsReclaimed;
+                reclaimed += attempt(id, true);
             }
         }
         (void)roomLeft();
@@ -729,7 +744,7 @@ public:
      * nothing can be removed, and a stream recovery found inconsistent is never touched (10.3).
      */
     [[nodiscard]] RetentionResult trimPrefix(std::string_view streamId) {
-        return retain(streamId, false);
+        return retain(streamId, false, nullptr);
     }
 
     /**
@@ -741,7 +756,7 @@ public:
      * owed can be authorized at the next start (7.2, condition 5).
      */
     [[nodiscard]] RetentionResult removeStream(std::string_view streamId) {
-        return retain(streamId, true);
+        return retain(streamId, true, nullptr);
     }
 
     [[nodiscard]] StorageHealthSnapshot health() const {
@@ -807,6 +822,22 @@ private:
         /** @brief Highest position the provider accepted from this adapter (7.3). */
         std::uint64_t anchored = 0;
     };
+
+    /** @brief The log as read once, and the recovery computed from it: what a retention attempt decides on (10.3, 10.4, 10.5). */
+    struct LogState {
+        LogAnalysis        log;
+        ChainStateRecovery recovery;
+    };
+
+    /** @brief The cached state, read now when there is none. */
+    [[nodiscard]] const LogState& current(std::optional<LogState>& cache) {
+        if (!cache.has_value()) {
+            LogAnalysis        log      = LogAnalysis::read(medium);
+            ChainStateRecovery recovery = recoverChainState(log, provider());
+            cache.emplace(LogState{.log = std::move(log), .recovery = std::move(recovery)});
+        }
+        return *cache;
+    }
 
     /** @brief Catches whatever the integrator's provider throws and answers unavailable, as the calls to the medium do. */
     class GuardedProvider final : public AnchorProvider {
@@ -1205,8 +1236,9 @@ private:
 
         const LogAnalysis        log      = LogAnalysis::read(medium);
         const ChainStateRecovery recovery = recoverChainState(log, provider());
-        restartInfo.faults                = recovery.faults;
-        restartInfo.fork                  = recovery.fork;
+        rememberNamedIdentities(log);
+        restartInfo.faults = recovery.faults;
+        restartInfo.fork   = recovery.fork;
         recordFaults(recovery.faults);
 
         LedgerEntry first = LedgerEntry::origin(ledger->id);
@@ -1244,6 +1276,22 @@ private:
         }
     }
 
+    /** @brief Every identity a ledger in the log names, as a ledger, an opened, closed, trimmed or recovered stream: none may start a new instance (10.3). */
+    void rememberNamedIdentities(const LogAnalysis& log) {
+        std::set<std::string, std::less<>> names;
+        for (const LedgerImage& ledgerImage : log.ledgers()) {
+            names.insert(ledgerImage.id);
+            names.insert(ledgerImage.opened.begin(), ledgerImage.opened.end());
+            for (const auto& [stream, close] : ledgerImage.closes)
+                names.insert(stream);
+            for (const TrimRecord& trim : ledgerImage.trims)
+                names.insert(trim.stream);
+            for (const Citation& citation : ledgerImage.recovered)
+                names.insert(citation.target);
+        }
+        namedByLedgers.assign(names.begin(), names.end());
+    }
+
     [[nodiscard]] bool closeOne(Stream& stream) {
         if (stream.state == StreamStorageState::Closed)
             return true;
@@ -1278,6 +1326,30 @@ private:
         return false;
     }
 
+    /**
+     * @brief The ledger holds the highest trim of a stream that still needs it: one the log still holds, whose prefix that trim accounts for, or a removed one
+     * whose anchor the provider has not replaced by a retirement, whose owed retirement that trim authorizes. Without a provider answer the trim is kept.
+     */
+    [[nodiscard]] bool holdsNeededTrim(const LogAnalysis& log, const LedgerImage& old) {
+        for (const TrimRecord& trim : old.trims) {
+            const bool coveredElsewhere = std::ranges::any_of(log.ledgers(), [&](const LedgerImage& other) {
+                return other.id != old.id && std::ranges::any_of(other.trims, [&](const TrimRecord& recorded) {
+                           return recorded.stream == trim.stream && recorded.position >= trim.position;
+                       });
+            });
+            if (coveredElsewhere)
+                continue;
+            if (log.image().find(trim.stream) != nullptr)
+                return true;
+            if (guarded != nullptr) {
+                const LatestAnswer answer = guarded->latest(trim.stream);
+                if (std::holds_alternative<Anchor>(answer) || std::holds_alternative<ProviderUnavailable>(answer))
+                    return true;
+            }
+        }
+        return false;
+    }
+
     [[nodiscard]] bool callReclaim(SegmentRef segment) noexcept {
         try {
             return medium.reclaim(segment);
@@ -1292,19 +1364,25 @@ private:
      * The order keeps an interruption on the safe side: the trim record is durably confirmed first, then the segments go, then the provider is told. A medium
      * that cannot confirm the trim never loses a segment on its account.
      */
-    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole) {
-        const auto refuse = [&](RetentionOutcome outcome) {
+    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole, std::optional<LogState>* cache) {
+        const auto refuse = [&](RetentionOutcome outcome, std::uint64_t recordedTrim = 0) {
             counters.retentionRefused.fetch_add(1, std::memory_order_relaxed);
-            return RetentionResult{.outcome = outcome};
+            return RetentionResult{.outcome = outcome, .trimmedThrough = recordedTrim};
         };
         if (ledger == nullptr || ledger->state == StreamStorageState::Failed || closed)
             return refuse(RetentionOutcome::NoLedger);
         if (ledger->id == target)
             return refuse(RetentionOutcome::NotRotatable);
+        // A trim the medium can never confirm would be written again at each attempt, and a ledger's trims must increase (10.2): write none at all.
+        if (ledger->syncUnsupported)
+            return refuse(RetentionOutcome::NotConfirmed);
 
-        const LogAnalysis       log   = LogAnalysis::read(medium);
-        const StreamEvaluation* ev    = log.evaluation(target);
-        const StreamImage*      image = log.image().find(target);
+        std::optional<LogState>   local;
+        const LogState&           read     = current(cache != nullptr ? *cache : local);
+        const LogAnalysis&        log      = read.log;
+        const ChainStateRecovery& recovery = read.recovery;
+        const StreamEvaluation*   ev       = log.evaluation(target);
+        const StreamImage*        image    = log.image().find(target);
         if (log.image().unreadable())
             return refuse(RetentionOutcome::MediumUnreadable);
         if (ev == nullptr || !ev->inImage || image == nullptr)
@@ -1320,7 +1398,6 @@ private:
         }
 
         // Retention never removes records of a stream found inconsistent (10.3).
-        const ChainStateRecovery recovery = recoverChainState(log, provider());
         if (const auto held = recovery.held.find(target); held == recovery.held.end() || !held->second.consistent) {
             for (const IntegrityFault& found : recovery.faults) {
                 if (found.stream == target)
@@ -1336,7 +1413,7 @@ private:
             const bool         cited       = std::ranges::any_of(log.ledgers(), [&](const LedgerImage& other) {
                 return other.id != target && other.predecessor.has_value() && other.predecessor->target == target;
             });
-            if (!streamsGone || !cited)
+            if (!streamsGone || !cited || holdsNeededTrim(log, *old))
                 return refuse(RetentionOutcome::LedgerStillNeeded);
         }
 
@@ -1387,8 +1464,10 @@ private:
             if (const auto done = sessionTrims.find(target); done != sessionTrims.end() && done->second.first >= q) {
                 trimSequence = done->second.second;  // already recorded and confirmed this start: the ledger's trims stay increasing (10.2)
             } else {
-                if (!writeLedger(LedgerEntry::streamTrim(target, q, *digest)) || !ledgerConfirmed())
+                if (!writeLedger(LedgerEntry::streamTrim(target, q, *digest)))
                     return refuse(RetentionOutcome::NotConfirmed);
+                if (!ledgerConfirmed())
+                    return refuse(RetentionOutcome::NotConfirmed, q);
                 trimSequence                      = ledger->appended;
                 sessionTrims[std::string{target}] = {q, trimSequence};
                 counters.trimsRecorded.fetch_add(1, std::memory_order_relaxed);
@@ -1399,7 +1478,7 @@ private:
             // covers the trim, so the ledger is anchored past it before anything is removed (7.2, condition 5).
             (void)advanceAnchor(*ledger);
             if (ledger->anchored < trimSequence)
-                return refuse(RetentionOutcome::LedgerNotAnchored);
+                return refuse(RetentionOutcome::LedgerNotAnchored, q);
         }
 
         for (const SegmentImage& segment : segments) {
@@ -1440,6 +1519,8 @@ private:
     RestartReport                    restartInfo;
     /** @brief The trims this start recorded and confirmed: the position, and where the ledger recorded it. Keeps a ledger's trims increasing (10.2). */
     std::map<std::string, std::pair<std::uint64_t, std::uint64_t>, std::less<>> sessionTrims;
+    /** @brief Identities the ledgers in the log named at start, sorted: none may start a new instance. */
+    std::vector<std::string> namedByLedgers;
 
     mutable std::mutex                                                         publishedMutex;
     std::map<std::string, StreamStorageHealth, std::less<>>                    published;

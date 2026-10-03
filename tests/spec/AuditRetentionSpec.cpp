@@ -953,4 +953,150 @@ const speclab::Register retentionCuts{
             .Execute();
     }};
 
+const speclab::Register removalRecords{
+    "Retention never erases the only record of a removal, and never takes a rotation's trim for the removal of a whole stream",
+    "integration",
+    [] {
+        return speclab::Test("audit-retention-removal-records")
+            .Then("on a medium that answers Unsupported, no trim is written at all, so repeated attempts never make the ledger malformed",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig(24, false);
+                      checks.expect(rig->start(rig->config(), false), "started on a medium that answers Unsupported");
+                      (void)rig->feed(streamP, 1, (2 * perSegment()) + 1, big);
+                      const auto first  = rig->sink->trimPrefix(streamP);
+                      const auto second = rig->sink->trimPrefix(streamP);
+                      checks.expect(first.outcome == RetentionOutcome::NotConfirmed && second.outcome == RetentionOutcome::NotConfirmed,
+                                    "both attempts are refused as not confirmable");
+                      checks.expect(first.trimmedThrough == 0 && second.trimmedThrough == 0 && trimsOf(*rig, "ledger/1") == 0, "and no trim was written");
+                      const LogAnalysis log = LogAnalysis::read(rig->medium);
+                      checks.expect(log.ledger("ledger/1") != nullptr && log.ledger("ledger/1")->wellFormed(), "the ledger stays well formed");
+                      checks.raise();
+                  })
+            .Then(
+                "a ledger that holds the only trim of a stream still held is not removed, and goes once a newer trim covers it",
+                [] {
+                    speclab::core::Checks checks;
+                    auto                  rig = makeRig();
+                    checks.expect(rig->start(), "first start: P is opened by ledger/1");
+                    const std::uint64_t segFrames = perSegment();
+                    feedAnchored(*rig, 2 * segFrames, (3 * segFrames) + 1);
+                    checks.expect(rig->sink->closeStream(streamP), "P closed and anchored at its end");
+                    rig->sink->close();
+                    checks.expect(rig->start(), "second start");
+                    const auto rotated = rig->sink->trimPrefix(streamP);
+                    checks.expect(rotated.outcome == RetentionOutcome::Trimmed, "ledger/2 records the trim of P, a stream it did not open");
+                    rig->sink->close();
+                    checks.expect(rig->start(), "third start");
+                    checks.expect(rig->sink->removeStream("ledger/2").outcome == RetentionOutcome::LedgerStillNeeded,
+                                  "ledger/2 holds the only trim of P, which the log still holds");
+                    const auto  report = readLog(*rig);
+                    const auto* stream = reportOf(report, streamP);
+                    checks.expect(stream != nullptr && stream->disposition == StreamDisposition::Rotated, "P still reads as rotated, not as a missing prefix");
+                    checks.expect(rig->sink->removeStream(streamP).outcome == RetentionOutcome::Removed, "P is removed as a whole");
+                    checks.expect(rig->sink->removeStream("ledger/2").outcome == RetentionOutcome::Removed, "now ledger/3's trim covers it, and ledger/2 goes");
+                    checks.expect(rig->sink->health().integrity.empty(), "no integrity fault on the way");
+                    checks.raise();
+                })
+            .Then("a ledger that holds the trim authorizing an owed retirement is kept until the retirement is done",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "first start");
+                      closedStream(*rig, 5);
+                      rig->provider.failRetire = true;
+                      const auto removed       = rig->sink->removeStream(streamP);
+                      checks.expect(removed.outcome == RetentionOutcome::Removed && !removed.retired, "P is gone and its retirement is owed");
+                      rig->sink->close();
+                      checks.expect(rig->start(), "second start, the provider still refuses to retire");
+                      rig->sink->close();
+                      checks.expect(rig->start(), "third start");
+                      checks.expect(rig->sink->removeStream("ledger/1").outcome == RetentionOutcome::LedgerStillNeeded,
+                                    "ledger/1 holds the trim that authorizes the owed retirement");
+                      rig->sink->close();
+                      rig->provider.failRetire = false;
+                      checks.expect(rig->start(), "fourth start completes the retirement");
+                      checks.expect(rig->sink->restart().retirementsCompleted == 1, "retired");
+                      checks.expect(rig->sink->removeStream("ledger/1").outcome == RetentionOutcome::Removed, "and only now ledger/1 goes");
+                      checks.raise();
+                  })
+            .Then("a rotation's trim at the anchor, followed by the loss of the records after it, is a finding and never a retirement",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "first start");
+                      const std::uint64_t segFrames = perSegment();
+                      const std::uint64_t p         = 2 * segFrames;  // a segment end
+                      const std::uint64_t m         = (3 * segFrames) + 1;
+                      feedAnchored(*rig, p, m);
+                      rig->powerLoss();
+                      checks.expect(rig->start(), "second start: ledger/2 records P as recovered at m");
+                      const auto rotated = rig->sink->trimPrefix(streamP);
+                      checks.expect(rotated.outcome == RetentionOutcome::Trimmed && rotated.trimmedThrough == p, "a rotation with q = p");
+                      for (const auto& segment : segmentsOf(rig->medium, streamP))
+                          checks.expect(rig->medium.reclaim(segment.ref), "someone removes the records after the trim");
+                      rig->sink->close();
+                      checks.expect(rig->start(), "third start");
+                      checks.expect(rig->sink->restart().retirementsCompleted == 0 && rig->provider.retires == 0, "no retirement is relayed");
+                      checks.expect(hasFaultOf(rig->sink->restart().faults, IntegrityFaultKind::RecordsMissing, streamP), "the loss is an integrity fault");
+                      const auto  report = readLog(*rig);
+                      const auto* stream = reportOf(report, streamP);
+                      checks.expect(stream != nullptr && stream->report.verdict == Verdict::Incomplete
+                                        && stream->report.cause == VerdictCause::RecordsMissingAfterTrim,
+                                    "the reader says Incomplete, not Retired");
+                      const auto missing = report.notesOf(BoundaryKind::RecordsMissingAfterTrim);
+                      checks.expect(std::ranges::any_of(missing,
+                                                        [&](const BoundaryNote& note) {
+                                                            return note.stream == streamP && note.position == p + 1 && note.secondPosition == m;
+                                                        }),
+                                    "records q + 1 … m are reported missing");
+                      checks.raise();
+                  })
+            .Then("a reader does not accept a retirement past the highest trim",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      checks.expect(rig->start(), "started");
+                      const std::uint64_t segFrames = perSegment();
+                      const std::uint64_t m         = (3 * segFrames) + 1;
+                      (void)rig->feed(streamP, 1, m, big);
+                      checks.expect(rig->sink->closeStream(streamP), "closed and anchored at m");
+                      const auto rotated = rig->sink->trimPrefix(streamP);
+                      checks.expect(rotated.outcome == RetentionOutcome::Trimmed && rotated.trimmedThrough < m, "a rotation below m");
+                      for (const auto& segment : segmentsOf(rig->medium, streamP))
+                          (void)rig->medium.reclaim(segment.ref);
+                      checks.expect(std::holds_alternative<AnchorStamp>(rig->provider.inner.retire(streamP, m)), "someone retires P at m");
+                      const auto  report = readLog(*rig);
+                      const auto* stream = reportOf(report, streamP);
+                      checks.expect(stream != nullptr && stream->report.verdict == Verdict::Incomplete
+                                        && stream->report.cause == VerdictCause::RetirementBeyondTrim,
+                                    "Incomplete: anchored records went with no trim");
+                      checks.raise();
+                  })
+            .Then("relieve() reads the log and recovers chain state once while its attempts change nothing",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig    = makeRig();
+                      auto                  policy = rig->config();
+                      policy.retention.rotate      = true;
+                      checks.expect(rig->start(policy), "started with rotation declared");
+                      constexpr int fillers = 6;
+                      for (int k = 0; k < fillers; ++k) {
+                          const std::string id = "filler/" + std::to_string(k);
+                          (void)rig->sink->accept(makeEvent(id, 1));
+                          (void)rig->sink->closeStream(id);
+                      }
+                      std::uint64_t fed = 0;
+                      while (rig->sink->accept(makeEvent(streamP, fed + 1, big)))
+                          ++fed;
+                      checks.expect(rig->sink->health().counters.fullEntries == 1, "P is full and has no anchor, so nothing can be rotated");
+                      const std::size_t before = rig->provider.latests;
+                      checks.expect(rig->sink->relieve() == 0, "nothing is freed");
+                      const std::size_t held = fillers + 2;  // the fillers, P and the ledger
+                      checks.expect(rig->provider.latests - before <= 2 * (held + 1), "one recovery for every attempt, not one per attempt");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 }  // namespace

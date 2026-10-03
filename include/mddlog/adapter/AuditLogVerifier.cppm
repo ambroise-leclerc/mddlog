@@ -45,7 +45,10 @@ enum class BoundaryKind : std::uint8_t {
     RemovalNotCarriedOut,
     /** @brief Records `1 … position - 1` are missing and no trim accounts for them. */
     PrefixMissingWithoutTrim,
-    /** @brief Records `position … secondPosition` are missing between a trim and the first record present. */
+    /**
+     * @brief Records `position … secondPosition` are missing between a trim and the first record present, or, for a removed stream, between its highest trim
+     * and the last position a ledger or the provider's retirement cites.
+     */
     RecordsMissingAfterTrim,
     /** @brief A trim past the anchor leaves records of the stream: `H_p` can no longer be recomputed. */
     TrimPastAnchor,
@@ -55,6 +58,8 @@ enum class BoundaryKind : std::uint8_t {
     NoEarlierHistoryKnown,
     /** @brief Two ledgers are cited by no other. */
     LedgersFork,
+    /** @brief Every ledger is cited by another: the `predecessor` citations form a cycle and no ledger is the newest. */
+    LedgerCitationCycle,
     /** @brief The log holds records of a stream no ledger opened. */
     StreamNotOpenedByAnyLedger,
     /** @brief A reserved action in a stream that is not a ledger, at the sequence `position`. */
@@ -113,6 +118,8 @@ enum class BoundaryKind : std::uint8_t {
             return "no earlier history known";
         case BoundaryKind::LedgersFork:
             return "ledgers fork";
+        case BoundaryKind::LedgerCitationCycle:
+            return "ledger citations form a cycle";
         case BoundaryKind::StreamNotOpenedByAnyLedger:
             return "stream opened by no ledger";
         case BoundaryKind::ReservedActionOutsideLedger:
@@ -293,7 +300,7 @@ private:
                 out.report = anchors.verify(ev.id, stream->records, {}, log.image().layoutOf(*stream));
                 break;
             case StreamDisposition::Removed:
-                out.report = removed(ev, anchors, notes);
+                out.report = removed(log, ev, anchors, notes);
                 break;
             case StreamDisposition::Absent:
                 out.report = anchors.verify(ev.id, {});
@@ -338,14 +345,31 @@ private:
         return anchors.verify(ev.id, rest, ev.start, log.image().layoutOf(stream, ev.skipSegments));
     }
 
-    /** @brief No segment is left and a trim is recorded: the stream aged out under retention, or the removal is still waiting for its `retire` (10.5). */
-    [[nodiscard]] StreamReport removed(const StreamEvaluation& ev, AnchorVerifier& anchors, std::vector<BoundaryNote>& notes) {
+    /**
+     * @brief No segment is left and a trim is recorded: the stream aged out under retention, or the removal is still waiting for its `retire` (10.5).
+     *
+     * A whole-stream trim has `q = m`. A retirement past `q`, or a `close` or `recovered` record citing a position past `q`, shows records that went with no
+     * trim: the stream is Incomplete, never Retired on the strength of a rotation's trim.
+     */
+    [[nodiscard]] StreamReport removed(const LogAnalysis& log, const StreamEvaluation& ev, AnchorVerifier& anchors, std::vector<BoundaryNote>& notes) {
         const LatestAnswer latest = provider->latest(ev.id);
         const TrimRecord   trim   = ev.trim.value_or(TrimRecord{});
         const auto         note   = [&](BoundaryKind kind, std::uint64_t position, std::uint64_t second) {
             notes.push_back(makeBoundaryNote(kind, ev.id, position, second, trim.ledger, trim.ledgerSequence));
         };
+        // The report the reader fixes itself when records went with no trim. The retained position is not raised on it.
+        const auto missing = [&](VerdictCause cause, std::uint64_t through, const Anchor* anchor) {
+            note(BoundaryKind::RecordsMissingAfterTrim, trim.position + 1, through);
+            StreamReport report  = shell(ev, Verdict::Incomplete, cause);
+            report.firstRetained = trim.position + 1;
+            report.lastPresent   = trim.position;
+            if (anchor != nullptr)
+                report.anchor = *anchor;
+            return report;
+        };
         note(BoundaryKind::RemovedUnderRetention, trim.position, 0);
+        const auto    cited  = log.highestCitedPosition(ev.id);
+        const Anchor* anchor = detail::anchorIn(latest);
         if (const auto* retirement = std::get_if<Retirement>(&latest)) {
             const Anchor& finalAnchor = retirement->finalAnchor;
             if (trim.position == finalAnchor.position && trim.digest != finalAnchor.digest) {
@@ -356,11 +380,15 @@ private:
                 report.anchor        = finalAnchor;
                 return report;
             }
+            if (trim.position < finalAnchor.position)
+                return missing(VerdictCause::RetirementBeyondTrim, finalAnchor.position, &finalAnchor);
             if (trim.position > finalAnchor.position)
                 note(BoundaryKind::RemovedWithoutAnchor, finalAnchor.position + 1, trim.position);
         } else if (std::holds_alternative<AnchorAbsent>(latest)) {
             note(BoundaryKind::RemovedNeverAnchored, trim.position, 0);
         }
+        if (cited.has_value() && cited->position > trim.position)
+            return missing(VerdictCause::RecordsMissingAfterTrim, cited->position, anchor);
         return anchors.verify(ev.id, {});
     }
 
@@ -376,6 +404,10 @@ private:
         if (log.uncitedLedgers().size() >= 2) {
             for (const auto& id : log.uncitedLedgers())
                 out.notes.push_back(makeBoundaryNote(BoundaryKind::LedgersFork, id));
+        }
+        if (log.citationCycle()) {
+            for (const LedgerImage& ledgerImage : log.ledgers())
+                out.notes.push_back(makeBoundaryNote(BoundaryKind::LedgerCitationCycle, ledgerImage.id));
         }
         for (const auto& id : log.streamsNoLedgerOpened())
             out.notes.push_back(makeBoundaryNote(BoundaryKind::StreamNotOpenedByAnyLedger, id));

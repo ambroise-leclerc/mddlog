@@ -72,6 +72,7 @@ using adapter::ChainFinding;
 using adapter::ChainRefusal;
 using adapter::ChainStateRecovery;
 using adapter::checkMediumAtStart;
+using adapter::CitedPosition;
 using adapter::Continuity;
 using adapter::crc32c;
 using adapter::digestFromHex;

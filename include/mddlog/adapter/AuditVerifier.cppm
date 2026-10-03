@@ -138,7 +138,9 @@ enum class VerdictCause : std::uint8_t {
     /** @brief A trim cites a position past the last record present while the prefix is still there: the records it covered are gone (10.4). */
     TrimExceedsRecords,
     /** @brief A whole-stream trim and the provider's retirement disagree on the digest at the same position (10.6). Set by the log reader. */
-    TrimDiffersFromRetirement
+    TrimDiffersFromRetirement,
+    /** @brief The provider retired the stream past the highest recorded trim: anchored records went with no trim (10.5, 10.6). Set by the log reader. */
+    RetirementBeyondTrim
 };
 
 /** @brief Outcome of the retained-position check of 7.4. */
@@ -451,7 +453,11 @@ public:
         return reports;
     }
 
-    /** @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5). */
+    /**
+     * @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5).
+     *
+     * Public so that the log reader (mddlog.adapter.auditlog) applies the same structural rule to the records it walks from a trim; it reads only the layout.
+     */
     [[nodiscard]] static std::optional<std::uint64_t> firstBoundaryBreak(const StoredLayout& layout, const StreamStart& start) noexcept {
         std::uint64_t                expected = start.afterSequence + 1;
         std::optional<std::uint32_t> previous;

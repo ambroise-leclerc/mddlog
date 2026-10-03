@@ -174,6 +174,13 @@ struct CloseRecord {
     std::uint64_t ledgerSequence = 0;
 };
 
+/** @brief A position a ledger record cites for a stream, and where the ledger records it. */
+struct CitedPosition {
+    std::uint64_t position = 0;
+    std::string   ledger;
+    std::uint64_t ledgerSequence = 0;
+};
+
 struct LedgerFaultAt {
     std::uint64_t sequence = 0;
     LedgerFault   fault    = LedgerFault::UnknownReservedAction;
@@ -182,6 +189,9 @@ struct LedgerFaultAt {
 /**
  * @brief One ledger as the log holds it (10.1, 10.2). Only the records up to the last one whose chain link checks are read: what a broken chain says after
  * the break is not evidence of anything.
+ *
+ * A malformed record is not a broken chain: its operation is never applied (10.2), and the valid records after it, whose chain still checks, are read as
+ * the adapter's words. The ledger itself is reported Inconsistent from the first malformed record on, and recovery cites it only up to the record before.
  */
 struct LedgerImage {
     std::string                id;
@@ -194,9 +204,9 @@ struct LedgerImage {
     std::optional<Citation>    predecessor;
     std::vector<Citation>      recovered;
     /** @brief Streams the ledger opened, in order. */
-    std::vector<std::string>           opened;
-    std::map<std::string, CloseRecord> closes;
-    std::vector<TrimRecord>            trims;
+    std::vector<std::string>                        opened;
+    std::map<std::string, CloseRecord, std::less<>> closes;
+    std::vector<TrimRecord>                         trims;
     /** @brief `mddlog.ledger.close` is present and valid. */
     bool closedOrderly = false;
 
@@ -269,7 +279,11 @@ struct StreamEvaluation {
     /** @brief The expected sequence of the first segment header that does not follow (9.5). */
     std::optional<std::uint64_t> layoutBreak;
 
-    /** @brief H at `position` recomputed from the stored records, when the walk reaches it. Never a recorded value. */
+    /**
+     * @brief H at `position` as the walk knows it, when the walk reaches it. Past the walk's start it is recomputed from the stored records. At the start
+     * itself it is the start value: H_0, a recorded trim's digest (Rotated, InterruptedRemoval), or the stored digest of the first record present when the
+     * chain cannot start (PrefixMissing, GapAfterTrim, TrimNotOnSegmentBoundary), which nothing vouches for.
+     */
     [[nodiscard]] std::optional<Sha256Digest> recomputedDigestAt(std::uint64_t position) const {
         if (position == walkStartPosition)
             return walkStartDigest;
@@ -444,6 +458,8 @@ enum class IntegrityFaultKind : std::uint8_t {
     CloseCitationMismatch,
     /** @brief Two ledgers are cited by no other. */
     LedgersFork,
+    /** @brief Ledgers are present and every one is cited by another: their `predecessor` citations form a cycle, so none is the newest (10.3). */
+    LedgerCitationCycle,
     /** @brief The log holds records of a stream no ledger opened. */
     StreamNotOpened,
     /** @brief The provider holds an anchor for a stream the log neither holds nor accounts for with a trim. */
@@ -500,14 +516,19 @@ struct PendingRetirement {
 /** @brief What the adapter concludes at start, before a new ledger writes a record (10.3). */
 struct ChainStateRecovery {
     std::map<std::string, RecoveredStream, std::less<>> held;
-    /** @brief The ledger record 1 will cite: the newest ledger, and under a fork the uncited one whose identity sorts last. */
+    /**
+     * @brief The ledger record 1 will cite: the newest ledger; under a fork the uncited one whose identity sorts last; under a citation cycle the ledger whose
+     * identity sorts last. Empty only when the log holds no ledger.
+     */
     std::optional<std::string> predecessor;
-    bool                       fork = false;
+    bool                       fork  = false;
+    bool                       cycle = false;
     /** @brief Streams the predecessor opened that the log still holds, in the order it opened them: the `recovered` records to write. */
     std::vector<std::string>       toCite;
     std::vector<IntegrityFault>    faults;
     std::vector<PendingRetirement> pendingRetirements;
 
+    /** @brief The log holds no ledger (10.3). A cycle or a fork is never absent state. */
     [[nodiscard]] bool absent() const noexcept {
         return !predecessor.has_value();
     }
@@ -570,6 +591,30 @@ public:
     /** @brief Ledgers no other ledger cites as its predecessor. One is the newest ledger; two or more are a fork (10.3). */
     [[nodiscard]] const std::vector<std::string>& uncitedLedgers() const noexcept {
         return uncited;
+    }
+    /** @brief Ledgers are present and none is uncited: their `predecessor` citations form a cycle (10.3). */
+    [[nodiscard]] bool citationCycle() const noexcept {
+        return !ledgerList.empty() && uncited.empty();
+    }
+    /**
+     * @brief The highest position any valid `close` or `recovered` record cites for a stream, and where it is recorded. A trim below it is not the removal of
+     * the whole stream (10.5): records up to that position existed when the ledger recorded them.
+     */
+    [[nodiscard]] std::optional<CitedPosition> highestCitedPosition(std::string_view stream) const {
+        std::optional<CitedPosition> out;
+        const auto                   offer = [&](std::uint64_t position, const std::string& ledgerId, std::uint64_t ledgerSequence) {
+            if (!out.has_value() || position > out->position)
+                out = CitedPosition{.position = position, .ledger = ledgerId, .ledgerSequence = ledgerSequence};
+        };
+        for (const LedgerImage& ledgerImage : ledgerList) {
+            if (const auto close = ledgerImage.closes.find(stream); close != ledgerImage.closes.end())
+                offer(close->second.position, ledgerImage.id, close->second.ledgerSequence);
+            for (const Citation& citation : ledgerImage.recovered) {
+                if (citation.target == stream && citation.position.has_value())
+                    offer(*citation.position, ledgerImage.id, citation.ledgerSequence);
+            }
+        }
+        return out;
     }
     /** @brief The newest ledger when there is exactly one uncited ledger. */
     [[nodiscard]] std::optional<std::string> newestLedger() const {
@@ -829,6 +874,15 @@ namespace detail {
             state.position = ev.checkedThrough;
             state.digest   = ev.checkedDigest;
         }
+        // A ledger checks only up to the record before its first malformed one (10.2), whatever its chain says after.
+        if (ledgerImage != nullptr && !ledgerImage->faults.empty() && state.position.has_value()) {
+            const std::uint64_t before = ledgerImage->faults.front().sequence - 1;
+            const auto          digest = before >= 1 ? ev.recomputedDigestAt(before) : std::nullopt;
+            if (before < *state.position) {
+                state.position = digest.has_value() ? std::optional<std::uint64_t>{before} : std::nullopt;
+                state.digest   = digest;
+            }
+        }
         out.held.emplace(id, std::move(state));
     }
 
@@ -863,8 +917,17 @@ namespace detail {
             out.held[id].consistent = false;
         }
     }
-    if (!uncited.empty())
+    if (!uncited.empty()) {
         out.predecessor = *std::ranges::max_element(uncited);
+    } else if (log.citationCycle()) {
+        // Ledgers are present, so this is never absent state: writing `origin` would claim no earlier ledger exists (10.3).
+        out.cycle = true;
+        for (const LedgerImage& ledgerImage : log.ledgers()) {
+            fault(IntegrityFaultKind::LedgerCitationCycle, ledgerImage.id);
+            out.held[ledgerImage.id].consistent = false;
+        }
+        out.predecessor = std::ranges::max(log.ledgers(), {}, &LedgerImage::id).id;
+    }
 
     if (out.predecessor.has_value()) {
         if (const LedgerImage* earlier = log.ledger(*out.predecessor); earlier != nullptr) {
@@ -900,6 +963,12 @@ namespace detail {
                 // The trim must account for every record the anchor covers, or a rewritten ledger could induce a retirement (7.2, condition 5).
                 if (trim.position < anchor.position || (trim.position == anchor.position && trim.digest != anchor.digest)) {
                     fault(IntegrityFaultKind::AnchoredEvidenceGone, anchor.streamId, anchor.position);
+                    continue;
+                }
+                // A whole-stream trim has `q = m` (10.5). A ledger that cites a later position shows this trim was a rotation, and the records after it went
+                // with no trim: never a reason to retire.
+                if (const auto cited = log.highestCitedPosition(anchor.streamId); cited.has_value() && cited->position > trim.position) {
+                    fault(IntegrityFaultKind::RecordsMissing, anchor.streamId, trim.position + 1);
                     continue;
                 }
                 const LedgerImage* recording = log.ledger(trim.ledger);

@@ -626,4 +626,74 @@ const speclab::Register cutsDuringRestart{
             .Execute();
     }};
 
+const speclab::Register citationCycles{
+    "Ledgers whose citations form a cycle are an inconsistent state, never absent state",
+    "integration",
+    [] {
+        return speclab::Test("audit-restart-cycle")
+            .Then("a ledger that cites itself: a reader states the cycle, and the next start cites it in Failed form instead of writing origin",
+                  [] {
+                      speclab::core::Checks   checks;
+                      auto                    rig = makeRig();
+                      std::vector<AuditEvent> events{ledgerEvent(LedgerEntry::predecessor("ledger/0", false, std::nullopt, std::nullopt), "ledger/0", 1)};
+                      (void)forgeSegment(rig->medium, "ledger/0", events);
+                      const auto before = readLog(*rig);
+                      checks.expect(before.has(BoundaryKind::LedgerCitationCycle, "ledger/0"), "the reader states the cycle");
+                      checks.expect(rig->start(), "started");
+                      const RestartReport& restart = rig->sink->restart();
+                      checks.expect(restart.firstRecord == LedgerRecordKind::Predecessor && restart.predecessor == "ledger/0" && !restart.predecessorChecks,
+                                    "record 1 cites the ledger in Failed form, never origin");
+                      checks.expect(hasFault(restart.faults, IntegrityFaultKind::LedgerCitationCycle, "ledger/0"), "an integrity fault is reported");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register malformedPredecessor{"A predecessor with a malformed record is cited up to the record before it", "integration", [] {
+                                                 return speclab::Test("audit-restart-malformed-predecessor")
+                                                     .Then("the Failed form cites the last valid record, not the chain's head",
+                                                           [] {
+                                                               speclab::core::Checks checks;
+                                                               auto                  rig       = makeRig();
+                                                               LedgerEntry           malformed = LedgerEntry::streamOpen(streamQ);
+                                                               malformed.sourceSequence        = 3;  // `open` carries no position (10.2)
+                                                               std::vector<AuditEvent> events{ledgerEvent(LedgerEntry::origin("ledger/0"), "ledger/0", 1),
+                                                                                              ledgerEvent(LedgerEntry::streamOpen(streamP), "ledger/0", 2),
+                                                                                              ledgerEvent(malformed, "ledger/0", 3),
+                                                                                              ledgerEvent(LedgerEntry::streamOpen(streamR), "ledger/0", 4)};
+                                                               (void)forgeSegment(rig->medium, "ledger/0", events);
+                                                               checks.expect(rig->start(), "started");
+                                                               const RestartReport& restart = rig->sink->restart();
+                                                               checks.expect(restart.predecessor == "ledger/0" && !restart.predecessorChecks
+                                                                                 && restart.predecessorPosition == 2,
+                                                                             "Failed, citing position 2");
+                                                               checks.expect(hasFault(restart.faults, IntegrityFaultKind::LedgerRecordMalformed, "ledger/0"),
+                                                                             "the malformed record is a fault");
+                                                               checks.raise();
+                                                           })
+                                                     .Execute();
+                                             }};
+
+const speclab::Register identityReuse{"An identity a ledger names never starts a new instance, even after its records were removed", "integration", [] {
+                                          return speclab::Test("audit-restart-identity-reuse")
+                                              .Then("a removed stream's identity is refused at the next start, so its trims are never read as a new instance's",
+                                                    [] {
+                                                        speclab::core::Checks checks;
+                                                        auto                  rig = makeRig();
+                                                        checks.expect(rig->start(), "first start");
+                                                        (void)rig->feed(streamP, 1, 3);
+                                                        checks.expect(rig->sink->closeStream(streamP), "closed");
+                                                        checks.expect(rig->sink->removeStream(streamP).outcome == RetentionOutcome::Removed,
+                                                                      "removed as a whole");
+                                                        rig->sink->close();
+                                                        checks.expect(rig->start(), "second start");
+                                                        checks.expect(!rig->sink->accept(makeEvent(streamP, 1)), "the identity is refused");
+                                                        checks.expect(rig->sink->health().counters.streamIdentityInUse == 1,
+                                                                      "and counted as an identity in use");
+                                                        checks.expect(rig->sink->accept(makeEvent(streamQ, 1)), "a new identity is accepted");
+                                                        checks.raise();
+                                                    })
+                                              .Execute();
+                                      }};
+
 }  // namespace

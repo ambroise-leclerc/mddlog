@@ -19,11 +19,15 @@ rotation is not bounded by an anchor (ADR-004 10.4).
 `predecessor` citing the newest earlier ledger) and one `recovered` record per stream that ledger
 opened and the log still holds. Each record is durably confirmed before the next is written.
 `restart()` says what was written. A restart never continues an old stream: producers must use new
-stream identities, and their sequences begin at 1 again. A reader reports the old and the new
+stream identities, and their sequences begin at 1 again. An identity that a ledger in the log
+names, even one whose records were removed, is refused (`streamIdentityInUse`). A reader reports the old and the new
 instances separately, so a discontinuity is never presented as continuity.
 
 Inconsistent state is written in its `Failed` form, citing the last position that checks, and
-reported through `health().integrity`. Records are never repaired, rewritten or reordered, and
+reported through `health().integrity`. A ledger with a malformed record checks only up to the
+record before it. Ledgers whose `predecessor` citations form a cycle are inconsistent too: record 1
+then cites one of them in `Failed` form, never `origin`, which is written only when the log holds no
+ledger. Records are never repaired, rewritten or reordered, and
 retention never removes records of a stream recovery found inconsistent.
 
 ## Closing
@@ -43,19 +47,28 @@ durable confirmation or removed: the two cannot be told apart.
 | `relieve()` | For a full producer stream, applies `StorageConfig::retention`: `rotate`, then `removeEnded`. Does nothing by default. |
 
 The trim record (`mddlog.stream.trim`, with `q` and `H_q`) is durably confirmed **before** any
-segment is reclaimed. On a medium that answers `Unsupported`, nothing is ever removed on that
-account (`NotConfirmed`). A provider that has accepted no anchor for the stream, or that does not
+segment is reclaimed. On a medium that answers `Unsupported`, no trim is written and nothing is
+removed (`NotConfirmed`). A provider that has accepted no anchor for the stream, or that does not
 answer, stops rotation (`NoAnchor`, `ProviderUnavailable`), except that an unavailable provider
 may be relied on for the anchor this adapter itself advanced in this start. Before a whole
 stream the provider anchors is removed, the ledger's own anchor is advanced past the trim, so a
-retirement an interruption leaves owed can be completed at the next start and only then.
+retirement an interruption leaves owed can be completed at the next start and only then. That
+retirement is relayed only when the trim reaches every position a `close` or `recovered` record
+cites for the stream: a rotation's trim followed by the loss of the later records is reported
+(`RecordsMissing`), never retired. An earlier ledger is kept, beyond the conditions of 10.5, while
+it holds the highest trim of a stream the log still holds or of a removed stream whose retirement
+is still owed: removing it would erase the only record of that removal (`LedgerStillNeeded`).
+`relieve()` reads the log and recovers chain state once, and again only after an attempt that
+wrote or removed something.
 
 `LogVerifier` reads a whole log and states each boundary: `ClosedAt`, `EndedWithoutClose`,
 `RemovedUnderRetention`, `LeftoverFromInterruptedRemoval`, `RemovalNotCarriedOut`,
 `PrefixMissingWithoutTrim`, `RecordsMissingAfterTrim`, `TrimPastAnchor`,
-`OriginClaimedWhileHistoryExists`, the checked citations of `predecessor` and `recovered`, and
+`OriginClaimedWhileHistoryExists`, `LedgerCitationCycle`, the checked citations of `predecessor` and `recovered`, and
 others. The 7.5 verdict of each stream and ledger is unchanged: only `Anchored` is "verified", and
-always with its range.
+always with its range. A removed stream is Incomplete rather than Retired when the provider retired
+it past its highest trim (`RetirementBeyondTrim`) or a ledger cites a position past that trim
+(`RecordsMissingAfterTrim`).
 
 ## Limits
 
