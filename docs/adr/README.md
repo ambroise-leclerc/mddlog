@@ -9,8 +9,8 @@ as MduX moves.
 
 An ADR record is **not** a claim that the described behavior is implemented. Distinguish a
 "Proposed" ADR (a decision drafted for maintainer review, not yet acted on) from an "Accepted" one
-(a decision the codebase is expected to already satisfy or is actively being brought into
-conformance with) the same way `AGENTS.md` asks the rest of this repository to: do not describe a
+(a decision the codebase is expected to already satisfy, is actively being brought into
+conformance with, or has accepted as a design while implementation remains pending) the same way `AGENTS.md` asks the rest of this repository to: do not describe a
 capability as delivered from an ADR's existence alone.
 
 | ADR | Title | Status |
