@@ -377,10 +377,10 @@ public:
                 return false;
             }
             // S bounds the instances open at once: one that failed has ended and no longer counts (9.6).
-            const auto open = std::ranges::count_if(streams, [](const auto& entry) {
-                return entry.second.state != StreamStorageState::Failed;
-            });
-            if (static_cast<std::size_t>(open) >= config.maxProducerStreams) {
+            std::size_t open = 0;
+            for (const auto& entry : streams)
+                open += entry.second.state != StreamStorageState::Failed ? 1U : 0U;
+            if (open >= config.maxProducerStreams) {
                 counters.streamLimitRefused.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
