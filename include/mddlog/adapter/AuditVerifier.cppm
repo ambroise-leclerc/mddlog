@@ -268,8 +268,14 @@ public:
         const std::optional<Anchor> held       = anchorOf(latest);
         const Retirement*           retirement = std::get_if<Retirement>(&latest);
 
-        const std::uint64_t anchorPosition = held.has_value() ? held->position : 0;
-        const std::uint64_t checkpoint     = before.has_value() ? before->position : 0;
+        // A retirement's final anchor stands in for the anchor (7.5), so its digest is captured while the records are read.
+        listedRetired                = retirement != nullptr;
+        std::uint64_t anchorPosition = 0;
+        if (held.has_value())
+            anchorPosition = held->position;
+        else if (retirement != nullptr)
+            anchorPosition = retirement->finalAnchor.position;
+        const std::uint64_t checkpoint = before.has_value() ? before->position : 0;
 
         std::optional<Sha256Digest> digestAtAnchor;
         std::optional<Sha256Digest> digestAtCheckpoint;
@@ -474,7 +480,7 @@ private:
                                       RetainedAnchor{.position = report.anchor->position,
                                                      .digest   = report.anchor->digest,
                                                      .counter  = report.anchor->counter,
-                                                     .retired  = verdict == Verdict::Retired});
+                                                     .retired  = listedRetired});
         }
         return report;
     }
@@ -484,6 +490,8 @@ private:
     VerifierConfig    config;
     /** @brief The provider head seen by the verification in progress, raised into the retained position on a clean result. */
     std::optional<std::pair<std::string, std::uint64_t>> listedHead;
+    /** @brief Whether latest() returned a retirement in the verification in progress, whatever became of the records. */
+    bool listedRetired = false;
 };
 
 }  // namespace mddlog::adapter

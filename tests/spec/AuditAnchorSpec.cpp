@@ -536,6 +536,38 @@ const speclab::Register retainedPosition{
                       }
                       checks.raise();
                   })
+            .Then("a retired stream whose records remain is still checked against its final anchor and remembered as retired",
+                  [] {
+                      speclab::core::Checks checks;
+                      const Log             log = writeLog(4);
+                      {
+                          InMemoryAnchorProvider provider{"witness-1"};
+                          RetainedPosition       retained;
+                          AnchorVerifier         verifier{provider, retained};
+                          (void)anchorAt(provider, log, 4);
+                          (void)provider.retire(streamName, 4);
+                          const auto forged = run(verifier, rewriteWithRecompute(log, 2));
+                          checks.expect(forged.verdict == Verdict::Altered && forged.cause == VerdictCause::AnchorDigestMismatch,
+                                        "a rewrite after retirement is Altered");
+                          const auto intact = run(verifier, log);
+                          checks.expect(intact.verdict == Verdict::Anchored && intact.anchoredThrough == std::uint64_t{4},
+                                        "the intact log still verifies against the final anchor");
+                      }
+                      {
+                          InMemoryAnchorProvider provider{"witness-1"};
+                          RetainedPosition       retained;
+                          AnchorVerifier         verifier{provider, retained};
+                          (void)anchorAt(provider, log, 4);
+                          const auto before = provider.snapshot();
+                          (void)provider.retire(streamName, 4);
+                          (void)run(verifier, log);
+                          checks.expect(retained.anchor(streamName)->retired, "retirement is retained although records remain");
+                          provider.restore(before);
+                          const auto undone = run(verifier, log);
+                          checks.expect(undone.verdict == Verdict::RolledBack, "an anchor back where a retirement was is a rollback, records or not");
+                      }
+                      checks.raise();
+                  })
             .Then("the retained checkpoint catches a history rewritten and re-anchored further on",
                   [] {
                       speclab::core::Checks  checks;
