@@ -7,6 +7,8 @@ export import mddlog.adapter.sha256;
 export import mddlog.adapter.auditcanonical;
 import mddlog.core.auditevent;
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers,hicpp-signed-bitwise,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses):
+// hexadecimal digit extraction over a fixed 32-byte digest.
 export namespace mddlog::adapter {
 
 /** @brief H_0: 32 bytes of 0x00, the same for every stream (8.4). */
@@ -161,12 +163,14 @@ private:
     [[nodiscard]] constexpr ChainFinding evaluate(std::span<const std::uint8_t> bytes, const Sha256Digest& storedDigest) noexcept {
         // 8.3 steps 1 and 2 need no knowledge of any version, so they precede an unknown version.
         const std::uint16_t version = canonicalVersionOf(bytes);
-        if (version == 0)
+        if (version == 0) {
             return ChainFinding::Malformed;
-        if (streamVersion == 0)
+        }
+        if (streamVersion == 0) {
             streamVersion = version;
-        else if (version != streamVersion)
+        } else if (version != streamVersion) {
             return ChainFinding::VersionChange;
+        }
         if (version != canonicalContractVersion)
             return ChainFinding::UnsupportedVersion;
 
@@ -195,3 +199,4 @@ private:
 };
 
 }  // namespace mddlog::adapter
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers,hicpp-signed-bitwise,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses)

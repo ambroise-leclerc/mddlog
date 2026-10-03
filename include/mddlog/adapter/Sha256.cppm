@@ -4,6 +4,8 @@ export module mddlog.adapter.sha256;
 
 import std;
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers,hicpp-signed-bitwise,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses):
+// FIPS 180-4 constants, rotation counts and word/byte arithmetic are the specification itself; indices are bounded by the fixed block and round counts.
 export namespace mddlog::adapter {
 
 inline constexpr std::size_t sha256DigestSize = 32;
@@ -119,3 +121,4 @@ private:
 }
 
 }  // namespace mddlog::adapter
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers,hicpp-signed-bitwise,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses)

@@ -7,10 +7,12 @@ import speclab;
 
 namespace {
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index,hicpp-signed-bitwise): test vectors are indexed by loop position over fixed arrays; hex
+// decoding shifts int nibbles.
+
 using namespace mddlog::adapter;
 using mddlog::core::AuditCategory;
 using mddlog::core::AuditEvent;
-using mddlog::core::AuditInput;
 using mddlog::core::AuditPhase;
 using mddlog::core::RawTime;
 
@@ -221,7 +223,7 @@ const speclab::Register chainAndVerifier{
                   [] {
                       speclab::core::Checks                    checks;
                       std::array<std::vector<std::uint8_t>, 4> stored;
-                      std::array<Sha256Digest, 4>              digests;
+                      std::array<Sha256Digest, 4>              digests{};
                       for (std::size_t k = 0; k < 4; ++k) {
                           stored[k]  = fromHex(vectors[k].canonicalHex);
                           digests[k] = digestFromHex(vectors[k].digestHex);
@@ -287,4 +289,5 @@ const speclab::Register chainAndVerifier{
             .Execute();
     }};
 
+// NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index,hicpp-signed-bitwise)
 }  // namespace

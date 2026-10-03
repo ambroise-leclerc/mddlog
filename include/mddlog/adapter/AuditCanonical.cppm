@@ -5,6 +5,8 @@ export module mddlog.adapter.auditcanonical;
 import std;
 import mddlog.core.auditevent;
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers,hicpp-signed-bitwise,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses):
+// byte offsets, shifts and enum bytes are the ADR-004 8.2 wire format itself; reads are bounds-checked against the span before each index.
 export namespace mddlog::adapter {
 
 /** @brief The contract version this encoder writes (ADR-004 8.1). Version 0 is never valid. */
@@ -332,3 +334,4 @@ private:
 }
 
 }  // namespace mddlog::adapter
+// NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast,cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers,hicpp-signed-bitwise,cppcoreguidelines-pro-bounds-constant-array-index,cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses)
