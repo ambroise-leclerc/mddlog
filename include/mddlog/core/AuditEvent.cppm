@@ -17,12 +17,25 @@ inline constexpr std::size_t auditCorrelationCapacity = 117;
 inline constexpr std::size_t auditStreamCapacity      = 96;
 inline constexpr std::size_t auditDetailCapacity      = 160;
 
+/**
+ * @brief Case-sensitive ASCII prefix of the actions only the persistence adapter may write, as ledger records (ADR-004 10.1).
+ *
+ * Producer admission refuses these actions. AuditEvent::assign() does not, so that the adapter can build ledger records through a path it owns.
+ */
+inline constexpr std::string_view auditReservedActionPrefix = "mddlog.";
+
+/** @brief True when `action` begins with the reserved prefix, `"mddlog."` itself included (ADR-004 10.1). */
+[[nodiscard]] constexpr bool isReservedAuditAction(std::string_view action) noexcept {
+    return action.starts_with(auditReservedActionPrefix);
+}
+
 /** @brief Runtime event domain; this set remains subject to ADR-002 review. */
 enum class AuditCategory : std::uint8_t { Lifecycle, Configuration, Access, RiskControl, Operator };
 /** @brief A request, an optional confirmation, or the actual outcome. */
 enum class AuditPhase : std::uint8_t { Requested, Confirmed, Executed, Failed };
 enum class AuditField : std::uint8_t { None, Action, Actor, Target, RequirementRef, RiskRef, CorrelationId };
-enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, SequenceExhausted, InvalidStream, Unconfigured };
+/** @brief ReservedAction: a producer used an action under the reserved ledger namespace (ADR-004 10.1). The refusal names the action field. */
+enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, SequenceExhausted, InvalidStream, Unconfigured, ReservedAction };
 
 struct AuditRefusal {
     AuditRefusalReason reason = AuditRefusalReason::RingFull;

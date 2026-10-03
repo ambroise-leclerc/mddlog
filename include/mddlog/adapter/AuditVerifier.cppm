@@ -122,7 +122,23 @@ enum class VerdictCause : std::uint8_t {
     LogEndsBeforeRetained,
     /** @brief The provider holds no anchor and no retirement for the stream. */
     NoAnchor,
-    ProviderUnavailable
+    ProviderUnavailable,
+    /** @brief A ledger record is malformed (10.2): the ledger is Inconsistent at that record. Set by the log reader. */
+    LedgerRecordMalformed,
+    /** @brief A recorded trim's digest is not the one the stored records reproduce at its position (10.4). Set by the log reader. */
+    TrimDigestMismatch,
+    /** @brief The leftover records of an interrupted removal do not reach the trim's digest (10.4). Set by the log reader. */
+    LeftoverDoesNotReachTrim,
+    /** @brief A trim's position falls inside a segment, which the adapter never writes (10.4). Set by the log reader. */
+    TrimNotOnSegmentBoundary,
+    /** @brief Records `1 … k-1` are missing and no trim accounts for them: the chain cannot start (10.6). Set by the log reader. */
+    PrefixMissingWithoutTrim,
+    /** @brief Records are missing between a trim's `q + 1` and the first record present (10.6). Set by the log reader. */
+    RecordsMissingAfterTrim,
+    /** @brief A trim cites a position past the last record present while the prefix is still there: the records it covered are gone (10.4). */
+    TrimExceedsRecords,
+    /** @brief A whole-stream trim and the provider's retirement disagree on the digest at the same position (10.6). Set by the log reader. */
+    TrimDiffersFromRetirement
 };
 
 /** @brief Outcome of the retained-position check of 7.4. */
@@ -435,7 +451,6 @@ public:
         return reports;
     }
 
-private:
     /** @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5). */
     [[nodiscard]] static std::optional<std::uint64_t> firstBoundaryBreak(const StoredLayout& layout, const StreamStart& start) noexcept {
         std::uint64_t                expected = start.afterSequence + 1;
@@ -449,6 +464,7 @@ private:
         return std::nullopt;
     }
 
+private:
     [[nodiscard]] static const Anchor& entryAnchor(const StreamEntry& entry) noexcept {
         if (const auto* anchor = std::get_if<Anchor>(&entry))
             return *anchor;

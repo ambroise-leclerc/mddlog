@@ -65,6 +65,9 @@ public:
             return AuditWriteResult::refused({.reason = AuditRefusalReason::InvalidStream});
         if (auto failure = AuditEvent::validate(input, streamId.view()); failure.has_value())
             return AuditWriteResult::refused(*failure);
+        // The reserved namespace belongs to the persistence adapter's ledger (ADR-004 10.1): refused before any sequence or slot is consumed.
+        if (isReservedAuditAction(input.action))
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::ReservedAction, .field = AuditField::Action});
         if (nextSequence == 0)
             return AuditWriteResult::refused({.reason = AuditRefusalReason::SequenceExhausted});
 

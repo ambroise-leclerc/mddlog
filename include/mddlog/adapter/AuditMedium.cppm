@@ -83,7 +83,7 @@ public:
  */
 class InMemoryStorageMedium final : public StorageMedium {
 public:
-    enum class Operation : std::uint8_t { Open, Append, Sync };
+    enum class Operation : std::uint8_t { Open, Append, Sync, Reclaim };
 
     enum class Effect : std::uint8_t {
         /** @brief The call answers failed and has no effect; the medium stays alive. */
@@ -276,13 +276,25 @@ public:
     }
 
     [[nodiscard]] bool reclaim(SegmentRef segment) override {
+        const auto fault = next(Operation::Reclaim);
         if (dead)
             return false;
-        return std::erase_if(held,
-                             [&](const Held& item) {
-                                 return item.ref == segment;
-                             })
-               != 0;
+        if (fault && fault->effect == Effect::Fail)
+            return false;
+        if (fault && fault->effect == Effect::CutBefore) {
+            dead = true;
+            return false;
+        }
+        const bool removed = std::erase_if(held,
+                                           [&](const Held& item) {
+                                               return item.ref == segment;
+                                           })
+                             != 0;
+        if (fault) {  // CutPartial or CutAfter: the segment is gone and power is lost before the call answers
+            dead = true;
+            return false;
+        }
+        return removed;
     }
 
 private:
@@ -314,7 +326,7 @@ private:
     bool                       eligible;
     bool                       dead    = false;
     SegmentRef                 lastRef = 0;
-    std::array<std::size_t, 3> callCount{};
+    std::array<std::size_t, 4> callCount{};
     std::vector<Fault>         faults;
     std::vector<Held>          held;
 };
