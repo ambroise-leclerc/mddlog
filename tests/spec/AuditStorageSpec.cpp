@@ -41,7 +41,7 @@ constexpr std::string_view streamName = "device-42/boot-7";
 struct Rig {
     explicit Rig(std::size_t capacity, bool eligible = true) : medium(capacity, eligible) {}
 
-    [[nodiscard]] StorageConfig config(std::size_t recordBound = 1) {
+    [[nodiscard]] static StorageConfig config(std::size_t recordBound = 1) {
         StorageConfig out;
         out.segmentSize        = 2048;
         out.segmentCount       = 12;

@@ -114,7 +114,7 @@ public:
         faults.push_back(fault);
     }
     /** @brief Number of calls of `operation` so far, to choose an ordinal. */
-    [[nodiscard]] std::size_t calls(Operation operation) const noexcept {
+    [[nodiscard]] std::size_t calls(Operation operation) const {
         return callCount.at(static_cast<std::size_t>(operation));
     }
     [[nodiscard]] bool poweredOff() const noexcept {
