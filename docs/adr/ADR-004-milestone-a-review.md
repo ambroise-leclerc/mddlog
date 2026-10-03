@@ -1,9 +1,11 @@
 # ADR-004 milestone A: acceptance review file
 
-This file prepares the maintainer's decision. It does **not** accept ADR-004. Closing #88, merging
-this file or moving the ADR's status is not acceptance; only the maintainer's recorded decision in
-the ADR's Approval section is. Acceptance of the ADR is also distinct from implementation (#89 to
-#93) and from validation evidence (#93). Nothing here is implemented.
+This file prepared the maintainer's decision. **Outcome (2026-10-03): the maintainer accepted
+ADR-004**, recorded in the ADR's Approval section. Decisions 1 and 7 to 11 are accepted as written;
+Decision 11's items stay deferred with no lot opened; milestone B (#89 to #93) is released from its
+dependency on acceptance. The questions below are kept as the record of what was decided. Acceptance of the ADR is also
+distinct from implementation (#89 to #93) and from validation evidence (#93). Nothing here is
+implemented.
 
 ## 1. Questions of Decision 4
 
@@ -28,12 +30,11 @@ No question is open by silence.
 - ADR-002's consequence on the former README claims and the ADR index were updated to match.
 - Allowed and forbidden wording is fixed in ADR-004 Decision 1.
 
-## 3. What the maintainer is asked to decide
+## 3. Recorded decisions
 
-1. Accept, amend or reject Decisions 1 and 7 to 11 as the design of record.
-2. Confirm the deferred items of Decision 11 and whether each gets a lot under epic #11 now. This file
-   opens none.
-3. Release milestone B (#89 to #93) from its dependency on acceptance, or hold it.
+1. Decisions 1 and 7 to 11 were accepted as the design of record.
+2. Decision 11's items remain deferred, and no lot was opened under epic #11.
+3. Milestone B (#89 to #93) was released from its dependency on acceptance.
 
 ## 4. Known limits to weigh
 
