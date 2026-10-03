@@ -26,7 +26,13 @@ inline constexpr std::string_view auditReservedActionPrefix = "mddlog.";
 
 /** @brief True when `action` begins with the reserved prefix, `"mddlog."` itself included (ADR-004 10.1). */
 [[nodiscard]] constexpr bool isReservedAuditAction(std::string_view action) noexcept {
-    return action.starts_with(auditReservedActionPrefix);
+    if (action.size() < auditReservedActionPrefix.size())
+        return false;
+    for (std::size_t i = 0; i < auditReservedActionPrefix.size(); ++i) {
+        if (action[i] != auditReservedActionPrefix[i])
+            return false;
+    }
+    return true;
 }
 
 /** @brief Runtime event domain; this set remains subject to ADR-002 review. */
@@ -39,7 +45,7 @@ enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, Sequ
 
 struct AuditRefusal {
     AuditRefusalReason reason = AuditRefusalReason::RingFull;
-    /** @brief Meaningful only for InvalidIdentifier; None for all other reasons. */
+    /** @brief The offending field for InvalidIdentifier, Action for ReservedAction; None for all other reasons. */
     AuditField field = AuditField::None;
 };
 

@@ -83,8 +83,8 @@ public:
 
     [[nodiscard]] std::optional<LedgerFault> next(const Shape& shape) {
         const auto event     = shaped(shape, ++sequence);
-        const auto canonical = CanonicalRecord::encode(event);
-        const auto decoded   = decodeCanonical(canonical->bytes());
+        const auto canonical = CanonicalRecord::encode(event).value_or(CanonicalRecord{});
+        const auto decoded   = decodeCanonical(canonical.bytes());
         return checker.check(decoded.record).fault;
     }
 
@@ -248,8 +248,9 @@ const speclab::Register entries{
                       trim.correlation = hex(digest);
                       events.push_back(shaped(trim, 3));
                       std::vector<CanonicalRecord> canonicals;
+                      canonicals.reserve(events.size());
                       for (const auto& event : events)
-                          canonicals.push_back(*CanonicalRecord::encode(event));
+                          canonicals.push_back(CanonicalRecord::encode(event).value_or(CanonicalRecord{}));
                       std::vector<LedgerRecordKind>   kinds;
                       std::optional<LedgerRecordView> last;
                       bool                            faultFree = true;

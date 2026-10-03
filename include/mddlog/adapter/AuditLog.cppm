@@ -618,8 +618,12 @@ private:
                 uncited.push_back(ledgerImage.id);
         }
         std::set<std::string> opened;
-        for (const LedgerImage& ledgerImage : ledgerList)
+        for (const LedgerImage& ledgerImage : ledgerList) {
             opened.insert(ledgerImage.opened.begin(), ledgerImage.opened.end());
+            // A stream a valid trim names is accounted for: such as what an interrupted removal left of an earlier ledger (10.4).
+            for (const TrimRecord& recorded : ledgerImage.trims)
+                opened.insert(recorded.stream);
+        }
         for (const auto& [id, stream] : pictured.streams()) {
             if (!isLedger(id) && !opened.contains(id) && !stream.records.empty())
                 unopened.push_back(id);
@@ -892,7 +896,12 @@ namespace detail {
                 if (held || retired)
                     continue;
                 // Removed under a trim and still anchored: the retirement is owed (7.3, 10.5), but only on the word of a ledger an anchor covers.
-                const TrimRecord&  trim      = *ev->trim;
+                const TrimRecord& trim = *ev->trim;
+                // The trim must account for every record the anchor covers, or a rewritten ledger could induce a retirement (7.2, condition 5).
+                if (trim.position < anchor.position || (trim.position == anchor.position && trim.digest != anchor.digest)) {
+                    fault(IntegrityFaultKind::AnchoredEvidenceGone, anchor.streamId, anchor.position);
+                    continue;
+                }
                 const LedgerImage* recording = log.ledger(trim.ledger);
                 bool               covered   = false;
                 if (recording != nullptr) {

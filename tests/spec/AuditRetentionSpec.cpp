@@ -56,29 +56,29 @@ const speclab::Register rotation{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      const std::uint64_t p = (3 * F) + 2;  // inside the fourth segment
-                      feedAnchored(*rig, p, (4 * F) + 2);
+                      const std::uint64_t segFrames = perSegment();
+                      const std::uint64_t p         = (3 * segFrames) + 2;  // inside the fourth segment
+                      feedAnchored(*rig, p, (4 * segFrames) + 2);
                       checks.expect(segmentsOf(rig->medium, streamP).size() == 5, "five segments");
                       const auto result = rig->sink->trimPrefix(streamP);
-                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == 3 * F && result.segmentsReclaimed == 3
+                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == 3 * segFrames && result.segmentsReclaimed == 3
                                         && !result.retired,
                                     "q is the last record of the third segment, three segments reclaimed");
                       const auto held = heldOf(rig->medium, streamP);
-                      checks.expect(held.first == (3 * F) + 1 && held.last == (4 * F) + 2, "records q + 1 … the last are kept");
+                      checks.expect(held.first == (3 * segFrames) + 1 && held.last == (4 * segFrames) + 2, "records q + 1 … the last are kept");
                       const LogAnalysis log  = LogAnalysis::read(rig->medium);
                       const auto*       mine = log.ledger("ledger/1");
-                      checks.expect(mine != nullptr && mine->trims.size() == 1 && mine->trims[0].stream == streamP && mine->trims[0].position == 3 * F
-                                        && mine->trims[0].digest == chainDigestAt(streamP, 3 * F, big),
+                      checks.expect(mine != nullptr && mine->trims.size() == 1 && mine->trims[0].stream == streamP && mine->trims[0].position == 3 * segFrames
+                                        && mine->trims[0].digest == chainDigestAt(streamP, 3 * segFrames, big),
                                     "the trim record carries q and H_q");
                       const auto  report = readLog(*rig);
                       const auto* stream = reportOf(report, streamP);
                       checks.expect(stream != nullptr && stream->disposition == StreamDisposition::Rotated && stream->report.verdict == Verdict::Anchored
-                                        && stream->report.firstRetained == (3 * F) + 1 && stream->report.anchoredThrough == p
+                                        && stream->report.firstRetained == (3 * segFrames) + 1 && stream->report.anchoredThrough == p
                                         && stream->report.unanchoredFrom == p + 1,
                                     "Anchored through p, from q + 1");
                       const auto removed = report.notesOf(BoundaryKind::RemovedUnderRetention);
-                      checks.expect(removed.size() == 1 && removed[0].position == 3 * F && removed[0].ledger == "ledger/1",
+                      checks.expect(removed.size() == 1 && removed[0].position == 3 * segFrames && removed[0].ledger == "ledger/1",
                                     "records 1 … q removed under retention");
                       const auto health = rig->sink->health();
                       checks.expect(health.counters.trimsRecorded == 1 && health.counters.segmentsReclaimed == 3, "counted");
@@ -89,14 +89,14 @@ const speclab::Register rotation{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, 3 * F, (4 * F) + 2);
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, 3 * segFrames, (4 * segFrames) + 2);
                       const auto result = rig->sink->trimPrefix(streamP);
-                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == 3 * F, "q is p");
+                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == 3 * segFrames, "q is p");
                       const auto  report = readLog(*rig);
                       const auto* stream = reportOf(report, streamP);
-                      checks.expect(stream != nullptr && stream->report.verdict == Verdict::Anchored && stream->report.anchoredThrough == 3 * F
-                                        && stream->report.firstRetained == (3 * F) + 1 && stream->report.unanchoredFrom == (3 * F) + 1,
+                      checks.expect(stream != nullptr && stream->report.verdict == Verdict::Anchored && stream->report.anchoredThrough == 3 * segFrames
+                                        && stream->report.firstRetained == (3 * segFrames) + 1 && stream->report.unanchoredFrom == (3 * segFrames) + 1,
                                     "Anchored at p with every record past it unanchored");
                       checks.raise();
                   })
@@ -105,10 +105,10 @@ const speclab::Register rotation{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, F - 2, F + 3);
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, segFrames - 2, segFrames + 3);
                       const auto result = rig->sink->trimPrefix(streamP);
-                      checks.expect(result.outcome == RetentionOutcome::NothingToTrim, "the first segment ends at F, above p = F - 2");
+                      checks.expect(result.outcome == RetentionOutcome::NothingToTrim, "the first segment ends at segFrames, above p = segFrames - 2");
                       checks.expect(trimsOf(*rig, "ledger/1") == 0 && heldOf(rig->medium, streamP).first == 1 && segmentsOf(rig->medium, streamP).size() == 2,
                                     "no trim record, no segment removed");
                       checks.expect(rig->sink->health().counters.retentionRefused == 1, "counted as a refusal");
@@ -119,12 +119,13 @@ const speclab::Register rotation{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, 2 * F, 2 * F);  // two full segments, anchor at the last record
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, 2 * segFrames, 2 * segFrames);  // two full segments, anchor at the last record
                       const auto result = rig->sink->trimPrefix(streamP);
-                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == F && result.segmentsReclaimed == 1,
+                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == segFrames && result.segmentsReclaimed == 1,
                                     "only the first segment goes");
-                      checks.expect(heldOf(rig->medium, streamP).first == F + 1 && heldOf(rig->medium, streamP).last == 2 * F, "the last segment stays");
+                      checks.expect(heldOf(rig->medium, streamP).first == segFrames + 1 && heldOf(rig->medium, streamP).last == 2 * segFrames,
+                                    "the last segment stays");
                       checks.expect(rig->sink->trimPrefix(streamP).outcome == RetentionOutcome::NothingToTrim, "nothing more to trim");
                       checks.raise();
                   })
@@ -141,8 +142,8 @@ const speclab::Register anchorBound{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      (void)rig->feed(streamP, 1, (3 * F) + 1, big);
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, (3 * segFrames) + 1, big);
                       checks.expect(rig->sink->trimPrefix(streamP).outcome == RetentionOutcome::NoAnchor, "no p, no rotation");
                       checks.expect(trimsOf(*rig, "ledger/1") == 0 && heldOf(rig->medium, streamP).first == 1, "nothing written, nothing removed");
                       checks.raise();
@@ -152,11 +153,12 @@ const speclab::Register anchorBound{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, 2 * F, (3 * F) + 1);
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, 2 * segFrames, (3 * segFrames) + 1);
                       rig->provider.inner.setAvailable(false);
                       const auto own = rig->sink->trimPrefix(streamP);
-                      checks.expect(own.outcome == RetentionOutcome::Trimmed && own.trimmedThrough == 2 * F, "the adapter's own advance bounds it at 2F");
+                      checks.expect(own.outcome == RetentionOutcome::Trimmed && own.trimmedThrough == 2 * segFrames,
+                                    "the adapter's own advance bounds it at 2F");
                       rig->sink->close();
                       rig->provider.inner.setAvailable(true);
                       checks.expect(rig->start(), "restarted");
@@ -171,13 +173,13 @@ const speclab::Register anchorBound{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(rig->config(), false), "started with no provider");
-                      const std::uint64_t F = perSegment();
-                      (void)rig->feed(streamP, 1, (3 * F) + 1, big);
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, (3 * segFrames) + 1, big);
                       const auto result = rig->sink->trimPrefix(streamP);
-                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == 3 * F, "everything but the open segment");
+                      checks.expect(result.outcome == RetentionOutcome::Trimmed && result.trimmedThrough == 3 * segFrames, "everything but the open segment");
                       const auto  report = readLog(*rig);
                       const auto* stream = reportOf(report, streamP);
-                      checks.expect(stream != nullptr && stream->report.verdict == Verdict::Unanchored && stream->report.firstRetained == (3 * F) + 1,
+                      checks.expect(stream != nullptr && stream->report.verdict == Verdict::Unanchored && stream->report.firstRetained == (3 * segFrames) + 1,
                                     "internally consistent, unanchored, from q + 1");
                       checks.raise();
                   })
@@ -186,15 +188,15 @@ const speclab::Register anchorBound{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(rig->config(), false), "no provider at the time of the trim");
-                      const std::uint64_t F = perSegment();
-                      (void)rig->feed(streamP, 1, (3 * F) + 1, big);
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, (3 * segFrames) + 1, big);
                       checks.expect(rig->sink->trimPrefix(streamP).outcome == RetentionOutcome::Trimmed, "trimmed through 3F");
                       Anchor early;
                       early.anchorFormat     = anchorFormatVersion;
                       early.canonicalVersion = canonicalContractVersion;
                       early.streamId         = std::string{streamP};
-                      early.position         = F;  // the anchor the provider holds is below the trim
-                      early.digest           = chainDigestAt(streamP, F, big);
+                      early.position         = segFrames;  // the anchor the provider holds is below the trim
+                      early.digest           = chainDigestAt(streamP, segFrames, big);
                       early.providerId       = "witness-1";
                       early.counter          = 1;
                       rig->provider.inner.inject(early);
@@ -211,14 +213,14 @@ const speclab::Register anchorBound{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      (void)rig->feed(streamP, 1, F + 1, big);
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, segFrames + 1, big);
                       (void)rig->sink->advanceAnchor(streamP);
                       RetainedPosition retained;
                       const auto       first = readLog(*rig, retained);
                       checks.expect(reportOf(first, streamP)->report.verdict == Verdict::Anchored && retained.anchor(streamP).has_value(),
                                     "the reader retains the checkpoint");
-                      (void)rig->feed(streamP, F + 2, (3 * F), big);
+                      (void)rig->feed(streamP, segFrames + 2, (3 * segFrames), big);
                       (void)rig->sink->advanceAnchor(streamP);
                       checks.expect(rig->sink->trimPrefix(streamP).outcome == RetentionOutcome::Trimmed, "trimmed past the checkpoint");
                       const auto second = readLog(*rig, retained);
@@ -240,12 +242,12 @@ const speclab::Register fullMedium{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F   = perSegment();
-                      std::uint64_t       fed = 0;
+                      const std::uint64_t segFrames = perSegment();
+                      std::uint64_t       fed       = 0;
                       while (rig->sink->accept(makeEvent(streamP, fed + 1, big)))
                           ++fed;
                       const auto full = rig->sink->health();
-                      checks.expect(full.counters.fullEntries == 1 && full.freeSegmentsBeyondReserve == 0 && fed > 5 * F,
+                      checks.expect(full.counters.fullEntries == 1 && full.freeSegmentsBeyondReserve == 0 && fed > 5 * segFrames,
                                     "the stream is full: only the reserve is free");
                       (void)rig->sink->advanceAnchor(streamP);
                       // Fill the ledger's own segment while the medium is full for producers: it opens a segment from the reserve.
@@ -309,8 +311,8 @@ const speclab::Register interruptions{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, 3 * F, (4 * F) + 2);
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, 3 * segFrames, (4 * segFrames) + 2);
                       rig->medium.inject({.operation = Operation::Reclaim, .ordinal = 1, .effect = Effect::CutBefore});
                       const auto result = rig->sink->trimPrefix(streamP);
                       checks.expect(result.outcome == RetentionOutcome::ReclaimInterrupted && result.segmentsReclaimed == 0,
@@ -336,22 +338,22 @@ const speclab::Register interruptions{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, 3 * F, (4 * F) + 2);
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, 3 * segFrames, (4 * segFrames) + 2);
                       rig->medium.inject({.operation = Operation::Reclaim, .ordinal = 2, .effect = Effect::CutBefore});
                       const auto result = rig->sink->trimPrefix(streamP);
                       checks.expect(result.outcome == RetentionOutcome::ReclaimInterrupted && result.segmentsReclaimed == 1, "one segment went");
                       rig->powerLoss();
                       const auto held = heldOf(rig->medium, streamP);
-                      checks.expect(held.first == F + 1, "records k … remain with k above 1");
+                      checks.expect(held.first == segFrames + 1, "records k … remain with k above 1");
                       const auto  report = readLog(*rig);
                       const auto* stream = reportOf(report, streamP);
                       checks.expect(stream != nullptr && stream->disposition == StreamDisposition::InterruptedRemoval
-                                        && stream->report.verdict == Verdict::Anchored && stream->report.firstRetained == (3 * F) + 1
-                                        && stream->report.anchoredThrough == 3 * F,
+                                        && stream->report.verdict == Verdict::Anchored && stream->report.firstRetained == (3 * segFrames) + 1
+                                        && stream->report.anchoredThrough == 3 * segFrames,
                                     "the leftovers reach H_q, and the stream is verified from q + 1");
                       const auto left = report.notesOf(BoundaryKind::LeftoverFromInterruptedRemoval);
-                      checks.expect(left.size() == 1 && left[0].position == F + 1 && left[0].secondPosition == 3 * F,
+                      checks.expect(left.size() == 1 && left[0].position == segFrames + 1 && left[0].secondPosition == 3 * segFrames,
                                     "records k … q are reported as left over");
                       checks.expect(rig->start(), "restarted");
                       checks.expect(rig->sink->restart().faults.empty(), "recovery treats it as consistent: no fault");
@@ -362,8 +364,8 @@ const speclab::Register interruptions{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      feedAnchored(*rig, 3 * F, (4 * F) + 2);
+                      const std::uint64_t segFrames = perSegment();
+                      feedAnchored(*rig, 3 * segFrames, (4 * segFrames) + 2);
                       rig->medium.inject({.operation = Operation::Reclaim, .ordinal = 3, .effect = Effect::Fail});
                       const auto result = rig->sink->trimPrefix(streamP);
                       checks.expect(result.outcome == RetentionOutcome::ReclaimInterrupted && result.segmentsReclaimed == 2, "two went, the third failed");
@@ -558,8 +560,8 @@ const speclab::Register refusals{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig(24, false);
                       checks.expect(rig->start(rig->config(), false), "started on a medium that answers Unsupported");
-                      const std::uint64_t F = perSegment();
-                      (void)rig->feed(streamP, 1, (2 * F) + 1, big);
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, (2 * segFrames) + 1, big);
                       const auto result = rig->sink->trimPrefix(streamP);
                       checks.expect(result.outcome == RetentionOutcome::NotConfirmed && result.segmentsReclaimed == 0, "not confirmed, nothing reclaimed");
                       checks.expect(segmentsOf(rig->medium, streamP).size() == 3 && heldOf(rig->medium, streamP).first == 1, "every segment is still there");
@@ -626,8 +628,8 @@ const speclab::Register missingRecords{
                       speclab::core::Checks checks;
                       auto                  rig = makeRig();
                       checks.expect(rig->start(), "started");
-                      const std::uint64_t F = perSegment();
-                      (void)rig->feed(streamP, 1, (2 * F) + 1, big);
+                      const std::uint64_t segFrames = perSegment();
+                      (void)rig->feed(streamP, 1, (2 * segFrames) + 1, big);
                       (void)rig->sink->closeStream(streamP);
                       checks.expect(rig->medium.reclaim(segmentsOf(rig->medium, streamP).front().ref), "someone removed the first segment");
                       const auto  report = readLog(*rig);
@@ -637,7 +639,7 @@ const speclab::Register missingRecords{
                                         && !stream->report.anchoredThrough,
                                     "Incomplete: the chain cannot start, so nothing is Anchored");
                       const auto notes = report.notesOf(BoundaryKind::PrefixMissingWithoutTrim);
-                      checks.expect(notes.size() == 1 && notes[0].position == F + 1, "records 1 … k - 1 are missing");
+                      checks.expect(notes.size() == 1 && notes[0].position == segFrames + 1, "records 1 … k - 1 are missing");
                       checks.expect(rig->start(), "restarted");
                       checks.expect(hasFaultOf(rig->sink->restart().faults, IntegrityFaultKind::RecordsMissing, streamP)
                                         && rig->sink->restart().recoveredFailed == 1,
@@ -745,6 +747,83 @@ const speclab::Register missingRecords{
             .Execute();
     }};
 
+const speclab::Register reviewCases{
+    "A ledger left over by an interrupted removal is accounted for by its trim, and a retirement needs a trim that covers the anchor",
+    "integration",
+    [] {
+        return speclab::Test("audit-retention-review-cases")
+            .Then("what an interrupted removal left of an earlier ledger is not a stream no ledger opened, and the next removal completes it",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig(40);
+                      checks.expect(rig->start(), "started");
+                      std::vector<std::string> fillers;
+                      for (int k = 0; k < 14; ++k) {
+                          fillers.push_back("filler/" + std::to_string(k));
+                          (void)rig->sink->accept(makeEvent(fillers.back(), 1));
+                          (void)rig->sink->closeStream(fillers.back());
+                      }
+                      rig->sink->close();
+                      checks.expect(segmentsOf(rig->medium, "ledger/1").size() >= 2, "the first ledger spans two segments");
+                      checks.expect(rig->start(), "restarted");
+                      for (const auto& id : fillers) {
+                          if (heldOf(rig->medium, id).count != 0)  // a filler the full medium refused stored nothing
+                              checks.expect(rig->sink->removeStream(id).outcome == RetentionOutcome::Removed, "a stream goes");
+                      }
+                      rig->medium.inject({.operation = Operation::Reclaim, .ordinal = rig->medium.calls(Operation::Reclaim) + 2, .effect = Effect::CutBefore});
+                      const auto cut = rig->sink->removeStream("ledger/1");
+                      checks.expect(cut.outcome == RetentionOutcome::ReclaimInterrupted && cut.segmentsReclaimed == 1,
+                                    "the removal of the ledger is interrupted");
+                      rig->powerLoss();
+                      checks.expect(rig->start(), "restarted again");
+                      checks.expect(!std::ranges::any_of(rig->sink->restart().faults,
+                                                         [](const IntegrityFault& fault) {
+                                                             return fault.kind == IntegrityFaultKind::StreamNotOpened;
+                                                         }),
+                                    "the leftover is not reported as a stream no ledger opened");
+                      checks.expect(rig->sink->removeStream("ledger/1").outcome == RetentionOutcome::Removed, "the next removal completes it");
+                      checks.expect(segmentsOf(rig->medium, "ledger/1").empty(), "nothing of ledger/1 is left");
+                      checks.raise();
+                  })
+            .Then("only the newest origin ledger claims an origin while earlier history exists",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  before = makeRig();
+                      (void)before->start();
+                      closedStream(*before, 3);
+                      before->sink->close();
+                      auto after = makeRig();
+                      after->provider.inner.restore(before->provider.inner.snapshot());
+                      after->session = 5;
+                      checks.expect(after->start(), "an origin ledger on a wiped log");
+                      checks.expect(after->start(), "and a second ledger that cites it");
+                      const auto report = readLog(*after);
+                      checks.expect(report.has(BoundaryKind::NoEarlierHistoryKnown, "ledger/6")
+                                        && !report.has(BoundaryKind::OriginClaimedWhileHistoryExists, "ledger/6"),
+                                    "the first ledger of this log is not blamed for history it never claimed");
+                      checks.raise();
+                  })
+            .Then("a trim that stops short of the anchor is not relayed as a retirement",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      forgeLedger(
+                          rig->medium,
+                          "ledger/1",
+                          {LedgerEntry::origin("ledger/1"), LedgerEntry::streamOpen(streamP), LedgerEntry::streamTrim(streamP, 3, chainDigestAt(streamP, 3))});
+                      (void)rig->provider.advance(makeAnchorClaim(streamP, 5, chainDigestAt(streamP, 5)));
+                      const LogAnalysis log = LogAnalysis::read(rig->medium);
+                      (void)rig->provider.advance(makeAnchorClaim("ledger/1", 3, log.ledger("ledger/1")->headDigest));
+                      rig->session = 1;
+                      checks.expect(rig->start(), "started");
+                      checks.expect(rig->provider.retires == 0 && rig->sink->restart().retirementsCompleted == 0, "no retirement was relayed");
+                      checks.expect(hasFaultOf(rig->sink->restart().faults, IntegrityFaultKind::AnchoredEvidenceGone, streamP),
+                                    "the anchored evidence is reported as gone");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 /** @brief One cut point of a retention operation. */
 struct Cut {
     Operation   operation;
@@ -758,64 +837,67 @@ const speclab::Register retentionCuts{
     "integration",
     [] {
         return speclab::Test("audit-retention-cuts")
-            .Then(
-                "rotation, cut at every point of the trim record and of the removal",
-                [] {
-                    speclab::core::Checks checks;
-                    const std::uint64_t   F       = perSegment();
-                    const auto            prepare = [&] {
-                        auto rig = makeRig();
-                        (void)rig->start();
-                        feedAnchored(*rig, 3 * F, (4 * F) + 2);
-                        return rig;
-                    };
-                    auto       dry        = prepare();
-                    const auto openBefore = dry->medium.calls(Operation::Open), appendBefore = dry->medium.calls(Operation::Append),
-                               syncBefore = dry->medium.calls(Operation::Sync), reclaimBefore = dry->medium.calls(Operation::Reclaim);
-                    checks.expect(dry->sink->trimPrefix(streamP).outcome == RetentionOutcome::Trimmed, "the dry run trims");
-                    std::vector<Cut> cuts;
-                    for (auto at = appendBefore + 1; at <= dry->medium.calls(Operation::Append); ++at) {
-                        cuts.push_back({Operation::Append, at, Effect::CutBefore, 0});
-                        cuts.push_back({Operation::Append, at, Effect::CutPartial, 20});
-                        cuts.push_back({Operation::Append, at, Effect::CutAfter, 0});
-                    }
-                    for (auto at = syncBefore + 1; at <= dry->medium.calls(Operation::Sync); ++at) {
-                        cuts.push_back({Operation::Sync, at, Effect::CutBefore, 0});
-                        cuts.push_back({Operation::Sync, at, Effect::CutAfter, 0});
-                    }
-                    for (auto at = reclaimBefore + 1; at <= dry->medium.calls(Operation::Reclaim); ++at) {
-                        cuts.push_back({Operation::Reclaim, at, Effect::CutBefore, 0});
-                        cuts.push_back({Operation::Reclaim, at, Effect::CutAfter, 0});
-                    }
-                    (void)openBefore;
-                    checks.expect(cuts.size() >= 10, "the operation has several write and acknowledgment points");
-                    bool recognised = true;
-                    bool completes  = true;
-                    for (const Cut& cut : cuts) {
-                        auto rig = prepare();
-                        rig->medium.inject({.operation = cut.operation, .ordinal = cut.ordinal, .effect = cut.effect, .partialBytes = cut.partialBytes});
-                        (void)rig->sink->trimPrefix(streamP);
-                        rig->powerLoss();
-                        const auto  first  = readLog(*rig);
-                        const auto* stream = reportOf(first, streamP);
-                        recognised = recognised && stream != nullptr && stream->report.verdict == Verdict::Anchored && stream->report.anchoredThrough == 3 * F;
-                        recognised = recognised && stream->disposition != StreamDisposition::GapAfterTrim
-                                     && stream->disposition != StreamDisposition::PrefixMissing;
-                        recognised         = recognised && std::ranges::none_of(first.streams, [](const StreamBoundaryReport& item) {
-                                         return item.report.verdict == Verdict::Inconsistent;
-                                     });
-                        completes          = completes && rig->start();
-                        const auto again   = rig->sink->trimPrefix(streamP);
-                        completes          = completes && (again.outcome == RetentionOutcome::Trimmed || again.outcome == RetentionOutcome::NothingToTrim);
-                        const auto doneLog = readLog(*rig);
-                        const auto done    = reportOf(doneLog, streamP);
-                        completes          = completes && done != nullptr && done->disposition == StreamDisposition::Rotated
-                                    && done->report.verdict == Verdict::Anchored;
-                    }
-                    checks.expect(recognised, "after any cut the stream is Anchored through p, in a disposition the reader names, and nothing is Inconsistent");
-                    checks.expect(completes, "the next start's trim completes the rotation");
-                    checks.raise();
-                })
+            .Then("rotation, cut at every point of the trim record and of the removal",
+                  [] {
+                      speclab::core::Checks checks;
+                      const std::uint64_t   segFrames = perSegment();
+                      const auto            prepare   = [&] {
+                          auto rig = makeRig();
+                          (void)rig->start();
+                          feedAnchored(*rig, 3 * segFrames, (4 * segFrames) + 2);
+                          return rig;
+                      };
+                      auto       dry           = prepare();
+                      const auto openBefore    = dry->medium.calls(Operation::Open);
+                      const auto appendBefore  = dry->medium.calls(Operation::Append);
+                      const auto syncBefore    = dry->medium.calls(Operation::Sync);
+                      const auto reclaimBefore = dry->medium.calls(Operation::Reclaim);
+                      checks.expect(dry->sink->trimPrefix(streamP).outcome == RetentionOutcome::Trimmed, "the dry run trims");
+                      std::vector<Cut> cuts;
+                      for (auto at = appendBefore + 1; at <= dry->medium.calls(Operation::Append); ++at) {
+                          cuts.push_back({Operation::Append, at, Effect::CutBefore, 0});
+                          cuts.push_back({Operation::Append, at, Effect::CutPartial, 20});
+                          cuts.push_back({Operation::Append, at, Effect::CutAfter, 0});
+                      }
+                      for (auto at = syncBefore + 1; at <= dry->medium.calls(Operation::Sync); ++at) {
+                          cuts.push_back({Operation::Sync, at, Effect::CutBefore, 0});
+                          cuts.push_back({Operation::Sync, at, Effect::CutAfter, 0});
+                      }
+                      for (auto at = reclaimBefore + 1; at <= dry->medium.calls(Operation::Reclaim); ++at) {
+                          cuts.push_back({Operation::Reclaim, at, Effect::CutBefore, 0});
+                          cuts.push_back({Operation::Reclaim, at, Effect::CutAfter, 0});
+                      }
+                      (void)openBefore;
+                      checks.expect(cuts.size() >= 10, "the operation has several write and acknowledgment points");
+                      bool recognised = true;
+                      bool completes  = true;
+                      for (const Cut& cut : cuts) {
+                          auto rig = prepare();
+                          rig->medium.inject({.operation = cut.operation, .ordinal = cut.ordinal, .effect = cut.effect, .partialBytes = cut.partialBytes});
+                          (void)rig->sink->trimPrefix(streamP);
+                          rig->powerLoss();
+                          const auto  first  = readLog(*rig);
+                          const auto* stream = reportOf(first, streamP);
+                          recognised         = recognised && stream != nullptr && stream->report.verdict == Verdict::Anchored
+                                       && stream->report.anchoredThrough == 3 * segFrames;
+                          recognised = recognised && stream->disposition != StreamDisposition::GapAfterTrim
+                                       && stream->disposition != StreamDisposition::PrefixMissing;
+                          recognised          = recognised && std::ranges::none_of(first.streams, [](const StreamBoundaryReport& item) {
+                                           return item.report.verdict == Verdict::Inconsistent;
+                                       });
+                          completes           = completes && rig->start();
+                          const auto again    = rig->sink->trimPrefix(streamP);
+                          completes           = completes && (again.outcome == RetentionOutcome::Trimmed || again.outcome == RetentionOutcome::NothingToTrim);
+                          const auto  doneLog = readLog(*rig);
+                          const auto* done    = reportOf(doneLog, streamP);
+                          completes           = completes && done != nullptr && done->disposition == StreamDisposition::Rotated
+                                      && done->report.verdict == Verdict::Anchored;
+                      }
+                      checks.expect(recognised,
+                                    "after any cut the stream is Anchored through p, in a disposition the reader names, and nothing is Inconsistent");
+                      checks.expect(completes, "the next start's trim completes the rotation");
+                      checks.raise();
+                  })
             .Then("whole-stream removal, cut at every point, ends Retired once the next start has completed the retirement",
                   [] {
                       speclab::core::Checks checks;
@@ -825,9 +907,10 @@ const speclab::Register retentionCuts{
                           closedStream(*rig, 5);
                           return rig;
                       };
-                      auto       dry          = prepare();
-                      const auto appendBefore = dry->medium.calls(Operation::Append), syncBefore = dry->medium.calls(Operation::Sync),
-                                 reclaimBefore = dry->medium.calls(Operation::Reclaim);
+                      auto       dry           = prepare();
+                      const auto appendBefore  = dry->medium.calls(Operation::Append);
+                      const auto syncBefore    = dry->medium.calls(Operation::Sync);
+                      const auto reclaimBefore = dry->medium.calls(Operation::Reclaim);
                       checks.expect(dry->sink->removeStream(streamP).outcome == RetentionOutcome::Removed, "the dry run removes");
                       std::vector<Cut> cuts;
                       for (auto at = appendBefore + 1; at <= dry->medium.calls(Operation::Append); ++at) {

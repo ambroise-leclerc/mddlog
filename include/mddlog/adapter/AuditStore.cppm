@@ -408,13 +408,12 @@ enum class RetentionOutcome : std::uint8_t {
     NotRotatable,
     /** @brief The stream is still being written, or ended on a failure this session. */
     StreamNotEnded,
-    /** @brief Recovery found the stream inconsistent: its records are never removed (10.3). */
+    /** @brief Recovery found the stream inconsistent, a continuity check against the provider's anchor included: its records are never removed (10.3, 7.3), and
+       a fault is reported. */
     StreamInconsistent,
     /** @brief A provider is configured and has accepted no anchor for the stream (10.4). */
     NoAnchor,
     ProviderUnavailable,
-    /** @brief The stored records do not reproduce the provider's digest: nothing was removed, and a fault was reported (7.3). */
-    ContinuityFailed,
     /** @brief No segment ends at or before the bound (10.4), or nothing is left to trim. */
     NothingToTrim,
     /** @brief The trim record could not be durably confirmed: nothing was removed (9.3). */

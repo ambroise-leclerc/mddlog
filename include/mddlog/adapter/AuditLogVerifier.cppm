@@ -390,8 +390,10 @@ private:
             if (!ledgerImage.closedOrderly)
                 out.notes.push_back(makeBoundaryNote(BoundaryKind::LedgerNotClosed, ledgerImage.id));
             if (ledgerImage.head == LedgerRecordKind::Origin) {
-                out.notes.push_back(makeBoundaryNote(out.unlisted.empty() ? BoundaryKind::NoEarlierHistoryKnown : BoundaryKind::OriginClaimedWhileHistoryExists,
-                                                     ledgerImage.id));
+                const bool isNewest = newest.has_value() && *newest == ledgerImage.id;
+                out.notes.push_back(
+                    makeBoundaryNote(isNewest && !out.unlisted.empty() ? BoundaryKind::OriginClaimedWhileHistoryExists : BoundaryKind::NoEarlierHistoryKnown,
+                                     ledgerImage.id));
             }
             if (ledgerImage.predecessor.has_value())
                 citePredecessor(log, ledgerImage, *ledgerImage.predecessor, out);

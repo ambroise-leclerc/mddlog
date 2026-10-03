@@ -30,7 +30,7 @@ inline constexpr std::size_t segmentBytes = 2048;
 /** @brief Record frames of the given detail size that fit in one segment of the test configuration, after a 45-byte-ish opening. */
 [[nodiscard]] inline std::uint64_t framesPerSegment(std::string_view stream, std::size_t detailSize) {
     const auto encoded = CanonicalRecord::encode(makeEvent(stream, 1, detailSize));
-    return (segmentBytes - encodeSegmentOpening(stream, 0, 1).size()) / recordFrameSize(encoded->size());
+    return (segmentBytes - encodeSegmentOpening(stream, 0, 1).size()) / recordFrameSize(encoded.value_or(CanonicalRecord{}).size());
 }
 
 /** @brief H_k of a fresh chain over `makeEvent(stream, 1..k, detailSize)`. */
@@ -124,7 +124,7 @@ struct Rig {
         medium.restart(policy);
     }
     /** @brief Hand `count` events of `stream` to the sink, from sequence `from`. */
-    std::size_t feed(std::string_view stream, std::uint64_t from, std::uint64_t count, std::size_t detailSize = 12) {
+    [[nodiscard]] std::size_t feed(std::string_view stream, std::uint64_t from, std::uint64_t count, std::size_t detailSize = 12) const {
         std::size_t accepted = 0;
         for (std::uint64_t k = from; k < from + count; ++k)
             accepted += sink->accept(makeEvent(stream, k, detailSize)) ? 1U : 0U;
@@ -197,7 +197,7 @@ struct Held {
 }
 
 [[nodiscard]] inline AuditEvent ledgerEvent(const LedgerEntry& entry, std::string_view ledgerId, std::uint64_t sequence) {
-    return *buildLedgerEvent(entry, ledgerId, sequence, RawTime::unavailable());
+    return buildLedgerEvent(entry, ledgerId, sequence, RawTime::unavailable()).value_or(AuditEvent{});
 }
 
 /**
@@ -220,7 +220,7 @@ inline SegmentRef forgeSegment(StorageMedium&              medium,
         if (i >= from) {
             Sha256Digest stored = chained->digest;
             if (corruptDigest == i)
-                stored[0] ^= 0x01;  // a rewrite that recomputed the frame's check but not the chain
+                stored[0] = static_cast<std::uint8_t>(stored[0] ^ 0x01U);  // a rewrite that recomputed the frame's check but not the chain
             const auto frame = encodeRecordFrame(chained->canonical.bytes(), stored);
             (void)medium.append(opened.segment, frame);
         }
@@ -230,12 +230,14 @@ inline SegmentRef forgeSegment(StorageMedium&              medium,
 
 /** @brief Copy every segment of one medium onto another, byte for byte, as a restore or a merge of two logs would. */
 inline void copySegments(StorageMedium& from, StorageMedium& to) {
-    for (const auto& info : *from.segments()) {
-        const auto bytes = *from.read(info.segment, 0, info.size);
+    for (const auto& info : from.segments().value_or(std::vector<SegmentInfo>{})) {
+        const auto bytes = from.read(info.segment, 0, info.size).value_or(std::vector<std::uint8_t>{});
         const auto scan  = scanSegment(bytes);
-        const auto open  = encodeSegmentOpening(scan.header->streamId, scan.header->segmentIndex, scan.header->firstSequence);
-        const auto made  = to.open(
-            {.streamId = scan.header->streamId, .segmentIndex = scan.header->segmentIndex, .firstSequence = scan.header->firstSequence, .bytes = open});
+        if (!scan.header.has_value())
+            continue;
+        const SegmentHeader& header = *scan.header;
+        const auto           open   = encodeSegmentOpening(header.streamId, header.segmentIndex, header.firstSequence);
+        const auto made = to.open({.streamId = header.streamId, .segmentIndex = header.segmentIndex, .firstSequence = header.firstSequence, .bytes = open});
         (void)to.append(made.segment, std::span{bytes}.subspan(open.size()));
     }
 }
