@@ -1,4 +1,7 @@
-/** @brief Persisting audit sink: segments, durable confirmation and storage health (ADR-004 Decisions 9.3, 9.5 and 9.6). Adapter zone only. */
+/**
+ * @brief Persisting audit sink: segments, durable confirmation, storage health, and with a ledger, restart, rotation and retention (ADR-004 Decisions 9.3, 9.5,
+ * 9.6, 10.2 to 10.5). Adapter zone only.
+ */
 
 export module mddlog.adapter.auditstore;
 
@@ -9,6 +12,8 @@ export import mddlog.adapter.auditlayout;
 export import mddlog.adapter.auditmedium;
 export import mddlog.adapter.auditanchor;
 export import mddlog.adapter.auditverifier;
+export import mddlog.adapter.auditledger;
+export import mddlog.adapter.auditlog;
 
 export namespace mddlog::adapter {
 
@@ -19,7 +24,9 @@ enum class StreamStorageState : std::uint8_t {
     /** @brief It needs a segment and only the ledger's reserve is free. Nothing is appended, nothing is skipped; events stay in the ring (9.6). */
     Full,
     /** @brief The instance ended on a storage failure or an integrity fault. Nothing more is written to it (9.6). */
-    Failed
+    Failed,
+    /** @brief Orderly close: its last record is confirmed and the ledger recorded `close`. Nothing more is accepted for it (10.2). */
+    Closed
 };
 
 /** @brief The cause the health signal names last (9.6). */
@@ -33,7 +40,9 @@ enum class StorageIssue : std::uint8_t {
     DuplicateMismatch,
     SequenceOutOfOrder,
     NotEncodable,
-    MediumUnreadable
+    MediumUnreadable,
+    /** @brief Recovery or a provider check found a suspect stream or ledger (10.3, 7.3). The records are never repaired. */
+    IntegrityFault
 };
 
 /** @brief When a sync is issued, besides the one before a rotation and the one on orderly close (9.3). */
@@ -42,6 +51,25 @@ struct SyncPolicy {
     std::size_t recordBound = 1;
     /** @brief Also sync once the oldest unconfirmed record is this old. Checked at each accept() and each tick(). Must be positive. */
     std::optional<std::chrono::nanoseconds> ageBound;
+};
+
+/** @brief The ledger of one adapter start (10.1): its stream identity and the host's clock for its records. */
+struct LedgerConfig {
+    /** @brief This start's ledger stream identity. The host guarantees it is new, under the uniqueness obligations of ADR-002 Decision 5. */
+    std::string streamId;
+    /** @brief Host-supplied time stamped on ledger records; unavailable when empty. */
+    std::function<core::RawTime()> time;
+};
+
+/**
+ * @brief What relieve() is allowed to remove (10.4, 10.5). Nothing is removed without a declaration: trimPrefix() and removeStream() are the host's explicit
+ * calls, and these flags are the integrator's standing permission for a full producer stream.
+ */
+struct RetentionPolicy {
+    /** @brief Trim the prefix of a kept stream, up to its anchor, one segment at a time (10.4). */
+    bool rotate = false;
+    /** @brief Remove whole ended streams, and ledgers that satisfy 10.5, oldest first, after rotation (10.5). */
+    bool removeEnded = false;
 };
 
 /** @brief What the integrator declares about the medium and the sink (9.1, 9.3, 9.6). */
@@ -58,6 +86,13 @@ struct StorageConfig {
     /** @brief Where events accepted but never confirmed are reported as losses after admission when an instance fails. Typically AuditSinkAdapter::reportLoss.
      */
     std::function<void(std::uint64_t)> reportLoss;
+    /** @brief The ledger of this start. Without it, restart, rotation and retention are not available and the sink behaves as before (10.1). */
+    std::optional<LedgerConfig> ledger;
+    /**
+     * @brief The anchor provider (7.2), or null: no anchor is ever advanced or retired, and rotation is not bounded by an anchor (10.4). Must outlive the sink.
+     */
+    AnchorProvider* provider = nullptr;
+    RetentionPolicy retention;
 };
 
 enum class StorageConfigError : std::uint8_t {
@@ -66,7 +101,14 @@ enum class StorageConfigError : std::uint8_t {
     NoProducerStreams,
     InvalidSyncPolicy,
     /** @brief The medium cannot hold the ledger's reserve and one more segment (9.6). */
-    MediumTooSmall
+    MediumTooSmall,
+    /** @brief The ledger's stream identity is one AuditEvent rejects. */
+    InvalidLedgerStream,
+    /**
+     * @brief The medium already holds a stream instance with the ledger's identity, or a ledger in the log names it, even for a stream whose records were
+     * removed: a restart starts a new ledger (10.1).
+     */
+    LedgerIdentityInUse
 };
 
 /**
@@ -329,16 +371,105 @@ struct StorageCounters {
     std::uint64_t invalidStream = 0;
     /** @brief Events refused because S producer streams were already open. */
     std::uint64_t streamLimitRefused = 0;
-    /** @brief Events refused because the medium already holds an instance of that identity: a restart must start a new instance (ADR-002 Decision 5). */
+    /**
+     * @brief Events refused because the medium already holds an instance of that identity, or, with a ledger, because a ledger in the log names it: a restart
+     * must start a new instance (ADR-002 Decision 5), and a removed stream's trims would otherwise be read as the new instance's.
+     */
     std::uint64_t streamIdentityInUse = 0;
     /** @brief Events accepted but never confirmed when an instance failed, reported as losses after admission (9.6). */
     std::uint64_t notDurableAtFailure = 0;
     /** @brief Findings of the startup check (9.6). */
     std::uint64_t recoveryFindings = 0;
+    /** @brief Events refused for an action under the reserved ledger namespace (10.1). Producer admission refuses them first. */
+    std::uint64_t reservedActionRefused = 0;
+    /** @brief Events refused because the ledger failed: nothing may be opened or stored without it (10.2). */
+    std::uint64_t ledgerRefused = 0;
+    std::uint64_t ledgerRecords = 0;
+    /** @brief Trim records written, whole segments reclaimed, and whole streams removed (10.4, 10.5). */
+    std::uint64_t trimsRecorded     = 0;
+    std::uint64_t segmentsReclaimed = 0;
+    std::uint64_t streamsRemoved    = 0;
+    /** @brief Retirements the provider accepted (10.5). */
+    std::uint64_t retirements = 0;
+    /** @brief Retention operations that removed nothing, whatever the reason (10.4). RetentionResult::trimmedThrough says whether a trim was still recorded. */
+    std::uint64_t retentionRefused = 0;
+    std::uint64_t anchorsAccepted  = 0;
+    /** @brief Refusals of a fresh claim, which mean the log or the provider diverged (7.3). */
+    std::uint64_t anchorsRefused     = 0;
+    std::uint64_t anchorsUnavailable = 0;
+    /** @brief Suspect streams or ledgers found at start or by a provider check (10.3, 7.3). */
+    std::uint64_t integrityFaults = 0;
+};
+
+/** @brief Why a retention operation did what it did (10.4, 10.5). Only Trimmed and Removed removed anything. */
+enum class RetentionOutcome : std::uint8_t {
+    /** @brief The trim record was confirmed and the segments were reclaimed. */
+    Trimmed,
+    /** @brief The whole stream was trimmed and reclaimed. */
+    Removed,
+    /** @brief The sink has no ledger, or its ledger failed: nothing may be removed without a recorded trim. */
+    NoLedger,
+    UnknownStream,
+    /** @brief The target is a ledger, which is not rotated (10.5), or the current ledger itself. */
+    NotRotatable,
+    /** @brief The stream is still being written, or ended on a failure this session. */
+    StreamNotEnded,
+    /** @brief Recovery found the stream inconsistent, a continuity check against the provider's anchor included: its records are never removed (10.3, 7.3), and
+       a fault is reported. */
+    StreamInconsistent,
+    /** @brief A provider is configured and has accepted no anchor for the stream (10.4). */
+    NoAnchor,
+    ProviderUnavailable,
+    /** @brief No segment ends at or before the bound (10.4), or nothing is left to trim. */
+    NothingToTrim,
+    /** @brief The trim record could not be durably confirmed, or the medium answers Unsupported so it never can: nothing was removed (9.3). */
+    NotConfirmed,
+    /**
+     * @brief The ledger's anchor could not be advanced past the trim, so a retirement could not be authorized later (7.2, 10.5). The trim is recorded and
+     * nothing was removed: a reader reports a removal that did not happen.
+     */
+    LedgerNotAnchored,
+    /**
+     * @brief The ledger rules of 10.5 are not met: a stream it opened remains, or no newer ledger cites it. Also while the ledger holds the highest trim of a
+     * stream the log still holds, or of a removed stream whose retirement is still owed: removing it would erase the only record of that removal.
+     */
+    LedgerStillNeeded,
+    MediumUnreadable,
+    /** @brief The trim was confirmed but the medium did not reclaim every segment: the removal is interrupted (10.4). */
+    ReclaimInterrupted
+};
+
+struct RetentionResult {
+    RetentionOutcome outcome = RetentionOutcome::NothingToTrim;
+    /** @brief The trim's position `q`, when a trim was recorded, even when nothing was then removed (NotConfirmed after the write, LedgerNotAnchored). */
+    std::uint64_t trimmedThrough    = 0;
+    std::size_t   segmentsReclaimed = 0;
+    /** @brief The provider accepted the retirement of a whole stream. False when none was needed, or when it is still owed (10.5). */
+    bool retired = false;
+};
+
+/** @brief What the ledger recorded at this start (10.2, 10.3). */
+struct RestartReport {
+    bool ledgerEnabled = false;
+    /** @brief Record 1 and the `recovered` records are written; false when the ledger failed while writing them. */
+    bool             startWritten = false;
+    LedgerRecordKind firstRecord  = LedgerRecordKind::Origin;
+    /** @brief The earlier ledger record 1 cites; empty for `origin`. */
+    std::string                  predecessor;
+    bool                         predecessorChecks = false;
+    std::optional<std::uint64_t> predecessorPosition;
+    std::size_t                  recoveredChecked = 0;
+    std::size_t                  recoveredFailed  = 0;
+    bool                         fork             = false;
+    /** @brief Retirements owed since an earlier start, which this start completed (7.3, 10.5). */
+    std::size_t                 retirementsCompleted = 0;
+    std::vector<IntegrityFault> faults;
 };
 
 struct StorageHealthSnapshot {
     std::vector<StreamStorageHealth> streams;
+    /** @brief The suspect streams and ledgers found at start and by provider checks. Nothing here is an audit event (9.6). */
+    std::vector<IntegrityFault> integrity;
     /** @brief Free segments beyond the ledger's reserve, as last counted: what producer streams may still open. */
     std::uint64_t   freeSegmentsBeyondReserve = 0;
     std::uint64_t   reserveSegments           = 0;
@@ -354,12 +485,22 @@ struct StorageHealthSnapshot {
  * position, and only a medium that answers Durable is eligible for it. A medium that answers Unsupported stores records and confirms none.
  *
  * It never reports a storage failure as an audit event or through any sink that writes to the failing storage (9.6): failures are counted in health().
- * accept(), tick(), flush() and close() belong to the one consumer thread that drains the rings, like AuditSinkAdapter::drainOnce(). health(),
- * durablePosition() and durableClaim() may be called from any thread. The medium must outlive the sink.
+ * accept(), tick(), flush(), close(), closeStream(), advanceAnchor(), trimPrefix(), removeStream() and relieve() belong to the one consumer thread that
+ * drains the rings, like AuditSinkAdapter::drainOnce(). health(), durablePosition() and durableClaim() may be called from any thread; restart() is fixed at
+ * creation. The medium and the anchor provider must outlive the sink.
+ *
+ * With a ledger (StorageConfig::ledger) the sink also records each stream before it stores anything of it, links this start to the previous one, closes
+ * streams in order, and offers rotation and retention that write their trim record durably before any segment is reclaimed (ADR-004 Decision 10). It never
+ * presents a restart as continuity: every start begins new stream instances.
  */
 class PersistingAuditSink final : public sinks::AuditSink {
 public:
-    /** @brief Validate the declared configuration against 9.6, run the startup check of the medium, and build the sink. Writes nothing. */
+    /**
+     * @brief Validate the declared configuration against 9.6, run the startup check of the medium, and build the sink.
+     *
+     * Without a ledger it writes nothing. With one it also recovers chain state and writes the ledger's record 1 and its `recovered` records, each durably
+     * confirmed before the next (10.2, 10.3); restart() says what was recorded, and a failure to write them is a failed ledger in health(), not an error here.
+     */
     [[nodiscard]] static std::expected<std::shared_ptr<PersistingAuditSink>, StorageConfigError> create(StorageMedium& medium, StorageConfig config) {
         if (config.segmentSize < maxSegmentOpeningSize + maxRecordFrameSize)
             return std::unexpected{StorageConfigError::SegmentTooSmall};
@@ -370,13 +511,26 @@ public:
         const std::size_t reserve = ledgerReserveSegments(config.segmentSize, config.segmentCount, config.maxProducerStreams);
         if (config.segmentCount < reserve + 1)
             return std::unexpected{StorageConfigError::MediumTooSmall};
+        if (config.ledger.has_value() && !core::AuditEvent::validStreamId(config.ledger->streamId))
+            return std::unexpected{StorageConfigError::InvalidLedgerStream};
         if (!config.clock)
             config.clock = [] {
                 return std::chrono::steady_clock::now();
             };
         auto recovered = checkMediumAtStart(medium);
+        if (config.ledger.has_value() && std::ranges::find(recovered.streamsHeld, config.ledger->streamId) != recovered.streamsHeld.end())
+            return std::unexpected{StorageConfigError::LedgerIdentityInUse};
+        std::optional<LogAnalysis> log;
+        if (config.ledger.has_value()) {
+            log.emplace(LogAnalysis::read(medium));
+            if (std::ranges::binary_search(namedIdentities(*log), config.ledger->streamId, std::less<>{}))
+                return std::unexpected{StorageConfigError::LedgerIdentityInUse};
+        }
         // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the constructor is private, so make_shared cannot reach it.
-        return std::shared_ptr<PersistingAuditSink>(new PersistingAuditSink(medium, std::move(config), reserve, std::move(recovered)));
+        std::shared_ptr<PersistingAuditSink> sink{new PersistingAuditSink(medium, std::move(config), reserve, std::move(recovered))};
+        if (log.has_value())
+            sink->startLedger(*log);
+        return sink;
     }
 
     PersistingAuditSink(const PersistingAuditSink&)            = delete;
@@ -400,6 +554,15 @@ public:
     [[nodiscard]] bool accept(const core::AuditEvent& event) override {
         if (closed)
             return false;
+        if (core::isReservedAuditAction(event.action())) {
+            // Producer admission refuses these first (10.1). A record built any other way never reaches the medium as a producer's: it could pass for a ledger.
+            counters.reservedActionRefused.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+        if (ledger != nullptr && ledger->state == StreamStorageState::Failed) {
+            counters.ledgerRefused.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
         const std::string_view id = event.streamId();
         if (!core::AuditEvent::validStreamId(id)) {
             counters.invalidStream.fetch_add(1, std::memory_order_relaxed);
@@ -407,23 +570,29 @@ public:
         }
         auto it = streams.find(id);
         if (it == streams.end()) {
-            if (std::ranges::binary_search(startup.streamsHeld, id)) {
+            if (std::ranges::binary_search(startup.streamsHeld, id) || std::ranges::binary_search(namedByLedgers, id, std::less<>{})
+                || (ledger != nullptr && ledger->id == id)) {
                 counters.streamIdentityInUse.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
             // S bounds the instances open at once: one that failed has ended and no longer counts (9.6).
             std::size_t open = 0;
             for (const auto& entry : streams)
-                open += entry.second.state != StreamStorageState::Failed ? 1U : 0U;
+                open += entry.second.state != StreamStorageState::Failed && entry.second.state != StreamStorageState::Closed ? 1U : 0U;
             if (open >= config.maxProducerStreams) {
                 counters.streamLimitRefused.fetch_add(1, std::memory_order_relaxed);
+                return false;
+            }
+            // The ledger records the stream before any record of it is stored, and confirms that first (10.2).
+            if (ledger != nullptr && !writeLedger(LedgerEntry::streamOpen(id))) {
+                counters.ledgerRefused.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
             it = streams.try_emplace(std::string{id}, std::string{id}).first;
             publish(it->second);
         }
         Stream& stream = it->second;
-        if (stream.state == StreamStorageState::Failed)
+        if (stream.state == StreamStorageState::Failed || stream.state == StreamStorageState::Closed)
             return false;
         return append(stream, event);
     }
@@ -440,6 +609,74 @@ public:
         }
     }
 
+    /**
+     * @brief Free segments for full producer streams under the declared retention policy (10.4, 10.5). Call it from the consumer thread when a stream is full.
+     *
+     * Rotation first, one segment of one stream at a time, then, if declared, the removal of whole ended streams, oldest first. It stops as soon as a free
+     * segment beyond the reserve exists. It removes nothing the policy does not allow, and never records of a stream recovery found inconsistent. Returns the
+     * segments reclaimed.
+     */
+    std::size_t relieve() {
+        if (ledger == nullptr || ledger->state == StreamStorageState::Failed || closed)
+            return 0;
+        const bool anyFull = std::ranges::any_of(streams, [](const auto& entry) {
+            return entry.second.state == StreamStorageState::Full;
+        });
+        if (!anyFull || (!config.retention.rotate && !config.retention.removeEnded))
+            return 0;
+        std::size_t reclaimed = 0;
+        const auto  roomLeft  = [&] {
+            const auto beyond = refreshFree();
+            return beyond.has_value() && *beyond > 0;
+        };
+        // One reading of the log and one recovery serve every attempt that changes nothing; an attempt that writes or removes anything invalidates them.
+        std::optional<LogState> cache;
+        const auto              attempt = [&](std::string_view target, bool whole) {
+            const std::uint64_t   ledgerBefore = ledger->appended;
+            const RetentionResult result       = retain(target, whole, &cache);
+            if (result.segmentsReclaimed != 0 || ledger->appended != ledgerBefore)
+                cache.reset();
+            return result.segmentsReclaimed;
+        };
+        std::vector<std::string> order;
+        {
+            const LogState& state = current(cache);
+            for (const LedgerImage* item : state.log.ledgersOldestFirst()) {
+                for (const auto& stream : item->opened) {
+                    if (state.log.image().find(stream) != nullptr && std::ranges::find(order, stream) == order.end())
+                        order.push_back(stream);
+                }
+            }
+        }
+        if (config.retention.rotate) {
+            for (const auto& stream : order) {
+                if (roomLeft())
+                    return reclaimed;
+                reclaimed += attempt(stream, false);
+            }
+        }
+        if (config.retention.removeEnded) {
+            for (const auto& stream : order) {
+                if (roomLeft())
+                    return reclaimed;
+                reclaimed += attempt(stream, true);
+            }
+            // A ledger goes only once every stream it opened has gone and a newer ledger cites it (10.5).
+            std::vector<std::string> oldLedgers;
+            for (const LedgerImage* item : current(cache).log.ledgersOldestFirst()) {
+                if (item->id != ledger->id)
+                    oldLedgers.push_back(item->id);
+            }
+            for (const auto& id : oldLedgers) {
+                if (roomLeft())
+                    return reclaimed;
+                reclaimed += attempt(id, true);
+            }
+        }
+        (void)roomLeft();
+        return reclaimed;
+    }
+
     /** @brief Sync every stream's open segment now, whatever the policy says. */
     void flush() {
         for (auto& entry : streams) {
@@ -448,12 +685,87 @@ public:
         }
     }
 
-    /** @brief Orderly close: a final sync of every stream, then no more events are accepted (9.3). Ledger close records belong to Decision 10. */
+    /**
+     * @brief Orderly close: a final sync of every stream, then no more events are accepted (9.3).
+     *
+     * With a ledger, each stream is closed as closeStream() says, and `mddlog.ledger.close` is written only if every stream it opened was closed (10.2): a
+     * stream that failed leaves the session without it, which a reader reports as an abrupt end. The ledger then attempts its own anchor.
+     */
     void close() {
         if (closed)
             return;
-        flush();
+        if (ledger == nullptr) {
+            flush();
+            closed = true;
+            return;
+        }
+        bool everyStreamClosed = true;
+        for (auto& entry : streams) {
+            if (entry.second.state != StreamStorageState::Closed && !closeOne(entry.second))
+                everyStreamClosed = false;
+        }
+        if (everyStreamClosed && ledger->state != StreamStorageState::Failed) {
+            if (writeLedger(LedgerEntry::ledgerClose(ledger->id)))
+                (void)advanceAnchor(*ledger);
+        }
         closed = true;
+    }
+
+    /**
+     * @brief Orderly close of one stream: its last record durably confirmed, the anchor attempt of 7.3, then the ledger's `close` record (10.2).
+     *
+     * False when the stream is unknown, failed, or its confirmation or the ledger write failed. Nothing more is accepted for a closed stream. It cites the last
+     * appended position: on an eligible medium that is the durable position, and on a medium that answers Unsupported it is only what was handed off.
+     */
+    [[nodiscard]] bool closeStream(std::string_view streamId) {
+        const auto found = streams.find(streamId);
+        if (found == streams.end() || closed)
+            return false;
+        return closeOne(found->second);
+    }
+
+    /**
+     * @brief Offer the stream's durable position to the anchor provider (7.3). True when the provider accepted a claim.
+     *
+     * Never above the durable position, never from state read back from storage, and never again for a position already accepted. Refusing a fresh claim as
+     * `positionNotIncreasing` or `conflict` is an integrity fault, not a transient failure; unavailable is counted and the claim is not retried here.
+     */
+    bool advanceAnchor(std::string_view streamId) {
+        const auto found = streams.find(streamId);
+        if (found != streams.end())
+            return advanceAnchor(found->second);
+        if (ledger != nullptr && ledger->id == streamId)
+            return advanceAnchor(*ledger);
+        return false;
+    }
+
+    /** @brief What the ledger recorded at this start (10.2, 10.3). */
+    [[nodiscard]] const RestartReport& restart() const noexcept {
+        return restartInfo;
+    }
+
+    /**
+     * @brief Rotation: remove a prefix of one kept stream (10.4).
+     *
+     * The adapter picks `q` as the last record of the latest whole segment that ends at or before the bound, writes `mddlog.stream.trim` with `q` and `H_q`,
+     * waits for its durable confirmation, and only then reclaims the segments from the oldest forward. The bound is the stream's accepted anchor when a
+     * provider is configured, after the continuity check of 7.3; the open segment and the last segment of the stream are never trimmed. Nothing is written when
+     * nothing can be removed, and a stream recovery found inconsistent is never touched (10.3).
+     */
+    [[nodiscard]] RetentionResult trimPrefix(std::string_view streamId) {
+        return retain(streamId, false, nullptr);
+    }
+
+    /**
+     * @brief Retention of a whole ended stream, or of a whole ledger that 10.5 allows removing: a trim with `q` equal to its last position, then the removal,
+     * then `retire` when the provider holds an anchor for it.
+     *
+     * With a provider the stream's `latest` decides: an anchor is retired after the removal, absent needs no retirement, unavailable writes and removes
+     * nothing. Before removing a stream the provider anchors, the ledger's own anchor is advanced past the trim, so that a retirement an interruption leaves
+     * owed can be authorized at the next start (7.2, condition 5).
+     */
+    [[nodiscard]] RetentionResult removeStream(std::string_view streamId) {
+        return retain(streamId, true, nullptr);
     }
 
     [[nodiscard]] StorageHealthSnapshot health() const {
@@ -463,6 +775,10 @@ public:
             out.streams.reserve(published.size());
             for (const auto& entry : published)
                 out.streams.push_back(entry.second);
+        }
+        {
+            const std::scoped_lock lock{publishedMutex};
+            out.integrity = integrityFaults;
         }
         out.freeSegmentsBeyondReserve = freeBeyondReserve.load(std::memory_order_relaxed);
         out.reserveSegments           = reserve;
@@ -510,6 +826,64 @@ private:
         std::chrono::steady_clock::time_point oldestUnsynced;
         bool                                  syncUnsupported = false;
         std::vector<std::uint8_t>             lastCanonical;
+        /** @brief The ledger is a stream of its own: it may draw on the reserve, and what it loses is not an admitted event (9.6, 10.1). */
+        bool isLedger = false;
+        /** @brief Highest position the provider accepted from this adapter (7.3). */
+        std::uint64_t anchored = 0;
+    };
+
+    /** @brief The log as read once, and the recovery computed from it: what a retention attempt decides on (10.3, 10.4, 10.5). */
+    struct LogState {
+        LogAnalysis        log;
+        ChainStateRecovery recovery;
+    };
+
+    /** @brief The cached state, read now when there is none. */
+    [[nodiscard]] const LogState& current(std::optional<LogState>& cache) {
+        if (!cache.has_value()) {
+            LogAnalysis        log      = LogAnalysis::read(medium);
+            ChainStateRecovery recovery = recoverChainState(log, provider());
+            cache.emplace(LogState{.log = std::move(log), .recovery = std::move(recovery)});
+        }
+        return *cache;
+    }
+
+    /** @brief Catches whatever the integrator's provider throws and answers unavailable, as the calls to the medium do. */
+    class GuardedProvider final : public AnchorProvider {
+    public:
+        explicit GuardedProvider(AnchorProvider& wrapped) : inner(&wrapped) {}
+
+        [[nodiscard]] AdvanceAnswer advance(const AnchorClaim& claim) override {
+            try {
+                return inner->advance(claim);
+            } catch (...) {
+                return ProviderUnavailable{};
+            }
+        }
+        [[nodiscard]] RetireAnswer retire(std::string_view streamId, std::uint64_t position) override {
+            try {
+                return inner->retire(streamId, position);
+            } catch (...) {
+                return ProviderUnavailable{};
+            }
+        }
+        [[nodiscard]] LatestAnswer latest(std::string_view streamId) override {
+            try {
+                return inner->latest(streamId);
+            } catch (...) {
+                return ProviderUnavailable{};
+            }
+        }
+        [[nodiscard]] StreamsAnswer streams() override {
+            try {
+                return inner->streams();
+            } catch (...) {
+                return ProviderUnavailable{};
+            }
+        }
+
+    private:
+        AnchorProvider* inner;
     };
 
     struct AtomicCounters {
@@ -528,31 +902,57 @@ private:
         std::atomic<std::uint64_t> streamIdentityInUse{0};
         std::atomic<std::uint64_t> notDurableAtFailure{0};
         std::atomic<std::uint64_t> recoveryFindings{0};
+        std::atomic<std::uint64_t> reservedActionRefused{0};
+        std::atomic<std::uint64_t> ledgerRefused{0};
+        std::atomic<std::uint64_t> ledgerRecords{0};
+        std::atomic<std::uint64_t> trimsRecorded{0};
+        std::atomic<std::uint64_t> segmentsReclaimed{0};
+        std::atomic<std::uint64_t> streamsRemoved{0};
+        std::atomic<std::uint64_t> retirements{0};
+        std::atomic<std::uint64_t> retentionRefused{0};
+        std::atomic<std::uint64_t> anchorsAccepted{0};
+        std::atomic<std::uint64_t> anchorsRefused{0};
+        std::atomic<std::uint64_t> anchorsUnavailable{0};
+        std::atomic<std::uint64_t> integrityFaults{0};
     };
 
     PersistingAuditSink(StorageMedium& storage, StorageConfig declared, std::size_t reserved, RecoveryReport recovered)
         : medium(storage), config(std::move(declared)), reserve(reserved), startup(std::move(recovered)) {
+        if (config.provider != nullptr)
+            guarded = std::make_unique<GuardedProvider>(*config.provider);
         std::ranges::sort(startup.streamsHeld);
         counters.recoveryFindings.store(startup.findings.size(), std::memory_order_relaxed);
         (void)refreshFree();
     }
 
     [[nodiscard]] StorageCounters counterSnapshot() const {
-        return {.fullEntries         = counters.fullEntries.load(std::memory_order_relaxed),
-                .openFailures        = counters.openFailures.load(std::memory_order_relaxed),
-                .appendFailures      = counters.appendFailures.load(std::memory_order_relaxed),
-                .syncFailures        = counters.syncFailures.load(std::memory_order_relaxed),
-                .noSpace             = counters.noSpace.load(std::memory_order_relaxed),
-                .duplicateMismatch   = counters.duplicateMismatch.load(std::memory_order_relaxed),
-                .sequenceOutOfOrder  = counters.sequenceOutOfOrder.load(std::memory_order_relaxed),
-                .notEncodable        = counters.notEncodable.load(std::memory_order_relaxed),
-                .mediumUnreadable    = counters.mediumUnreadable.load(std::memory_order_relaxed),
-                .syncUnsupported     = counters.syncUnsupported.load(std::memory_order_relaxed),
-                .invalidStream       = counters.invalidStream.load(std::memory_order_relaxed),
-                .streamLimitRefused  = counters.streamLimitRefused.load(std::memory_order_relaxed),
-                .streamIdentityInUse = counters.streamIdentityInUse.load(std::memory_order_relaxed),
-                .notDurableAtFailure = counters.notDurableAtFailure.load(std::memory_order_relaxed),
-                .recoveryFindings    = counters.recoveryFindings.load(std::memory_order_relaxed)};
+        return {.fullEntries           = counters.fullEntries.load(std::memory_order_relaxed),
+                .openFailures          = counters.openFailures.load(std::memory_order_relaxed),
+                .appendFailures        = counters.appendFailures.load(std::memory_order_relaxed),
+                .syncFailures          = counters.syncFailures.load(std::memory_order_relaxed),
+                .noSpace               = counters.noSpace.load(std::memory_order_relaxed),
+                .duplicateMismatch     = counters.duplicateMismatch.load(std::memory_order_relaxed),
+                .sequenceOutOfOrder    = counters.sequenceOutOfOrder.load(std::memory_order_relaxed),
+                .notEncodable          = counters.notEncodable.load(std::memory_order_relaxed),
+                .mediumUnreadable      = counters.mediumUnreadable.load(std::memory_order_relaxed),
+                .syncUnsupported       = counters.syncUnsupported.load(std::memory_order_relaxed),
+                .invalidStream         = counters.invalidStream.load(std::memory_order_relaxed),
+                .streamLimitRefused    = counters.streamLimitRefused.load(std::memory_order_relaxed),
+                .streamIdentityInUse   = counters.streamIdentityInUse.load(std::memory_order_relaxed),
+                .notDurableAtFailure   = counters.notDurableAtFailure.load(std::memory_order_relaxed),
+                .recoveryFindings      = counters.recoveryFindings.load(std::memory_order_relaxed),
+                .reservedActionRefused = counters.reservedActionRefused.load(std::memory_order_relaxed),
+                .ledgerRefused         = counters.ledgerRefused.load(std::memory_order_relaxed),
+                .ledgerRecords         = counters.ledgerRecords.load(std::memory_order_relaxed),
+                .trimsRecorded         = counters.trimsRecorded.load(std::memory_order_relaxed),
+                .segmentsReclaimed     = counters.segmentsReclaimed.load(std::memory_order_relaxed),
+                .streamsRemoved        = counters.streamsRemoved.load(std::memory_order_relaxed),
+                .retirements           = counters.retirements.load(std::memory_order_relaxed),
+                .retentionRefused      = counters.retentionRefused.load(std::memory_order_relaxed),
+                .anchorsAccepted       = counters.anchorsAccepted.load(std::memory_order_relaxed),
+                .anchorsRefused        = counters.anchorsRefused.load(std::memory_order_relaxed),
+                .anchorsUnavailable    = counters.anchorsUnavailable.load(std::memory_order_relaxed),
+                .integrityFaults       = counters.integrityFaults.load(std::memory_order_relaxed)};
     }
 
     void publish(const Stream& stream) {
@@ -578,7 +978,8 @@ private:
         stream.state = StreamStorageState::Failed;
         stream.cause = issue;
         note(issue);
-        const std::uint64_t lost = stream.appended > stream.durable ? stream.appended - stream.durable : 0;
+        // What the ledger had written but not confirmed was never an event a producer was admitted for.
+        const std::uint64_t lost = !stream.isLedger && stream.appended > stream.durable ? stream.appended - stream.durable : 0;
         counters.notDurableAtFailure.fetch_add(lost, std::memory_order_relaxed);
         publish(stream);
         if (lost != 0 && config.reportLoss) {
@@ -612,6 +1013,7 @@ private:
         const std::uint64_t used   = listing->size();
         const std::uint64_t free   = used < config.segmentCount ? config.segmentCount - used : 0;
         const std::uint64_t beyond = free > reserve ? free - reserve : 0;
+        freeTotal.store(free, std::memory_order_relaxed);
         freeBeyondReserve.store(beyond, std::memory_order_relaxed);
         return beyond;
     }
@@ -677,8 +1079,15 @@ private:
             fail(stream, StorageIssue::MediumUnreadable);
             return false;
         }
-        if (*beyond == 0) {
-            enterFull(stream);
+        // The ledger opens ordinary free segments while there are any and draws on the reserve only when there are none (9.6).
+        const std::uint64_t room = stream.isLedger ? freeTotal.load(std::memory_order_relaxed) : *beyond;
+        if (room == 0) {
+            if (stream.isLedger) {
+                counters.noSpace.fetch_add(1, std::memory_order_relaxed);
+                fail(stream, StorageIssue::NoSpace);
+            } else {
+                enterFull(stream);
+            }
             return false;
         }
         if (stream.segmentOpen && !sync(stream))
@@ -760,6 +1169,352 @@ private:
         return true;
     }
 
+    [[nodiscard]] AnchorProvider* provider() noexcept {
+        return guarded.get();
+    }
+
+    /** @brief Report suspect streams and ledgers through the health signal, never as an audit event and never to the medium (9.6, 10.3). Each is reported once.
+     */
+    void recordFaults(std::span<const IntegrityFault> faults) {
+        std::size_t added = 0;
+        {
+            const std::scoped_lock lock{publishedMutex};
+            for (const IntegrityFault& found : faults) {
+                const auto same = [&](const IntegrityFault& known) {
+                    return known.kind == found.kind && known.stream == found.stream && known.position == found.position;
+                };
+                if (std::ranges::none_of(integrityFaults, same)) {
+                    integrityFaults.push_back(found);
+                    ++added;
+                }
+            }
+        }
+        if (added != 0) {
+            counters.integrityFaults.fetch_add(added, std::memory_order_relaxed);
+            note(StorageIssue::IntegrityFault);
+        }
+    }
+
+    [[nodiscard]] core::RawTime ledgerTime() {
+        if (!config.ledger.has_value() || !config.ledger->time)
+            return core::RawTime::unavailable();
+        try {
+            return config.ledger->time();
+        } catch (...) {
+            return core::RawTime::unavailable();
+        }
+    }
+
+    /**
+     * @brief Append one ledger record and confirm it before anything else is written (10.2). False when the ledger failed.
+     *
+     * On a medium that answers Unsupported the record is stored but never confirmed, so the ordering of 10.2 cannot hold, and nothing is ever removed on the
+     * strength of it (see retain()).
+     */
+    [[nodiscard]] bool writeLedger(const LedgerEntry& entry) {
+        if (ledger == nullptr || ledger->state == StreamStorageState::Failed)
+            return false;
+        const auto event = buildLedgerEvent(entry, ledger->id, ledger->appended + 1, ledgerTime());
+        if (!event.has_value()) {
+            counters.notEncodable.fetch_add(1, std::memory_order_relaxed);
+            fail(*ledger, StorageIssue::NotEncodable);
+            return false;
+        }
+        if (!append(*ledger, *event))
+            return false;
+        counters.ledgerRecords.fetch_add(1, std::memory_order_relaxed);
+        return sync(*ledger);
+    }
+
+    /** @brief The ledger's last record is durably confirmed: only a medium that answered Durable can say so (9.3). */
+    [[nodiscard]] bool ledgerConfirmed() const noexcept {
+        return ledger != nullptr && ledger->state != StreamStorageState::Failed && ledger->appended != 0 && ledger->durable == ledger->appended;
+    }
+
+    /**
+     * @brief Recover chain state, then write record 1 and the `recovered` records (10.2, 10.3), then complete the retirements an earlier start left owed (7.3).
+     *
+     * Nothing is repaired, rewritten or reordered: an inconsistent state is written as the `Failed` form, citing the last position that checks, and reported
+     * through health. A ledger that cannot write its start is failed, and no producer event is stored.
+     */
+    void startLedger(const LogAnalysis& log) {
+        ledger                    = std::make_unique<Stream>(config.ledger.value_or(LedgerConfig{}).streamId);
+        ledger->isLedger          = true;
+        restartInfo.ledgerEnabled = true;
+        publish(*ledger);
+
+        const ChainStateRecovery recovery = recoverChainState(log, provider());
+        namedByLedgers                    = namedIdentities(log);
+        restartInfo.faults                = recovery.faults;
+        restartInfo.fork                  = recovery.fork;
+        recordFaults(recovery.faults);
+
+        LedgerEntry first = LedgerEntry::origin(ledger->id);
+        if (recovery.predecessor.has_value()) {
+            const auto earlier              = recovery.held.find(*recovery.predecessor);
+            const bool checks               = earlier != recovery.held.end() && earlier->second.consistent;
+            first                           = LedgerEntry::predecessor(*recovery.predecessor,
+                                             checks,
+                                             earlier != recovery.held.end() ? earlier->second.position : std::nullopt,
+                                             earlier != recovery.held.end() ? earlier->second.digest : std::nullopt);
+            restartInfo.predecessor         = *recovery.predecessor;
+            restartInfo.predecessorChecks   = checks;
+            restartInfo.predecessorPosition = first.sourceSequence;
+        }
+        restartInfo.firstRecord = first.kind;
+        if (!writeLedger(first))
+            return;
+        for (const auto& id : recovery.toCite) {
+            const auto found = recovery.held.find(id);
+            if (found == recovery.held.end())
+                continue;
+            const RecoveredStream& state = found->second;
+            if (!writeLedger(LedgerEntry::recovered(id, state.consistent, state.position, state.digest)))
+                return;
+            ++(state.consistent ? restartInfo.recoveredChecked : restartInfo.recoveredFailed);
+        }
+        restartInfo.startWritten = true;
+        if (guarded == nullptr)
+            return;
+        for (const PendingRetirement& owed : recovery.pendingRetirements) {
+            if (std::holds_alternative<AnchorStamp>(guarded->retire(owed.stream, owed.position))) {
+                counters.retirements.fetch_add(1, std::memory_order_relaxed);
+                ++restartInfo.retirementsCompleted;
+            }
+        }
+    }
+
+    /**
+     * @brief Every identity a ledger in the log names, as a ledger, a predecessor, an opened, closed, trimmed or recovered stream, sorted: none may start a new
+     * instance, the ledger's included (10.1, 10.3).
+     */
+    [[nodiscard]] static std::vector<std::string> namedIdentities(const LogAnalysis& log) {
+        std::set<std::string, std::less<>> names;
+        for (const LedgerImage& ledgerImage : log.ledgers()) {
+            names.insert(ledgerImage.id);
+            if (ledgerImage.predecessor.has_value())
+                names.insert(ledgerImage.predecessor->target);
+            names.insert(ledgerImage.opened.begin(), ledgerImage.opened.end());
+            for (const auto& [stream, close] : ledgerImage.closes)
+                names.insert(stream);
+            for (const TrimRecord& trim : ledgerImage.trims)
+                names.insert(trim.stream);
+            for (const Citation& citation : ledgerImage.recovered)
+                names.insert(citation.target);
+        }
+        return {names.begin(), names.end()};
+    }
+
+    [[nodiscard]] bool closeOne(Stream& stream) {
+        if (stream.state == StreamStorageState::Closed)
+            return true;
+        if (stream.state == StreamStorageState::Failed || !sync(stream))
+            return false;
+        (void)advanceAnchor(stream);
+        if (ledger != nullptr && !writeLedger(LedgerEntry::streamClose(stream.id, stream.appended, stream.chain.headDigest())))
+            return false;
+        stream.state = StreamStorageState::Closed;
+        stream.cause = StorageIssue::None;
+        publish(stream);
+        return true;
+    }
+
+    [[nodiscard]] bool advanceAnchor(Stream& stream) {
+        if (guarded == nullptr || stream.durable == 0 || stream.durable <= stream.anchored)
+            return false;
+        const AdvanceAnswer answer = guarded->advance(makeAnchorClaim(stream.id, stream.durable, stream.durableDigest));
+        if (std::holds_alternative<AnchorStamp>(answer)) {
+            stream.anchored = stream.durable;
+            counters.anchorsAccepted.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        if (std::holds_alternative<AdvanceRefusal>(answer)) {
+            // A fresh claim the provider refuses means the log or the provider has diverged (7.3): never a transient failure.
+            counters.anchorsRefused.fetch_add(1, std::memory_order_relaxed);
+            const IntegrityFault diverged{.kind = IntegrityFaultKind::AnchorDiverged, .stream = stream.id, .position = stream.durable};
+            recordFaults(std::span{&diverged, 1});
+            return false;
+        }
+        counters.anchorsUnavailable.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    /**
+     * @brief The ledger holds the highest trim of a stream that still needs it: one the log still holds, whose prefix that trim accounts for, or a removed one
+     * whose anchor the provider has not replaced by a retirement, whose owed retirement that trim authorizes. Without a provider answer the trim is kept.
+     */
+    [[nodiscard]] bool holdsNeededTrim(const LogAnalysis& log, const LedgerImage& old) {
+        for (const TrimRecord& trim : old.trims) {
+            const bool coveredElsewhere = std::ranges::any_of(log.ledgers(), [&](const LedgerImage& other) {
+                return other.id != old.id && std::ranges::any_of(other.trims, [&](const TrimRecord& recorded) {
+                           return recorded.stream == trim.stream && recorded.position >= trim.position;
+                       });
+            });
+            if (coveredElsewhere)
+                continue;
+            if (log.image().find(trim.stream) != nullptr)
+                return true;
+            if (guarded != nullptr) {
+                const LatestAnswer answer = guarded->latest(trim.stream);
+                if (std::holds_alternative<Anchor>(answer) || std::holds_alternative<ProviderUnavailable>(answer))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool callReclaim(SegmentRef segment) noexcept {
+        try {
+            return medium.reclaim(segment);
+        } catch (...) {
+            return false;
+        }
+    }
+
+    /**
+     * @brief Rotation (`whole` false) or whole-stream retention (`whole` true), 10.4 and 10.5.
+     *
+     * The order keeps an interruption on the safe side: the trim record is durably confirmed first, then the segments go, then the provider is told. A medium
+     * that cannot confirm the trim never loses a segment on its account.
+     */
+    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole, std::optional<LogState>* cache) {
+        const auto refuse = [&](RetentionOutcome outcome, std::uint64_t recordedTrim = 0) {
+            counters.retentionRefused.fetch_add(1, std::memory_order_relaxed);
+            return RetentionResult{.outcome = outcome, .trimmedThrough = recordedTrim};
+        };
+        if (ledger == nullptr || ledger->state == StreamStorageState::Failed || closed)
+            return refuse(RetentionOutcome::NoLedger);
+        if (ledger->id == target)
+            return refuse(RetentionOutcome::NotRotatable);
+        // A trim the medium can never confirm would be written again at each attempt, and a ledger's trims must increase (10.2): write none at all.
+        if (ledger->syncUnsupported)
+            return refuse(RetentionOutcome::NotConfirmed);
+
+        std::optional<LogState>   local;
+        const LogState&           read     = current(cache != nullptr ? *cache : local);
+        const LogAnalysis&        log      = read.log;
+        const ChainStateRecovery& recovery = read.recovery;
+        const StreamEvaluation*   ev       = log.evaluation(target);
+        const StreamImage*        image    = log.image().find(target);
+        if (log.image().unreadable())
+            return refuse(RetentionOutcome::MediumUnreadable);
+        if (ev == nullptr || !ev->inImage || image == nullptr)
+            return refuse(RetentionOutcome::UnknownStream);
+        const bool ledgerTarget = log.isLedger(target);
+        if (ledgerTarget && !whole)
+            return refuse(RetentionOutcome::NotRotatable);
+        const auto live = streams.find(target);
+        if (live != streams.end()) {
+            const StreamStorageState state = live->second.state;
+            if (state == StreamStorageState::Failed || (whole && state != StreamStorageState::Closed))
+                return refuse(RetentionOutcome::StreamNotEnded);
+        }
+
+        // Retention never removes records of a stream found inconsistent (10.3).
+        if (const auto held = recovery.held.find(target); held == recovery.held.end() || !held->second.consistent) {
+            for (const IntegrityFault& found : recovery.faults) {
+                if (found.stream == target)
+                    recordFaults(std::span{&found, 1});
+            }
+            return refuse(RetentionOutcome::StreamInconsistent);
+        }
+        if (ledgerTarget) {
+            const LedgerImage* old         = log.ledger(target);
+            const bool         streamsGone = std::ranges::none_of(old->opened, [&](const std::string& opened) {
+                return log.image().find(opened) != nullptr;
+            });
+            const bool         cited       = std::ranges::any_of(log.ledgers(), [&](const LedgerImage& other) {
+                return other.id != target && other.predecessor.has_value() && other.predecessor->target == target;
+            });
+            if (!streamsGone || !cited || holdsNeededTrim(log, *old))
+                return refuse(RetentionOutcome::LedgerStillNeeded);
+        }
+
+        const auto&   segments       = image->segments;
+        std::uint64_t q              = 0;
+        bool          retire         = false;
+        std::uint64_t retirePosition = 0;
+        std::uint64_t bound          = std::numeric_limits<std::uint64_t>::max();
+        if (guarded != nullptr) {
+            const LatestAnswer answer = guarded->latest(target);
+            if (const auto* anchor = std::get_if<Anchor>(&answer)) {
+                bound          = anchor->position;
+                retire         = whole;
+                retirePosition = anchor->position;
+            } else if (std::holds_alternative<Retirement>(answer)) {
+                return refuse(RetentionOutcome::StreamInconsistent);
+            } else if (std::holds_alternative<AnchorAbsent>(answer)) {
+                if (!whole)
+                    return refuse(RetentionOutcome::NoAnchor);
+            } else if (!whole && live != streams.end() && live->second.anchored != 0) {
+                // The provider did not answer: only an anchor this adapter itself holds from its own advance may be relied on (10.4).
+                bound = live->second.anchored;
+            } else {
+                return refuse(RetentionOutcome::ProviderUnavailable);
+            }
+        }
+        if (whole) {
+            q = ev->checkedThrough;
+        } else {
+            // The last record of the latest whole segment that ends at or before the bound; never the last segment, which is the open one for a live stream.
+            for (std::size_t i = 0; i + 1 < segments.size(); ++i) {
+                if (segments[i].recordCount == 0 || segments[i].lastSequence() > bound)
+                    break;
+                q = segments[i].lastSequence();
+            }
+            if (q == 0)
+                return refuse(RetentionOutcome::NothingToTrim);
+        }
+        if (whole && q == 0 && ev->recordCount != 0)
+            return refuse(RetentionOutcome::StreamInconsistent);
+
+        RetentionResult result{.outcome = whole ? RetentionOutcome::Removed : RetentionOutcome::Trimmed, .trimmedThrough = q};
+        std::uint64_t   trimSequence = 0;
+        if (q != 0) {
+            const auto digest = ev->recomputedDigestAt(q);
+            if (!digest.has_value())
+                return refuse(RetentionOutcome::StreamInconsistent);
+            if (const auto done = sessionTrims.find(target); done != sessionTrims.end() && done->second.first >= q) {
+                trimSequence = done->second.second;  // already recorded and confirmed this start: the ledger's trims stay increasing (10.2)
+            } else {
+                const std::uint64_t ledgerBefore = ledger->appended;
+                // A trim appended but not confirmed may still survive on the medium: the result says it was recorded.
+                if (!writeLedger(LedgerEntry::streamTrim(target, q, *digest)) || !ledgerConfirmed())
+                    return refuse(RetentionOutcome::NotConfirmed, ledger->appended != ledgerBefore ? q : 0);
+                trimSequence                      = ledger->appended;
+                sessionTrims[std::string{target}] = {q, trimSequence};
+                counters.trimsRecorded.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        if (retire) {
+            // An interruption between the removal and the retirement leaves a retirement owed. The next start may relay it only if an anchor of the ledger
+            // covers the trim, so the ledger is anchored past it before anything is removed (7.2, condition 5).
+            (void)advanceAnchor(*ledger);
+            if (ledger->anchored < trimSequence)
+                return refuse(RetentionOutcome::LedgerNotAnchored, q);
+        }
+
+        for (const SegmentImage& segment : segments) {
+            if (segment.recordCount != 0 && segment.lastSequence() > q)
+                break;
+            if (!callReclaim(segment.ref)) {
+                result.outcome = RetentionOutcome::ReclaimInterrupted;
+                break;
+            }
+            ++result.segmentsReclaimed;
+        }
+        counters.segmentsReclaimed.fetch_add(result.segmentsReclaimed, std::memory_order_relaxed);
+        (void)refreshFree();
+        if (result.outcome == RetentionOutcome::Removed) {
+            counters.streamsRemoved.fetch_add(1, std::memory_order_relaxed);
+            if (retire && std::holds_alternative<AnchorStamp>(guarded->retire(target, retirePosition))) {
+                counters.retirements.fetch_add(1, std::memory_order_relaxed);
+                result.retired = true;
+            }
+        }
+        return result;
+    }
+
     StorageMedium& medium;
     StorageConfig  config;
     std::size_t    reserve;
@@ -770,10 +1525,20 @@ private:
     AtomicCounters                             counters;
     std::atomic<StorageIssue>                  lastIssue{StorageIssue::None};
     std::atomic<std::uint64_t>                 freeBeyondReserve{0};
+    std::atomic<std::uint64_t>                 freeTotal{0};
+
+    std::unique_ptr<GuardedProvider> guarded;
+    std::unique_ptr<Stream>          ledger;
+    RestartReport                    restartInfo;
+    /** @brief The trims this start recorded and confirmed: the position, and where the ledger recorded it. Keeps a ledger's trims increasing (10.2). */
+    std::map<std::string, std::pair<std::uint64_t, std::uint64_t>, std::less<>> sessionTrims;
+    /** @brief Identities the ledgers in the log named at start, sorted: none may start a new instance. */
+    std::vector<std::string> namedByLedgers;
 
     mutable std::mutex                                                         publishedMutex;
     std::map<std::string, StreamStorageHealth, std::less<>>                    published;
     std::map<std::string, std::pair<std::uint64_t, Sha256Digest>, std::less<>> durableDigests;
+    std::vector<IntegrityFault>                                                integrityFaults;
 };
 
 }  // namespace mddlog::adapter

@@ -92,6 +92,19 @@ belongs in `detail`; an invalid event-field identifier is refused with
 The old default `complianceStandard = "IEC_62304"` is not copied onto
 every event. A meaningful per-event standard reference belongs in `requirementRef`.
 
+## Reserved actions (#92)
+
+Actions that begin with the case-sensitive ASCII prefix `mddlog.` belong to the persistence
+adapter's ledger (ADR-004 Decision 10.1). `AuditRing::tryRecord()`, and so `SimpleLogger::logAudit()`
+and the `Log` facade, refuse them with `AuditRefusalReason::ReservedAction` and
+`AuditField::Action`. The refusal comes after the identifier grammar is checked and before a
+sequence or a slot is consumed, so the next admitted event takes the sequence it would have taken.
+`mddlog` without the dot, `Mddlog.x` and `x.mddlog.y` are ordinary actions. **Breaking change:**
+a producer that used an action under `mddlog.` must rename it. Nothing else about the
+grammar changes, and `AuditEvent::assign()` still accepts the prefix, so that the adapter can build
+its own records. `PersistingAuditSink::accept()` refuses such an event as well and counts it as
+`reservedActionRefused`.
+
 ## Admission and sequence
 
 Construct one `AuditRing<Capacity>` per producer with a unique `streamId` for that producer

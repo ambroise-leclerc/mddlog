@@ -41,6 +41,11 @@ struct StoredLayout {
 struct StreamStart {
     std::uint64_t afterSequence = 0;
     Sha256Digest  afterDigest   = chainInitialValue;
+    /**
+     * @brief False when records before the ones given are missing and nothing accounts for them (10.6): record `afterSequence` is present, its stored digest
+     * stands in as `afterDigest`, and nothing vouches for it. The checks that do not rest on that value still run, and the verdict is at best Incomplete.
+     */
+    bool vouched = true;
 };
 
 /** @brief The verdicts of 7.5, in the order in which the first that applies is reported. */
@@ -122,7 +127,25 @@ enum class VerdictCause : std::uint8_t {
     LogEndsBeforeRetained,
     /** @brief The provider holds no anchor and no retirement for the stream. */
     NoAnchor,
-    ProviderUnavailable
+    ProviderUnavailable,
+    /** @brief A ledger record is malformed (10.2): the ledger is Inconsistent at that record. Set by the log reader. */
+    LedgerRecordMalformed,
+    /** @brief A recorded trim's digest is not the one the stored records reproduce at its position (10.4). Set by the log reader. */
+    TrimDigestMismatch,
+    /** @brief The leftover records of an interrupted removal do not reach the trim's digest (10.4). Set by the log reader. */
+    LeftoverDoesNotReachTrim,
+    /** @brief A trim's position falls inside a segment, which the adapter never writes (10.4). Set by the log reader. */
+    TrimNotOnSegmentBoundary,
+    /** @brief Records `1 … k-1` are missing and no trim accounts for them: the chain cannot start (10.6). Set by the log reader. */
+    PrefixMissingWithoutTrim,
+    /** @brief Records are missing between a trim's `q + 1` and the first record present (10.6). Set by the log reader. */
+    RecordsMissingAfterTrim,
+    /** @brief A trim cites a position past the last record present while the prefix is still there: the records it covered are gone (10.4). */
+    TrimExceedsRecords,
+    /** @brief A whole-stream trim and the provider's retirement disagree on the digest at the same position (10.6). Set by the log reader. */
+    TrimDiffersFromRetirement,
+    /** @brief The provider retired the stream past the highest recorded trim: anchored records went with no trim (10.5, 10.6). Set by the log reader. */
+    RetirementBeyondTrim
 };
 
 /** @brief Outcome of the retained-position check of 7.4. */
@@ -312,7 +335,7 @@ public:
         std::optional<Sha256Digest> digestAtAnchor;
         std::optional<Sha256Digest> digestAtCheckpoint;
         const auto                  noteStart = [&](std::uint64_t position, std::optional<Sha256Digest>& slot) {
-            if (position != 0 && position == start.afterSequence)
+            if (start.vouched && position != 0 && position == start.afterSequence)
                 slot = start.afterDigest;
         };
         noteStart(anchorPosition, digestAtAnchor);
@@ -364,7 +387,7 @@ public:
             return finish(report, Verdict::CannotVerify, cause);
         }
         const bool recordsPresent = recordCount != 0;
-        if (effective.has_value() && start.afterSequence > effective->position && (recordsPresent || !retiredStream))
+        if (start.vouched && effective.has_value() && start.afterSequence > effective->position && (recordsPresent || !retiredStream))
             return finish(report, Verdict::CannotVerify, VerdictCause::TrimPastAnchor);
 
         // 3. Rolled back: a retained-position check fails (7.4).
@@ -386,6 +409,10 @@ public:
             return finish(report, Verdict::Altered, VerdictCause::AnchorDigestMismatch);
         if (checkpointApplies && checkpoint <= present && digestAtCheckpoint.has_value() && *digestAtCheckpoint != before->digest)
             return finish(report, Verdict::Altered, VerdictCause::RetainedCheckpointMismatch);
+
+        // A start nothing vouches for: records at the start are missing, so nothing better than Incomplete applies, and the anchor stays in the report.
+        if (!start.vouched)
+            return finish(report, Verdict::Incomplete, VerdictCause::PrefixMissingWithoutTrim);
 
         // 6. Retired: the stream aged out under retention and the log holds none of it. Not a finding.
         if (retiredStream && !recordsPresent)
@@ -435,10 +462,14 @@ public:
         return reports;
     }
 
-private:
-    /** @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5). */
+    /**
+     * @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5).
+     *
+     * Public so that the log reader (mddlog.adapter.auditlog) applies the same structural rule to the records it walks from a trim; it reads only the layout.
+     */
     [[nodiscard]] static std::optional<std::uint64_t> firstBoundaryBreak(const StoredLayout& layout, const StreamStart& start) noexcept {
-        std::uint64_t                expected = start.afterSequence + 1;
+        // An unvouched start is the first record present, which the layout's first segment holds.
+        std::uint64_t                expected = start.vouched ? start.afterSequence + 1 : start.afterSequence;
         std::optional<std::uint32_t> previous;
         for (const SegmentBoundary& segment : layout.segments) {
             if ((previous.has_value() && segment.segmentIndex != *previous + 1) || segment.firstSequence != expected)
@@ -449,6 +480,7 @@ private:
         return std::nullopt;
     }
 
+private:
     [[nodiscard]] static const Anchor& entryAnchor(const StreamEntry& entry) noexcept {
         if (const auto* anchor = std::get_if<Anchor>(&entry))
             return *anchor;
