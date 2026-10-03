@@ -192,7 +192,13 @@ struct RecoveryReport {
     return report;
 }
 
-/** @brief The records of one stream instance as a reader holds them, ready for AnchorVerifier. Owns the bytes the records point into. */
+/**
+ * @brief The records of one stream instance as a reader holds them, ready for AnchorVerifier, with the segment structure the verifier needs. Owns the bytes
+ * the records point into.
+ *
+ * Pass `records()` and `layout()` together: the layout carries what a bare list of records loses, namely the segment boundaries and headers (9.5), a segment
+ * of an unknown layout version (9.4) and a segment that could not be read.
+ */
 class StoredStream {
 public:
     StoredStream()                                   = default;
@@ -206,6 +212,10 @@ public:
     [[nodiscard]] const std::vector<StoredRecord>& records() const noexcept {
         return stored;
     }
+    /** @brief The segment boundaries, an unknown layout version and unreadable segments, for AnchorVerifier::verify(). */
+    [[nodiscard]] const StoredLayout& layout() const noexcept {
+        return structure;
+    }
     /** @brief Indices of the segments that held a valid header for this instance, in order. */
     [[nodiscard]] const std::vector<std::uint32_t>& segmentIndices() const noexcept {
         return indices;
@@ -214,9 +224,14 @@ public:
     [[nodiscard]] std::size_t trailingBytesOfLastSegment() const noexcept {
         return trailing;
     }
-    /** @brief False when the medium could not be listed or a segment of the instance could not be read. */
+    /** @brief Segments with no valid preamble or header, which no stream can claim: the usual trace of a cut during open (9.5). They do not stop a verdict. */
+    [[nodiscard]] std::size_t segmentsWithoutHeader() const noexcept {
+        return withoutHeader;
+    }
+    /** @brief False when the medium could not be listed, a segment could not be read, or a segment is in an unknown layout version: the records may not be the
+     * stream. */
     [[nodiscard]] bool complete() const noexcept {
-        return readable;
+        return !structure.unreadable && !structure.unknownLayoutVersion.has_value();
     }
 
 private:
@@ -225,39 +240,59 @@ private:
     std::vector<std::vector<std::uint8_t>> buffers;
     std::vector<StoredRecord>              stored;
     std::vector<std::uint32_t>             indices;
-    std::size_t                            trailing = 0;
-    bool                                   readable = true;
+    StoredLayout                           structure;
+    std::size_t                            trailing      = 0;
+    std::size_t                            withoutHeader = 0;
 };
 
-/** @brief Read back the records of `streamId` from every segment whose header names it. Records are not verified: that is AnchorVerifier's job. */
+/**
+ * @brief Read back the records of `streamId` from every segment whose header names it. Records are not verified: that is AnchorVerifier's job.
+ *
+ * A segment in a layout version this reader does not know has no header it can read, so it cannot be tied to a stream: it is reported for every stream, and
+ * none of them can be verified (9.4).
+ */
 [[nodiscard]] inline StoredStream readStoredStream(StorageMedium& medium, std::string_view streamId) {
     StoredStream out;
     const auto   listing = medium.segments();
     if (!listing) {
-        out.readable = false;
+        out.structure.unreadable = true;
         return out;
     }
     struct Found {
-        std::uint32_t index  = 0;
-        std::size_t   buffer = 0;
+        std::uint32_t index         = 0;
+        std::uint64_t firstSequence = 0;
+        std::size_t   buffer        = 0;
     };
     std::vector<Found> found;
     for (const auto& info : *listing) {
         auto bytes = medium.read(info.segment, 0, info.size);
         if (!bytes) {
-            out.readable = false;
+            out.structure.unreadable = true;
             continue;
         }
         const SegmentScan scan = scanSegment(*bytes);
-        if (scan.status != SegmentStatus::Readable || !scan.header || scan.header->streamId != streamId)
-            continue;
-        found.push_back({.index = scan.header->segmentIndex, .buffer = out.buffers.size()});
-        out.buffers.push_back(std::move(*bytes));
+        switch (scan.status) {
+            case SegmentStatus::UnknownLayoutVersion:
+                if (!out.structure.unknownLayoutVersion)
+                    out.structure.unknownLayoutVersion = scan.layoutVersion;
+                break;
+            case SegmentStatus::NoValidPreamble:
+            case SegmentStatus::NoValidHeader:
+                ++out.withoutHeader;
+                break;
+            case SegmentStatus::Readable:
+                if (scan.header && scan.header->streamId == streamId) {
+                    found.push_back({.index = scan.header->segmentIndex, .firstSequence = scan.header->firstSequence, .buffer = out.buffers.size()});
+                    out.buffers.push_back(std::move(*bytes));
+                }
+                break;
+        }
     }
     std::ranges::sort(found, {}, &Found::index);
     for (const auto& item : found) {
         const SegmentScan scan = scanSegment(out.buffers[item.buffer]);
         out.indices.push_back(item.index);
+        out.structure.segments.push_back({.segmentIndex = item.index, .firstSequence = item.firstSequence, .recordCount = scan.records.size()});
         for (const auto& record : scan.records)
             out.stored.push_back({.bytes = record.canonical, .digest = record.digest});
         out.trailing = scan.trailingBytes;

@@ -377,7 +377,7 @@ const speclab::Register durableConfirmation{
                       checks.expect(claim && claim->position == 4, "durable through 4");
                       checks.expect(std::holds_alternative<AnchorStamp>(provider.advance(*claim)), "the provider accepts the claim");
                       const auto stored = readStoredStream(rig->medium, streamName);
-                      const auto report = verifier.verify(streamName, stored.records());
+                      const auto report = verifier.verify(streamName, stored.records(), {}, stored.layout());
                       checks.expect(report.verdict == Verdict::Anchored && report.anchoredThrough == std::uint64_t{4}, "Anchored through the durable position");
                       checks.raise();
                   })
@@ -815,6 +815,157 @@ const speclab::Register powerCuts{
                           checks.expect(out.publishedDurable == full && out.stored.stored >= full && out.stored.allOk && out.claimWithinStored,
                                         "the next record opens segment 1; its sync did not complete");
                       }
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+/** @brief Open a segment by hand, as a medium holding hand-made bytes would. */
+[[nodiscard]] SegmentRef openRaw(InMemoryStorageMedium& medium, std::string_view stream, std::uint32_t index, std::uint64_t firstSequence) {
+    const auto opening = encodeSegmentOpening(stream, index, firstSequence);
+    return medium.open({.streamId = stream, .segmentIndex = index, .firstSequence = firstSequence, .bytes = opening}).segment;
+}
+
+/** @brief Append the next chained record of `chain` to a hand-made segment. */
+void appendNext(InMemoryStorageMedium& medium, SegmentRef segment, AuditChain& chain, std::uint64_t sequence) {
+    const auto chained = chain.append(makeEvent(streamName, sequence));
+    const auto frame   = encodeRecordFrame(chained->canonical.bytes(), chained->digest);
+    (void)medium.append(segment, frame);
+}
+
+const speclab::Register verifierSeesStructure{
+    "The reader hands the verifier the segment structure, so a layout it cannot trust is never Anchored",
+    "integration",
+    [] {
+        return speclab::Test("audit-storage-reader-structure")
+            .Then("a clean multi-segment stream is Anchored through its confirmed position",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      rig->start(1);
+                      const std::uint64_t total = (2 * perSegment(160)) + 1;
+                      for (std::uint64_t k = 1; k <= total; ++k)
+                          (void)rig->sink->accept(makeEvent(streamName, k, 160));
+                      InMemoryAnchorProvider provider{"witness-1"};
+                      RetainedPosition       retained;
+                      AnchorVerifier         verifier{provider, retained};
+                      (void)provider.advance(*rig->sink->durableClaim(streamName));
+                      const auto stored = readStoredStream(rig->medium, streamName);
+                      checks.expect(stored.complete() && stored.layout().segments.size() == 3, "three segments, complete");
+                      const auto report = verifier.verify(streamName, stored.records(), {}, stored.layout());
+                      checks.expect(report.verdict == Verdict::Anchored && report.anchoredThrough == total, "Anchored through the last record");
+                      checks.raise();
+                  })
+            .Then("a segment in an unknown layout version makes the stream Cannot verify, naming the version, even with an anchored record",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{8};
+                      AuditChain            chain{streamName};
+                      const auto            first = openRaw(medium, streamName, 0, 1);
+                      appendNext(medium, first, chain, 1);
+                      auto unknown = encodeSegmentOpening(streamName, 1, 2);
+                      unknown[5]   = 9;
+                      (void)medium.open({.streamId = streamName, .segmentIndex = 1, .firstSequence = 2, .bytes = unknown});
+                      InMemoryAnchorProvider provider{"witness-1"};
+                      RetainedPosition       retained;
+                      AnchorVerifier         verifier{provider, retained};
+                      (void)provider.advance(makeAnchorClaim(streamName, 1, chainDigestAt(1)));
+                      const auto stored = readStoredStream(medium, streamName);
+                      checks.expect(stored.records().size() == 1 && !stored.complete(), "the record is read, the stream is not complete");
+                      const auto report = verifier.verify(streamName, stored.records(), {}, stored.layout());
+                      checks.expect(report.verdict == Verdict::CannotVerify && report.cause == VerdictCause::UnsupportedLayoutVersion
+                                        && report.unknownLayoutVersion == std::uint16_t{9},
+                                    "Cannot verify, with the layout version named");
+                      checks.expect(report.verdict != Verdict::Anchored, "never Anchored");
+                      const auto bare = verifier.verify(streamName, stored.records());
+                      checks.expect(bare.verdict == Verdict::Anchored, "which is exactly what the records alone could not show");
+                      checks.raise();
+                  })
+            .Then("a header whose firstSequence is not its first record is Inconsistent, not Anchored",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{8};
+                      AuditChain            chain{streamName};
+                      const auto            segment = openRaw(medium, streamName, 0, 99);
+                      appendNext(medium, segment, chain, 1);
+                      InMemoryAnchorProvider provider{"witness-1"};
+                      RetainedPosition       retained;
+                      AnchorVerifier         verifier{provider, retained};
+                      (void)provider.advance(makeAnchorClaim(streamName, 1, chainDigestAt(1)));
+                      const auto stored = readStoredStream(medium, streamName);
+                      const auto report = verifier.verify(streamName, stored.records(), {}, stored.layout());
+                      checks.expect(report.verdict == Verdict::Inconsistent && report.cause == VerdictCause::SegmentLayoutInconsistent
+                                        && report.failedAt == std::uint64_t{1},
+                                    "Inconsistent at the first record that does not follow the header");
+                      checks.raise();
+                  })
+            .Then("a header that does not follow the previous segment, a duplicate index and a missing index are Inconsistent",
+                  [] {
+                      speclab::core::Checks checks;
+                      const auto            verdictFor = [](std::uint32_t secondIndex, std::uint64_t secondFirst) {
+                          InMemoryStorageMedium medium{8};
+                          AuditChain            chain{streamName};
+                          const auto            first = openRaw(medium, streamName, 0, 1);
+                          appendNext(medium, first, chain, 1);
+                          appendNext(medium, first, chain, 2);
+                          const auto second = openRaw(medium, streamName, secondIndex, secondFirst);
+                          appendNext(medium, second, chain, 3);
+                          InMemoryAnchorProvider provider{"witness-1"};
+                          RetainedPosition       retained;
+                          AnchorVerifier         verifier{provider, retained};
+                          (void)provider.advance(makeAnchorClaim(streamName, 3, chainDigestAt(3)));
+                          const auto stored = readStoredStream(medium, streamName);
+                          return verifier.verify(streamName, stored.records(), {}, stored.layout());
+                      };
+                      checks.expect(verdictFor(1, 3).verdict == Verdict::Anchored, "the control: index 1, firstSequence 3");
+                      const auto wrongFirst = verdictFor(1, 4);
+                      checks.expect(wrongFirst.verdict == Verdict::Inconsistent && wrongFirst.failedAt == std::uint64_t{3}, "firstSequence 4 where 3 follows");
+                      checks.expect(verdictFor(0, 3).verdict == Verdict::Inconsistent, "a duplicate segment index");
+                      checks.expect(verdictFor(2, 3).verdict == Verdict::Inconsistent, "a missing segment index");
+                      checks.raise();
+                  })
+            .Then("lost records inside an earlier segment show as a header that does not follow",
+                  [] {
+                      speclab::core::Checks checks;
+                      auto                  rig = makeRig();
+                      rig->start(1);
+                      const std::uint64_t total = perSegment(160) + 2;
+                      for (std::uint64_t k = 1; k <= total; ++k)
+                          (void)rig->sink->accept(makeEvent(streamName, k, 160));
+                      const auto listing = *rig->medium.segments();
+                      // Cut the first segment back by one frame: its trailing bytes now end before the next header's firstSequence.
+                      const auto size = rig->medium.bytesOf(listing.front().segment).size();
+                      rig->medium.truncate(listing.front().segment, size - 100);
+                      InMemoryAnchorProvider provider{"witness-1"};
+                      RetainedPosition       retained;
+                      AnchorVerifier         verifier{provider, retained};
+                      const auto             stored = readStoredStream(rig->medium, streamName);
+                      const auto             report = verifier.verify(streamName, stored.records(), {}, stored.layout());
+                      checks.expect(report.verdict == Verdict::Inconsistent, "the boundary no longer follows");
+                      checks.raise();
+                  })
+            .Then("a segment without a header does not stop a verdict, and an unreadable medium is Cannot verify",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{8};
+                      AuditChain            chain{streamName};
+                      const auto            first = openRaw(medium, streamName, 0, 1);
+                      appendNext(medium, first, chain, 1);
+                      const std::array<std::uint8_t, 3> torn{0x6d, 0x64, 0x6c};
+                      (void)medium.open({.streamId = "other/stream", .segmentIndex = 0, .firstSequence = 1, .bytes = torn});
+                      InMemoryAnchorProvider provider{"witness-1"};
+                      RetainedPosition       retained;
+                      AnchorVerifier         verifier{provider, retained};
+                      (void)provider.advance(makeAnchorClaim(streamName, 1, chainDigestAt(1)));
+                      const auto stored = readStoredStream(medium, streamName);
+                      checks.expect(stored.complete() && stored.segmentsWithoutHeader() == 1, "the torn segment is counted, not fatal");
+                      checks.expect(verifier.verify(streamName, stored.records(), {}, stored.layout()).verdict == Verdict::Anchored, "Anchored");
+                      medium.inject({.operation = Operation::Open, .ordinal = medium.calls(Operation::Open) + 1, .effect = Effect::CutBefore});
+                      (void)openRaw(medium, streamName, 1, 2);
+                      const auto dead   = readStoredStream(medium, streamName);
+                      const auto report = verifier.verify(streamName, dead.records(), {}, dead.layout());
+                      checks.expect(!dead.complete() && report.verdict == Verdict::CannotVerify && report.cause == VerdictCause::StorageUnreadable,
+                                    "a medium that cannot be read is Cannot verify, not an empty log");
                       checks.raise();
                   })
             .Execute();

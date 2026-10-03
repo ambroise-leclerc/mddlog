@@ -15,6 +15,28 @@ struct StoredRecord {
     Sha256Digest                  digest{};
 };
 
+/** @brief One segment of a stream as the reader found it: its header's numbers and how many valid record frames it held (9.4, 9.5). */
+struct SegmentBoundary {
+    std::uint32_t segmentIndex  = 0;
+    std::uint64_t firstSequence = 0;
+    std::size_t   recordCount   = 0;
+};
+
+/**
+ * @brief What the stored layout contributes to a verdict, beside the records themselves (9.4, 9.5).
+ *
+ * A reader that does not know a segment's layout version reads nothing from it, and cannot tell which stream it belongs to, so the stream cannot be verified.
+ * The segment boundaries let the verifier check that the headers and the records agree, which a bare list of records cannot show.
+ */
+struct StoredLayout {
+    /** @brief The stream's segments in index order. Empty when the caller holds records with no segment structure, which then checks no boundary. */
+    std::vector<SegmentBoundary> segments;
+    /** @brief A segment on the medium has a layout version this reader does not know: nothing was read from it. */
+    std::optional<std::uint16_t> unknownLayoutVersion;
+    /** @brief A segment could not be read, or the medium could not be listed: records may be missing for that reason alone. */
+    bool unreadable = false;
+};
+
 /** @brief Where a stream's records start: `afterSequence` 0 and H_0, or a trim's recorded `q` and `H_q` (10.4). */
 struct StreamStart {
     std::uint64_t afterSequence = 0;
@@ -71,6 +93,13 @@ enum class VerdictCause : std::uint8_t {
     InvalidStreamIdentity,
     /** @brief The stream's version is not implemented here: nothing was decoded, so no digest can be recomputed. */
     UnsupportedStreamVersion,
+    /** @brief A segment's layout version is unknown to this reader: nothing was read from it, and the stream is named Cannot verify (9.4). */
+    UnsupportedLayoutVersion,
+    /** @brief A segment or the medium could not be read, so the records held may not be the stream (9.6). */
+    StorageUnreadable,
+    /** @brief The segment headers and the records disagree: a duplicate or missing segment index, or a header whose firstSequence is not the next record (9.5).
+     */
+    SegmentLayoutInconsistent,
     /** @brief The provider holds an anchor whose anchorFormat or canonicalVersion this verifier does not know. */
     AnchorFormatUnknown,
     /** @brief The provider holds an anchor with a mandatory field missing. */
@@ -205,6 +234,8 @@ struct StreamReport {
     ChainFinding chainFinding = ChainFinding::Ok;
     /** @brief For Inconsistent, the expected sequence of the first failing record. */
     std::optional<std::uint64_t> failedAt;
+    /** @brief For Cannot verify on an unknown layout, the version that was found (9.4). */
+    std::optional<std::uint16_t> unknownLayoutVersion;
 
     /** @brief s: the first record retained, 1 or q + 1 after a trim. */
     std::uint64_t firstRetained = 1;
@@ -247,7 +278,8 @@ public:
         : provider(&anchorProvider), retained(&retainedPosition), config(verifierConfig) {}
 
     /** @brief Verify one stream instance whose records are given in storage order. An empty span means the log holds none. */
-    [[nodiscard]] StreamReport verify(std::string_view streamId, std::span<const StoredRecord> records, const StreamStart& start = {}) {
+    [[nodiscard]] StreamReport
+    verify(std::string_view streamId, std::span<const StoredRecord> records, const StreamStart& start = {}, const StoredLayout& layout = {}) {
         StreamReport report;
         report.streamId      = std::string{streamId};
         report.firstRetained = start.afterSequence + 1;
@@ -306,8 +338,19 @@ public:
             report.failedAt = failed;
             return finish(report, Verdict::Inconsistent, VerdictCause::None);
         }
+        // Headers and records must agree (9.5). It comes before Cannot verify, as Inconsistent does in 7.5.
+        if (const auto broken = firstBoundaryBreak(layout, start); broken.has_value()) {
+            report.failedAt = broken;
+            return finish(report, Verdict::Inconsistent, VerdictCause::SegmentLayoutInconsistent);
+        }
+        if (layout.unknownLayoutVersion.has_value()) {
+            report.unknownLayoutVersion = layout.unknownLayoutVersion;
+            return finish(report, Verdict::CannotVerify, VerdictCause::UnsupportedLayoutVersion);
+        }
         if (chain.cannotVerify())
             return finish(report, Verdict::CannotVerify, VerdictCause::UnsupportedStreamVersion);
+        if (layout.unreadable)
+            return finish(report, Verdict::CannotVerify, VerdictCause::StorageUnreadable);
         const std::uint64_t present = report.lastPresent;
 
         // The anchor the verdicts below rest on: the latest anchor, or a retirement's final anchor.
@@ -393,6 +436,19 @@ public:
     }
 
 private:
+    /** @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5). */
+    [[nodiscard]] static std::optional<std::uint64_t> firstBoundaryBreak(const StoredLayout& layout, const StreamStart& start) noexcept {
+        std::uint64_t                expected = start.afterSequence + 1;
+        std::optional<std::uint32_t> previous;
+        for (const SegmentBoundary& segment : layout.segments) {
+            if ((previous.has_value() && segment.segmentIndex != *previous + 1) || segment.firstSequence != expected)
+                return expected;
+            previous  = segment.segmentIndex;
+            expected += segment.recordCount;
+        }
+        return std::nullopt;
+    }
+
     [[nodiscard]] static const Anchor& entryAnchor(const StreamEntry& entry) noexcept {
         if (const auto* anchor = std::get_if<Anchor>(&entry))
             return *anchor;
