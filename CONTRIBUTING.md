@@ -174,6 +174,25 @@ scripts/run-clang-tidy.sh build-clang
   `tests/.clang-tidy` and `examples/.clang-tidy` (inheriting the root config) turn off only the two
   magic-number checks there, because scenario data are literals; `include/` keeps them.
 
+## Development file
+
+[The software development file](software_development_file/README.md) documents the component
+baseline and its limits. When a change affects requirements, design, risks, dependencies or
+verification coverage, update its single register and the relevant filled documents in the same
+review. Each epic #113–#122 includes this update in its closure criteria. Keep future work and
+unaccepted evidence explicit; document identifiers belong in the dossier, not at every C++ call.
+
+Check structure and references independently of the C++ toolchain:
+
+```bash
+python3 scripts/check-development-file.py
+python3 -m unittest discover -s tests/documentation -p 'Test*.py'
+```
+
+These checks do not accept content or qualify a deployment. A maintainer's decision must identify
+the reviewed revision, date and reservations; #124 accepts the initial baseline and #122 the final
+release dossier. Follow the dossier README's [integration and traceability section](software_development_file/README.md#utilisation-et-traçabilité) when reusing its templates.
+
 ## Pull Requests
 
 - **Branches.** Work on an `<issue-number>-<slug>` branch and target `develop`, the default
