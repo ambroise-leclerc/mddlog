@@ -191,7 +191,7 @@ python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 
 These checks do not accept content or qualify a deployment. A maintainer's decision must identify
 the reviewed revision, date and reservations; #124 accepts the initial baseline and #122 the final
-release dossier. Follow the dossier's integration guide when reusing its templates.
+release dossier. Follow the dossier README's [integration and traceability section](software_development_file/README.md#utilisation-et-traçabilité) when reusing its templates.
 
 ## Pull Requests
 

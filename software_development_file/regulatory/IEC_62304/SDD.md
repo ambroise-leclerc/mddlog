@@ -25,6 +25,10 @@ sont des déclarations explicites. AuditSinkAdapter rend refus et reprise de tra
 SinkRegistry protège inscription et retrait ; TransportConsumer découple producteur et transport
 avec une file bornée. Cela ne borne pas automatiquement la file de SimpleLogger. TextLogger
 fournit groupes et callbacks synchrones ; le contexte réutilisable unifié de #113 reste prévu.
+REQ-015 relie la file bornée du transport à CTRL-010/VER-010. REQ-012 ne revendique aucune
+couverture de ces tests pour la mémoire de SimpleLogger ou la lecture d'archives ; ces budgets
+restent à qualifier dans GAP-010/GAP-011. Les champs bornés de REQ-002 conservent leur couverture
+unitaire existante et une qualification du profil explicitement ouverte dans GAP-018.
 
 Le contrat canonique versionné et le chaînage déterministe sont contrôlés par vecteurs de
 référence. PersistingAuditSink distingue append, synchronisation, état durable et santé.

@@ -11,12 +11,20 @@ ni une certification, ni la validation d'un dispositif, ni un système qualité 
 - Base logicielle : v0.2.0, commit `e7012f299b3c976b37b43b53add43e5e6e4636b8`.
 - Révision de develop examinée : `8344aba4e5516e446ea1b73e52b87547bb79bffb` ; même arbre que v0.2.0.
 - Auteur : contributeur identifié par l'historique Git de chaque document.
-- Relecteur requis : Ambroise Leclerc, mainteneur indiqué par [CODEOWNERS](../.github/CODEOWNERS).
+- Responsable de la revue de projet : Ambroise Leclerc, mainteneur indiqué par [CODEOWNERS](../.github/CODEOWNERS).
 - Date de revue : aucune revue de cette base encore enregistrée ; suivi GAP-001.
 - Version et historique de chaque document : Git ; la révision du dossier soumis est le SHA
   du commit contenant les documents. Ne pas utiliser le SHA de base comme preuve de leur acceptation.
 - La décision, la révision relue, la date et les réserves seront consignées dans le champ
   `review` du [registre](register.json). Ne pas déduire une acceptation d'un test réussi.
+
+La base initiale de #124 est soumise par Ambroise Leclerc, également responsable de la revue de projet et de
+plusieurs lacunes. Une revue réalisée par lui seul sera une **auto-revue non indépendante**.
+Le projet assume cette limite organisationnelle ; aucune indépendance de revue ni satisfaction
+d'exigences IEC 62304/ISO 13485 par ce cumul de rôles n'est revendiquée. GAP-019 exige que la
+décision consigne auteurs, relecteurs, approbateurs et cumuls. Le fabricant détermine les revues
+et qualifications nécessaires dans son propre système qualité ; cette acceptation de projet
+ne les remplace pas. Aucun relecteur indépendant n'est actuellement désigné.
 
 Les métadonnées ci-dessus s'appliquent à tous les documents de `regulatory/` et au registre.
 Les modèles sont des aides à remplir ; ils ne portent aucune décision pour un dispositif.

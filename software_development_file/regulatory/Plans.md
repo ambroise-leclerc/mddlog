@@ -58,6 +58,11 @@ ou secrets ; le canal privé et les délais de traitement restent à établir da
 
 ## Acceptation et publication
 
+L'organisation actuelle permet un cumul auteur/relecteur/approbateur chez le mainteneur.
+Une revue de cette base par son auteur est non indépendante ; GAP-019 exige l'identification
+explicite de cette limite dans la décision. Le fabricant évalue ses besoins de revue et de
+qualification selon son système qualité et le dispositif ; l'auto-revue du projet ne les remplace pas.
+
 #124 exige une revue nominative de la base : révision, date, décision et réserves sont consignées
 une fois dans `review`. Les réserves doivent être closes pour enregistrer une acceptation.
 Les autres GAP ouverts liés aux exigences implémentées doivent être clos ou acceptés explicitement avec justification dans

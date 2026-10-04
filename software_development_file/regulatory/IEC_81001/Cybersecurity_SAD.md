@@ -22,6 +22,11 @@ qualifie la disponibilité et l'indépendance du fournisseur, et protège sa cha
 #114/#115 produisent les backends ; #119 le lecteur/export ; #120 les essais adverses ;
 #123 porte la signature et les clés, explicitement hors critères de publication 1.0.
 
+GAP-017 suit explicitement la qualification des hypothèses de minimisation et confidentialité
+par le fabricant du profil : catégories autorisées/exclues, messages et identifiants, accès,
+stockage, export et conservation. REQ-016 et RISK-009 y renvoient ; ces mesures hôte ne sont
+ni implémentées ni vérifiées par la bibliothèque.
+
 Les DEP identifient la chaîne de construction et sa surveillance. Le suivi des vulnérabilités
 utilise la procédure d'anomalies des [plans](../Plans.md) ; canal privé, responsable opérationnel
 et délais sont une lacune explicite GAP-004 à résoudre avant publication. Aucun processus de

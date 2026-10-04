@@ -10,11 +10,15 @@ profil de l'hôte ; « sans dépendance externe » ne les retire pas de l'analys
 SOUP est une proposition à confirmer selon le dossier de développement disponible et la
 classification système du fabricant (GAP-005), pas une conséquence automatique de leur licence.
 
-SpecLab est réservé aux tests ; CPM est un outil vendue de construction. CMake, Ninja,
+SpecLab est réservé aux tests ; CPM est un outil de construction dont une copie est intégrée au dépôt. CMake, Ninja,
 compilateurs, analyseurs, Python, Git et runners CI influencent la construction ou les preuves
 sans être liés au composant. Les backends réels et leur pile système seront ajoutés par #114/#115.
 Les versions supportées et exclusions restent gouvernées par CMake ; en particulier GCC 16.2
 est exclu pour corruption des BMI, sans généraliser une garantie aux versions ultérieures.
+
+Les sources de surveillance propres à chaque DEP et leur cadence figurent dans le registre.
+Elles définissent un plan ; aucun examen complet des avis ni suivi opérationnel déjà réalisé
+n’est revendiqué. Les résultats et anomalies de chaque examen restent à conserver.
 
 Avant une mise à jour : vérifier licence et provenance, examiner défauts et avis de sécurité,
 reconstruire modules et consommateurs, exécuter les vérifications impactées et faire accepter

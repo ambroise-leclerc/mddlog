@@ -1,6 +1,6 @@
 # Modèle — Architecture de cybersécurité
 
-Modèle à copier et remplir pour le dispositif ; voir [le guide](../../README.md).
+Modèle à copier et remplir pour le dispositif ; voir [la section Utilisation et traçabilité](../../README.md#utilisation-et-traçabilité).
 Ce modèle ne prescrit pas de classe de sécurité et ne reproduit aucune clause normative.
 
 ## Maîtrise documentaire

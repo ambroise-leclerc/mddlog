@@ -16,7 +16,8 @@
       "GAP-002",
       "GAP-003",
       "GAP-004",
-      "GAP-005"
+      "GAP-005",
+      "GAP-019"
     ],
     "acceptedGaps": {}
   },
@@ -27,7 +28,7 @@
       "status": "open",
       "issue": 124,
       "owner": "Ambroise Leclerc",
-      "closure": "Décision nominative avec date, SHA du dossier et réserves ; vérifier applicabilité, exigences, architecture et traçabilité."
+      "closure": "Décision nominative avec date, SHA du dossier et réserves ; vérifier applicabilité, exigences, architecture et traçabilité. Consigner les cumuls de rôles et la limite d’indépendance traitée dans GAP-019."
     },
     {
       "id": "GAP-002",
@@ -148,6 +149,30 @@
       "issue": 123,
       "owner": "Ambroise Leclerc",
       "closure": "Conception et qualification dédiées ; hors critères de publication 1.0, aucune preuve d’auteur revendiquée."
+    },
+    {
+      "id": "GAP-017",
+      "title": "Qualifier les hypothèses de minimisation et confidentialité des données",
+      "status": "open",
+      "issue": 122,
+      "owner": "Ambroise Leclerc pour les hypothèses du composant ; fabricant du profil pour les contrôles système",
+      "closure": "Politique du profil revue : catégories de données autorisées/exclues, minimisation des messages et identifiants, accès au support et aux exports, chiffrement si requis et conservation. Contrôles hôte et preuves référencés, risque résiduel évalué par le fabricant ; aucune protection fournie par mddlog présumée."
+    },
+    {
+      "id": "GAP-018",
+      "title": "Qualifier les champs bornés sur le profil d’intégration",
+      "status": "open",
+      "issue": 117,
+      "owner": "Ambroise Leclerc et intégrateur du profil",
+      "closure": "Exécuter et conserver les essais de capacités exactes, refus des identifiants, troncature UTF-8 et résultat de troncature sur le tuple retenu ; vérifier les entrées réelles, les capacités choisies et la politique hôte de traitement des refus. Relier résultats et mesures au SHA et au profil, sans assimiler les tests unitaires existants à cette qualification."
+    },
+    {
+      "id": "GAP-019",
+      "title": "Consigner la limite d’indépendance de la revue initiale",
+      "status": "open",
+      "issue": 124,
+      "owner": "Ambroise Leclerc",
+      "closure": "Décision de revue indiquant auteur, relecteur, approbateur et leurs éventuels cumuls ; auto-revue identifiée comme non indépendante. Limite de cette acceptation de projet consignée et besoins de revue/qualification du fabricant explicités ; ne revendiquer ni revue indépendante ni satisfaction d’une exigence normative non examinée."
     }
   ],
   "controls": [
@@ -412,7 +437,8 @@
       "gaps": [
         "GAP-007",
         "GAP-009",
-        "GAP-011"
+        "GAP-011",
+        "GAP-018"
       ],
       "status": "open",
       "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
@@ -532,12 +558,11 @@
       "effect": "Messages et identifiants persistés accessibles sans chiffrement ni contrôle d’accès fourni par mddlog.",
       "controls": [],
       "gaps": [
-        "GAP-006",
-        "GAP-007",
+        "GAP-017",
         "GAP-015"
       ],
       "status": "open",
-      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+      "systemAssessment": "Hypothèse à qualifier par le fabricant : minimiser les données émises, exclure secrets et données patient non nécessaires, protéger accès, stockage et exports selon leur sensibilité. Aucun contrôle de confidentialité n’est fourni ou qualifié par mddlog ; politique et preuves du profil à établir dans GAP-017."
     },
     {
       "id": "RISK-010",
@@ -558,9 +583,7 @@
       "id": "RISK-011",
       "title": "Chaîne de construction ou dépendance défectueuse",
       "effect": "BMI corrompu, outil ou dépendance compromis : logiciel ou preuves incorrects.",
-      "controls": [
-        "CTRL-001"
-      ],
+      "controls": [],
       "gaps": [
         "GAP-004",
         "GAP-005",
@@ -589,9 +612,7 @@
       "id": "REQ-001",
       "text": "Le cœur reste séparé des adaptateurs, I/O et clés.",
       "status": "implemented",
-      "risks": [
-        "RISK-011"
-      ],
+      "risks": [],
       "controls": [
         "CTRL-001"
       ],
@@ -615,7 +636,9 @@
       "verifications": [
         "VER-002"
       ],
-      "gaps": []
+      "gaps": [
+        "GAP-018"
+      ]
     },
     {
       "id": "REQ-003",
@@ -779,17 +802,13 @@
     },
     {
       "id": "REQ-012",
-      "text": "La lecture et le diagnostic sous surcharge respectent des budgets mesurés.",
+      "text": "La lecture d’archives et le diagnostic SimpleLogger sous surcharge respectent des budgets mémoire et temporels mesurés sur le profil retenu.",
       "status": "planned",
       "risks": [
         "RISK-007"
       ],
-      "controls": [
-        "CTRL-010"
-      ],
-      "verifications": [
-        "VER-010"
-      ],
+      "controls": [],
+      "verifications": [],
       "gaps": [
         "GAP-010",
         "GAP-011"
@@ -822,7 +841,40 @@
         "GAP-003",
         "GAP-004",
         "GAP-005",
-        "GAP-015"
+        "GAP-015",
+        "GAP-019"
+      ]
+    },
+    {
+      "id": "REQ-015",
+      "text": "Le transport découplé utilise une file bornée et rend ses pannes observables par retrait et compteurs de santé ; ce contrat ne borne pas la file de SimpleLogger.",
+      "status": "implemented",
+      "risks": [
+        "RISK-007",
+        "RISK-008"
+      ],
+      "controls": [
+        "CTRL-010"
+      ],
+      "verifications": [
+        "VER-010"
+      ],
+      "gaps": [
+        "GAP-003",
+        "GAP-013"
+      ]
+    },
+    {
+      "id": "REQ-016",
+      "text": "Le profil de référence documente les données autorisées dans les messages et identifiants, leur minimisation et les protections de confidentialité apportées par l’hôte.",
+      "status": "planned",
+      "risks": [
+        "RISK-009"
+      ],
+      "controls": [],
+      "verifications": [],
+      "gaps": [
+        "GAP-017"
       ]
     }
   ],
@@ -836,7 +888,7 @@
       "license": "Licences spécifiques libstdc++ (GPL avec exception runtime), libc++ (Apache-2.0 avec exceptions LLVM) ou runtime MSVC ; notices exactes à relever pour le profil.",
       "classification": "Classement SOUP proposé pour bibliothèques préexistantes ; confirmation GAP-005.",
       "knownIssues": "Garanties std/atomiques/modules liées au tuple ; limites des contrôles de frontière.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur et intégrateur examinent avant mise à jour et release les défauts libstdc++ via https://gcc.gnu.org/bugzilla/ (accès automatisé bloqué lors de la consultation du 2026-10-04), les avis libc++/LLVM via https://github.com/llvm/llvm-project/security/advisories et le runtime MSVC via https://msrc.microsoft.com/update-guide. Filtrer sur le runtime réellement déployé et consigner version, avis examinés et anomalies du profil dans GAP-005.",
       "gaps": [
         "GAP-005"
       ]
@@ -850,7 +902,7 @@
       "license": "EUPL-1.2, LICENSE du dépôt au SHA épinglé consulté.",
       "classification": "Test seulement, non déployé.",
       "knownIssues": "Défauts du runner peuvent affecter les résultats ; révision immuable et contrôle de découverte.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine avant changement de la révision épinglée et release les issues du runner https://github.com/ambroise-leclerc/SpecLab/issues ; rejouer découverte et scénarios impactés. Conserver révision examinée et anomalies ; absence d’issue connue ne démontre pas la fiabilité du runner.",
       "gaps": [
         "GAP-005"
       ]
@@ -859,12 +911,12 @@
       "id": "DEP-003",
       "name": "CPM.cmake",
       "scope": "build",
-      "version": "0.42.0 vendue",
+      "version": "0.42.0, copie intégrée au dépôt",
       "provenance": "cmake/CPM.cmake",
       "license": "MIT ; notice conservée dans le fichier.",
       "classification": "Outil de construction, non déployé.",
       "knownIssues": "Téléchargements dépendants du réseau ; examiner provenance et cache.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine les notes de https://github.com/cpm-cmake/CPM.cmake/releases avant remplacement de la copie intégrée et release ; vérifier provenance des téléchargements, changements de cache et révision du fichier, puis reconstruire sans dépendre d’un cache non vérifié.",
       "gaps": [
         "GAP-005"
       ]
@@ -878,7 +930,7 @@
       "license": "GCC GPL avec exceptions runtime ; LLVM Apache-2.0 avec exceptions ; MSVC propriétaire. À relever pour chaque installation.",
       "classification": "Outils de construction/vérification, non SOUP déployé sauf runtimes DEP-001.",
       "knownIssues": "GCC 16.2 exclu : corruption BMI ; AppleClang exclu ; import std expérimental.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine avant mise à jour et release les défauts modules GCC dans https://gcc.gnu.org/bugzilla/ (accès automatisé bloqué le 2026-10-04), les anomalies LLVM dans https://github.com/llvm/llvm-project/issues et avis dans https://github.com/llvm/llvm-project/security/advisories, ainsi que https://msrc.microsoft.com/update-guide pour MSVC. Filtrer compilateur/analyseur exact et tester BMIs, consommateurs et frontière ; exclusions restent dans CMake.",
       "gaps": [
         "GAP-005"
       ]
@@ -892,7 +944,7 @@
       "license": "CMake BSD-3-Clause ; Ninja Apache-2.0 ; distribution exacte à confirmer GAP-005.",
       "classification": "Outils de génération/construction, non déployés.",
       "knownIssues": "Gate expérimental import std dépendant de version CMake.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine avant mise à jour et release https://cmake.org/cmake/help/latest/release/index.html pour les changements import std/FILE_SET et https://github.com/ninja-build/ninja/releases pour le scanning/modules ; vérifier le gate CMake, la génération et les consommateurs sur le tuple retenu.",
       "gaps": [
         "GAP-005"
       ]
@@ -901,12 +953,12 @@
       "id": "DEP-006",
       "name": "Python",
       "scope": "verification",
-      "version": "3.9+ pour les contrôles de frontière et du dossier",
+      "version": "Python 3.9+ : exigé par cmake/GovernedChecks.cmake ; Path.is_relative_to utilisé dans scripts/check-governed.py et scripts/check-development-file.py. Version exacte à enregistrer par campagne.",
       "provenance": "scripts/check-governed.py",
       "license": "PSF ; notices de la distribution exacte à relever.",
       "classification": "Vérification seulement, non déployé.",
       "knownIssues": "Les contrôles lexicaux/documentaires ne prouvent pas la sémantique C++.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine les versions et notes de https://www.python.org/downloads/ et le canal https://www.python.org/dev/security/ avant changement d’interpréteur et release ; exécuter contrôles de frontière et documentaires avec l’interpréteur exact et conserver les anomalies.",
       "gaps": [
         "GAP-005"
       ]
@@ -920,7 +972,7 @@
       "license": "Git GPL-2.0 ; actions et images : licences/provenances à inventorier pour le profil GAP-005.",
       "classification": "Configuration et preuves seulement, non déployés.",
       "knownIssues": "Images et tags d’actions évolutifs ; une configuration CI n’est pas un résultat.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine https://github.com/git/git/security/advisories pour Git, https://github.com/actions/runner/releases pour les runners et les releases/avis des dépôts de chaque action réellement référencée dans les workflows avant mise à jour et release. Conserver SHA des actions, image et outils des journaux ; compléter l’inventaire du profil dans GAP-005.",
       "gaps": [
         "GAP-005"
       ]
@@ -934,7 +986,7 @@
       "license": "Licences et versions exactes à relever si utilisés, GAP-005.",
       "classification": "Outils optionnels, non déployés.",
       "knownIssues": "Cache nommé soumis au contrôle d’intégrité ; outils absents ne prouvent pas une analyse passée.",
-      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "monitoring": "Plan : mainteneur examine, si utilisés, https://ccache.dev/releasenotes.html pour le cache BMI, https://www.doxygen.nl/manual/changelog.html pour la génération documentaire et https://github.com/cppcheck-opensource/cppcheck/releases pour l’analyse, avant mise à jour et release ; rejouer les contrôles concernés et noter versions/options et anomalies.",
       "gaps": [
         "GAP-005"
       ]

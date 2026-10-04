@@ -29,3 +29,9 @@ Le texte intégral des normes n'a pas été examiné : **références de clauses
 GAP-002. Ce dossier n'attribue aucun numéro de clause et ne reprend pas ceux du modèle MduX.
 Les éditions ci-dessus sont une base proposée, pas une déclaration des normes applicables dans
 chaque juridiction ; le fabricant examine les éditions, amendements et adoptions locales requis.
+
+Pour IEC 81001-5-1, la [fiche de la publication](https://webstore.iec.ch/en/publication/63293)
+consultée le 2026-10-04 indique une version corrigée 2025-12 et l'inclusion de la feuille
+d'interprétation ; la [fiche ISH1:2025](https://webstore.iec.ch/en/publication/108664) identifie
+séparément cette feuille. Cela confirme la désignation éditoriale de la matrice, pas le contenu
+normatif ni ses effets sur ce composant. Leur examen sur copie autorisée reste GAP-002.
