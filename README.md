@@ -174,6 +174,7 @@ pour le dispositif et son profil réel.
 - **Livré (v0.2.0) :** admission d'audit bornée, séquence par flux, refus explicite et transmission avec santé ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md) ; épique [#9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Livré (v0.2.0) :** registre de sinks synchronisé, consommateur de transport borné et journal texte, avec WebFront comme consommateur de référence ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md) ; épique [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Livré (v0.2.0), preuves en revue :** confirmation durable sur un support éligible, détection d'altération relative à un ancrage indépendant, redémarrage, rotation et rétention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md) ; épique [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). L'acceptation de ces preuves est une décision de revue distincte.
+- **Proposé pour la 1.0 :** contextes explicites et liaisons de producteurs ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md), [étude compilable avant/après](docs/contextual-api-study.md) ; épique [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). La conception attend sa revue en #127 ; les prototypes locaux aux exemples ne sont pas une API publique livrée.
 - **Différé :** signature et gestion des clés, format d'export ([ADR-004, décision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
 ## Compiler et vérifier

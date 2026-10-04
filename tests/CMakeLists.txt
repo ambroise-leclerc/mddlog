@@ -133,3 +133,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 mddlog_discover_tests(mddlog_specs)
+
+# Run the executable before/after usage study when examples are enabled.
+if(TARGET mddlog_contextual_usage)
+    add_test(NAME examples.contextualUsage COMMAND mddlog_contextual_usage)
+    set_tests_properties(examples.contextualUsage PROPERTIES LABELS "examples;api")
+endif()

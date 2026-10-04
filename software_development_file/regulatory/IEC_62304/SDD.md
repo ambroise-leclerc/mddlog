@@ -46,3 +46,18 @@ prouve l'auteur. Le lecteur matérialise des données dans des conteneurs alloua
 restent à établir. L'hôte appelle aujourd'hui les primitives de pilotage ; #116 doit les regrouper
 hors code métier. Les suites de tests et guides de migration liés par les VER décrivent ce qui
 est exercé ; leur couverture n'équivaut pas à une validation applicative réelle.
+
+## Proposition de contextes pour la 1.0 (#113/#127)
+
+[ADR-005](../../../docs/adr/ADR-005-contextual-logging-api.md) est **proposée**, sans
+modification des modules publics ou des formats. Elle précise capture possédée, contexte
+d'opération indépendant, origine diagnostic, temps gouverné par événement, filtre avant
+fabrique de message et phases d'audit explicites. Les liaisons empruntent un anneau par
+producteur ; elles ne modifient pas SPSC et leurs destructeurs n'émettent rien.
+
+L'[étude](../../../docs/contextual-api-study.md) décrit l'exécutable et ses limites.
+GAP-006 suit l'acceptation #127 puis réalisation diagnostic #128, audit #129 et preuves
+#130. REQ-009/REQ-011 restent prévues ; RISK-008/009/010 ne sont pas clos par cette
+proposition. Les mesures envisagées sont la copie exacte des identifiants, des contextes
+indépendants et une politique d'admission visible ; aucune qualification de ces mesures
+n'est revendiquée. Aucun composant tiers nouveau : la chaîne DEP existante reste utilisée.

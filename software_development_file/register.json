@@ -78,7 +78,7 @@
       "status": "open",
       "issue": 113,
       "owner": "Ambroise Leclerc",
-      "closure": "Décision d’API et exemples avant/après revus ; contexte explicite sûr en concurrence, sans identifiants documentaires imposés aux appels."
+      "closure": "Décision d’API et exemples avant/après revus ; contexte explicite sûr en concurrence, sans identifiants documentaires imposés aux appels. Conception proposée dans docs/adr/ADR-005-contextual-logging-api.md et étude examples/ContextualUsage.cpp, preuves et limites dans docs/contextual-api-study.md ; acceptation encore attendue en #127. Réalisation et preuves suivies par les sous-issues #128, #129 et #130 de #113 ; REQ-009/REQ-011 restent prévues tant que les commodités ne sont pas livrées et vérifiées."
     },
     {
       "id": "GAP-007",

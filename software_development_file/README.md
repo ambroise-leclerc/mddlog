@@ -127,3 +127,12 @@ La conception de #113 peut démarrer après livraison de cette décision sur dev
 de #124 suit cette livraison. Cette décision ne vaut pas acceptation finale de la 1.0.
 Chaque épique #113–#122 actualise les données concernées, la conception et ses preuves ;
 #122 accepte le dossier final avant la publication selon le [processus de release](../docs/release-process.md).
+
+## Évolution après la base initiale
+
+Le lot #127 de #113 propose [ADR-005](../docs/adr/ADR-005-contextual-logging-api.md) et une
+[étude avant/après](../docs/contextual-api-study.md) compilable. Cette nouvelle conception
+attend sa propre revue ; elle n'est pas couverte par la décision initiale #124. GAP-006
+reste ouvert, les exigences concernées restent prévues. Le découpage #127–#130 conserve
+une livraison et une revue par lot ; les résultats de l'étude ne qualifient pas les budgets
+ou l'application indépendante des futurs lots.

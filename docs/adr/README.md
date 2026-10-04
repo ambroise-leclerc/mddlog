@@ -19,6 +19,7 @@ capability as delivered from an ADR's existence alone.
 | [002](ADR-002-regulatory-audit-event-model.md) | Regulatory audit-event model, separate from application logging | Accepted |
 | [003](ADR-003-application-integration-and-sink-ownership.md) | Application integration and sink ownership | Accepted |
 | [004](ADR-004-audit-persistence-and-tamper-evidence.md) | Audit persistence and tamper evidence | Accepted |
+| [005](ADR-005-contextual-logging-api.md) | Explicit contexts and producer bindings (#113/#127) | Proposed |
 
 ## How the four relate
 
@@ -45,3 +46,7 @@ serialization), they say so, state what the borrowed mechanism actually
 checks, and adapt it to a type mddlog owns rather than importing MduX's. MduX describes itself as
 experimental: its ADRs and targeted checks are an architectural precedent, not validation
 transferable to mddlog.
+
+ADR-005 proposes the 1.0 usage layer without amending the four existing contracts. Its
+[executable study](../../examples/ContextualUsage.cpp) contains local prototypes only;
+[the study report](../contextual-api-study.md) separates verification from design acceptance.
