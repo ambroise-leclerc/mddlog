@@ -37,8 +37,8 @@ the [executable study](../../examples/ContextualUsage.cpp) now uses those public
 The [study report](../contextual-api-study.md) preserves the accepted prototype revision,
 while [primitive verification](../contextual-api-validation.md) and
 [integration review](../contextual-api-integration.md) document the implementation and
-its evidence. Maintainer acceptance of the integration results remains separate from
-design acceptance.
+its evidence. The integration report records the maintainer closure decision and its
+local-application reservation; this acceptance remains separate from design acceptance.
 
 Further records are anticipated and deliberately not drafted: signing with key management
 (custody, provisioning, rotation), an **export format**, and **compliance reports**, which ADR-004

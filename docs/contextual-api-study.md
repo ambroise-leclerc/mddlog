@@ -21,7 +21,9 @@ Pas de sous-issue par méthode ou par champ : chacun conserve tests, migration e
 Ce lot prépare le jalon A : inventaire, capture, filtrage, propriété, erreurs et alternatives
 dans [ADR-005](adr/ADR-005-contextual-logging-api.md), plus usages compilables.
 La conception est acceptée à la révision `f3063bc4122cad41f23352721824db9094066b3d` ;
-la livraison sur develop et les lots d'implémentation restent distincts. #113 et GAP-006 restent ouverts.
+la livraison et l'acceptation des implémentations restent des décisions distinctes de cette
+étude historique. Les lots sont ensuite livrés par PR #131 et acceptés selon la
+[décision d'intégration](contextual-api-integration.md) : GAP-006 est clos pour ce périmètre.
 
 ## Démonstrateur et comparaison
 

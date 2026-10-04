@@ -98,10 +98,10 @@ portent messages, phases, temps et politique de refus, avec contexte/destination
 Le [rapport initial](contextual-api-study.md) conserve la comparaison acceptée et sa révision.
 La [campagne d’intégration #130](contextual-api-integration.md) ajoute un composant stock
 concret, la mesure actuelle des cinq usages et un scénario de producteurs/consommateur avec
-arrêt explicite. Sa revue mainteneur et la clôture de l’expérience #113 restent dues.
+arrêt explicite. Sa décision de clôture enregistre la revue de PR #131, la livraison sur
+`develop` à `2588124` et la confirmation explicite d'Ambroise Leclerc avec réserve locale/#122.
 
-REQ-009/REQ-011 restent au statut prévu pour l'expérience complète jusqu'à cette revue ;
-leurs contrôles et les primitives de #128/#129 sont ici implémentés. GAP-006 reste ouvert pour
-#130. Ni ce rapport ni l'acceptation de conception ne qualifient stockage, fournisseur indépendant,
+REQ-009/REQ-011 sont implémentées et GAP-006 est clos pour le périmètre accepté de #113.
+Les révisions et résultats de cette campagne historique restent inchangés. Ni ce rapport ni l'acceptation de conception ne qualifient stockage, fournisseur indépendant,
 réponse hôte à un refus critique ou application médicale. La bibliothèque ne fournit pas de
 politique de confidentialité ; l'hôte minimise et protège les identifiants.

@@ -209,5 +209,7 @@ utilise ces modules ; la révision de conception approuvée reste le SHA indiqu�
 Le [rapport](../contextual-api-integration.md) mesure les cinq usages avec l’API publique
 et un composant concret de stock, compare les mutations et le refus avant/après, et exerce
 producteurs et consommateur avec copie avant acquittement et arrêt avant destruction.
-Ce lot ne modifie aucune signature ni le modèle SPSC. La revue technique locale est
-disponible ; la décision mainteneur sur les résultats reste distincte de l’Approval ci-dessus.
+Ce lot ne modifie aucune signature ni le modèle SPSC. La décision de clôture du rapport
+consigne revue AM-L, livraison par PR #131 et confirmation explicite d'Ambroise Leclerc,
+avec réserve d'intégration locale/#122. GAP-006 est clos ; cette acceptation des résultats
+reste distincte de l'Approval de conception ci-dessus.

@@ -136,7 +136,10 @@ implémentent les liaisons et leurs contrôles ; [les preuves](../docs/contextua
 identifient la révision logicielle et [la référence/migration](../docs/migration/contextual-logging.md).
 Le registre contient CTRL-011–013 et VER-011–019 sans changer la décision historique de `review`.
 L’[intégration #130](../docs/contextual-api-integration.md) ajoute CTRL-014/VER-020–022,
-un composant stock concret et la revue technique de lisibilité, avec vérification actualisée sur `f64161b`. GAP-006
-reste ouvert pour la décision mainteneur sur ce lot ; les exigences de l’expérience complète
-restent prévues. L’application indépendante reste #122.
+un composant stock concret et la revue technique de lisibilité, avec vérification actualisée sur `f64161b`.
+Les lots #127–130 sont livrés par PR #131 sur `develop` à `2588124`. La revue AM-L du
+2026-10-04 sur `b2b985f` et la confirmation explicite d'Ambroise Leclerc sont enregistrées
+avec leurs réserves dans le rapport d'intégration. GAP-006 est clos ; REQ-009/REQ-011 sont
+implémentées pour les usages publics et l'intégration locale. L'application indépendante
+et l'acceptation finale du dossier restent #122 ; la décision historique de `review` est inchangée.
 Les résultats locaux ne qualifient pas les budgets temporels ou l'application indépendante.
