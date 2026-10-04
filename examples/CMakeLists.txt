@@ -46,8 +46,8 @@ if(MDDLOG_INSTALL_EXAMPLES)
     )
 endif()
 
-# ADR-005 usage study: local prototypes, not installed public API.
+# ADR-005 usage study with public context bindings.
 add_executable(mddlog_contextual_usage ContextualUsage.cpp)
-target_link_libraries(mddlog_contextual_usage PRIVATE mddlog::mddlog)
+target_link_libraries(mddlog_contextual_usage PRIVATE mddlog::mddlog mddlog::core)
 target_compile_features(mddlog_contextual_usage PRIVATE cxx_std_23)
 set_target_properties(mddlog_contextual_usage PROPERTIES FOLDER "Examples")

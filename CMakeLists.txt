@@ -202,9 +202,13 @@ set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/LogLevel.cppm
     include/mddlog/core/WriteResult.cppm
     include/mddlog/core/Record.cppm
+    include/mddlog/core/DiagnosticContext.cppm
     include/mddlog/core/Ring.cppm
+    include/mddlog/core/GovernedBinding.cppm
     include/mddlog/core/AuditEvent.cppm
+    include/mddlog/core/AuditContext.cppm
     include/mddlog/core/AuditRing.cppm
+    include/mddlog/core/AuditBinding.cppm
 )
 target_sources(mddlog-core
     PUBLIC
@@ -237,6 +241,7 @@ target_sources(mddlog
         include/mddlog/adapter/AuditStore.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
+        include/mddlog/adapter/DiagnosticBinding.cppm
         include/mddlog/mddlog.cppm
         include/mddlog/Log.cppm
 )

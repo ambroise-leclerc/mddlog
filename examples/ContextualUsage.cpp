@@ -1,125 +1,17 @@
-/** @brief Executable usage study for ADR-005; these local bindings are not public API. */
+/** @brief Executable before/after usage study using the delivered ADR-005 context bindings. */
 
 import std;
 import mddlog.core.ring;
 import mddlog.core.auditring;
-import mddlog.adapter.textlogger;
+import mddlog.core.governedbinding;
+import mddlog.core.auditbinding;
+import mddlog.adapter.diagnosticbinding;
 
 namespace study {
 namespace {
 using namespace mddlog::core;
 
-/** @brief Capture diagnostic invariants by value with the existing record validation. */
-class DiagnosticContext {
-public:
-    [[nodiscard]] static std::optional<DiagnosticContext>
-    create(std::string_view component, std::string_view operation = {}, std::string_view correlation = {}) noexcept {
-        DiagnosticContext next;
-        if (next.snapshot.assign({.time = RawTime::unavailable(), .component = component, .operationId = operation, .correlationId = correlation}).admission()
-            == Admission::Refused)
-            return std::nullopt;
-        return next;
-    }
-
-    [[nodiscard]] std::optional<DiagnosticContext> withOperation(std::string_view operation, std::string_view correlation) const noexcept {
-        return create(snapshot.component(), operation, correlation);
-    }
-
-    [[nodiscard]] RecordInput input(LogLevel level, RawTime time, std::string_view message, std::source_location location) const noexcept {
-        return {.level         = level,
-                .time          = time,
-                .location      = location,
-                .message       = message,
-                .component     = snapshot.component(),
-                .operationId   = snapshot.operationId(),
-                .correlationId = snapshot.correlationId()};
-    }
-
-private:
-    GovernedRecord snapshot;
-};
-
-/** @brief Adapter-only injection; formatting and callbacks may allocate or throw. */
-class TextBinding {
-public:
-    TextBinding(mddlog::adapter::TextLogger& target, DiagnosticContext value) : logger(target), context(value) {}
-
-    void info(std::string_view text, std::source_location location = std::source_location::current()) {
-        write(LogLevel::Info, text, location);
-    }
-
-    template <typename Factory>
-    void debugLazy(Factory&& factory, std::source_location location = std::source_location::current()) {
-        if (!logger.get().is(LogLevel::Debug))
-            return;
-        // Own the result until write has copied/rendered it, including a returned temporary string.
-        const auto text = std::invoke(std::forward<Factory>(factory));
-        write(LogLevel::Debug, text, location);
-    }
-
-private:
-    void write(LogLevel level, std::string_view text, std::source_location location) {
-        if (!logger.get().is(level))
-            return;
-        const auto input = context.input(level, RawTime::unavailable(), text, location);
-        logger.get().write(level, std::format("[{}:{}:{}] {}", input.component, input.operationId, input.correlationId, input.message), location);
-    }
-
-    std::reference_wrapper<mddlog::adapter::TextLogger> logger;
-    DiagnosticContext                                   context;
-};
-
-/** @brief Borrow one producer's ring, own its context, and capture source at the caller. */
-template <std::size_t Capacity>
-class GovernedBinding {
-public:
-    GovernedBinding(RingLog<Capacity>& target, DiagnosticContext value) noexcept : ring(target), context(value) {}
-    GovernedBinding(RingLog<Capacity>&&, DiagnosticContext) = delete;
-
-    [[nodiscard]] WriteResult info(RawTime time, std::string_view message, std::source_location location = std::source_location::current()) noexcept {
-        return ring.get().tryWrite(context.input(LogLevel::Info, time, message, location));
-    }
-
-private:
-    std::reference_wrapper<RingLog<Capacity>> ring;
-    DiagnosticContext                         context;
-};
-
-/** @brief Own one host event description and operation context without publishing at construction. */
-template <std::size_t Capacity>
-class AuditBinding {
-public:
-    [[nodiscard]] static std::expected<AuditBinding, AuditRefusal> create(AuditRing<Capacity>& target, const AuditInput& invariants) noexcept {
-        AuditEvent snapshot;
-        if (const auto failure = snapshot.assign(invariants, target.identity(), 1).refusal())
-            return std::unexpected(*failure);
-        if (isReservedAuditAction(invariants.action))
-            return std::unexpected(AuditRefusal{.reason = AuditRefusalReason::ReservedAction, .field = AuditField::Action});
-        return AuditBinding(target, snapshot);
-    }
-    static std::expected<AuditBinding, AuditRefusal> create(AuditRing<Capacity>&&, const AuditInput&) = delete;
-
-    [[nodiscard]] AuditWriteResult
-    record(AuditPhase phase, RawTime time, std::string_view detail = {}, std::optional<std::uint64_t> sourceSequence = std::nullopt) noexcept {
-        return ring.get().tryRecord({.category       = context.category(),
-                                     .phase          = phase,
-                                     .time           = time,
-                                     .action         = context.action(),
-                                     .actor          = context.actor(),
-                                     .target         = context.target(),
-                                     .requirementRef = context.requirementRef(),
-                                     .riskRef        = context.riskRef(),
-                                     .correlationId  = context.correlationId(),
-                                     .sourceSequence = sourceSequence,
-                                     .detail         = detail});
-    }
-
-private:
-    AuditBinding(AuditRing<Capacity>& target, AuditEvent value) noexcept : ring(target), context(value) {}
-
-    std::reference_wrapper<AuditRing<Capacity>> ring;
-    AuditEvent                                  context;
-};
+using TextBinding = mddlog::adapter::DiagnosticBinding<mddlog::adapter::TextLogger>;
 
 void require(bool condition, std::string_view failure) {
     if (!condition)
@@ -200,13 +92,13 @@ template <typename Action>
 int main() {
     using namespace study;
     const auto time      = RawTime::unavailable();
-    const auto component = DiagnosticContext::create("pump");
+    const auto component = DiagnosticContext::create({.component = "pump"});
     if (!component.has_value())
         throw std::runtime_error("valid component refused");
-    const auto operation = component.value().withOperation("prime", std::string("call-7"));
+    const auto operation = component.value().withOperation({.operationId = "prime", .correlationId = std::string("call-7")});
     if (!operation.has_value())
         throw std::runtime_error("operation captures temporary identifiers");
-    require(!DiagnosticContext::create(std::string(componentCapacity + 1, 'x')), "overlong component refused");
+    require(!DiagnosticContext::create({.component = std::string(componentCapacity + 1, 'x')}), "overlong component refused");
 
     mddlog::adapter::TextLogger text;
     text.set(LogLevel::Info, true);
@@ -259,55 +151,52 @@ int main() {
                         })
                 .admission.wasAdmitted(),
             "before audit action");
-    // The host owns its vocabulary. Binding construction captures all invariant identifier bytes.
-    const AuditInput primeDescription{.category = AuditCategory::Operator, .action = "pump.prime"};
-    AuditRing<8>     auditRing("pump:boot-1");
-    auto             invariants = primeDescription;
-    invariants.actor            = "operator-1";
-    invariants.target           = "pump-1";
-    invariants.correlationId    = "call-7";
+    // The host owns its vocabulary. Description and operation identities are separate named options.
+    const auto primeDescription = AuditDescription::create({.category = AuditCategory::Operator, .action = "pump.prime"});
+    const auto auditContext     = AuditContext::create({.actor = "operator-1", .target = "pump-1", .correlationId = "call-7"});
+    if (!primeDescription || !auditContext)
+        throw std::runtime_error("invalid audit composition");
+    AuditRing<8> auditRing("pump:boot-1");
     {
-        auto audit = AuditBinding<8>::create(auditRing, invariants);
-        require(audit.has_value() && auditRing.admittedCount() == 0, "construction never publishes");
-        require(auditAfter(*audit,
+        AuditBinding audit(auditRing, *primeDescription, *auditContext);
+        require(auditRing.admittedCount() == 0, "construction never publishes");
+        require(auditAfter(audit,
                            time,
                            [] {
                                return true;
                            })
                     .admission.wasAdmitted(),
                 "explicit success");
-        require(auditAfter(*audit,
+        require(auditAfter(audit,
                            time,
                            [] {
                                return false;
                            })
                     .admission.wasAdmitted(),
                 "explicit failure");
-        require(audit->record(AuditPhase::Confirmed, time).wasAdmitted(), "confirmation is explicit");
+        require(audit.record(AuditPhase::Confirmed, time).wasAdmitted(), "confirmation is explicit");
     }
     require(auditRing.admittedCount() == 5, "destruction never publishes");
     const auto events = auditRing.drain();
     require(events.first()[0].phase() == AuditPhase::Requested && events.first()[1].phase() == AuditPhase::Executed
                 && events.first()[3].phase() == AuditPhase::Failed && events.first()[4].phase() == AuditPhase::Confirmed,
             "explicit phase sequence");
-    auto audit = AuditBinding<8>::create(auditRing, invariants);
-    require(audit.has_value(), "valid audit binding");
+    AuditBinding audit(auditRing, *primeDescription, *auditContext);
     for (int i = 0; i < 2; ++i)
-        require(audit->record(AuditPhase::Requested, time).wasAdmitted(), "fill audit ring");
+        require(audit.record(AuditPhase::Requested, time).wasAdmitted(), "fill audit ring");
     int        actions = 0;
     const auto action  = [&actions] {
         ++actions;
         return true;
     };
-    const auto outcomeRefused = auditAfter(*audit, time, action);
+    const auto outcomeRefused = auditAfter(audit, time, action);
     require(!outcomeRefused.admission.wasAdmitted() && outcomeRefused.actionRan && outcomeRefused.actionSucceeded && actions == 1,
             "refused outcome cannot undo an executed action");
-    const auto requestRefused = auditAfter(*audit, time, action);
+    const auto requestRefused = auditAfter(audit, time, action);
     const auto requestFailure = requestRefused.admission.refusal();
     require(requestFailure && requestFailure->reason == AuditRefusalReason::RingFull && !requestRefused.actionRan && actions == 1,
             "refused request blocks the action and preserves refusal reason");
-    invariants.action  = "mddlog.reserved";
-    const auto invalid = AuditBinding<8>::create(auditRing, invariants);
+    const auto invalid = AuditDescription::create({.action = "mddlog.reserved"});
     require(!invalid && invalid.error().reason == AuditRefusalReason::ReservedAction, "reserved vocabulary refused");
     std::println("ADR-005: five usage comparisons and prototype checks passed");
 }
