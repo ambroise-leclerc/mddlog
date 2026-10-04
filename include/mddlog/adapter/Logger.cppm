@@ -109,7 +109,7 @@ public:
     }
 
     /** @brief Emit diagnostic context into structured fields, retaining the existing adapter clock. */
-    void log(LogLevel level, std::string_view message, const DiagnosticContext& context, const std::source_location& loc = std::source_location::current()) {
+    void log(LogLevel level, const DiagnosticContext& context, std::string_view message, const std::source_location& loc = std::source_location::current()) {
         if (!is(level))
             return;
         LogRecord record(level, message, context.component(), loc);

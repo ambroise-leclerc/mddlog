@@ -106,6 +106,9 @@ const speclab::Register simpleBinding{
                               propagated = true;
                           }
                           checks.expect(propagated && sink->size() == 1, "factory exception creates no record");
+                          simple.log(LogLevel::Info, "legacy", {});
+                          records = sink->records();
+                          checks.expect(records.size() == 2 && records.back().category.empty(), "legacy empty category remains unambiguous");
                       }
                       checks.raise();
                   })

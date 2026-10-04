@@ -34,7 +34,7 @@ public:
         if constexpr (std::same_as<Logger, TextLogger>) {
             logger.get().write(level, std::format("[{}:{}:{}] {}", context.component(), context.operationId(), context.correlationId(), message), location);
         } else {
-            logger.get().log(level, message, context, location);
+            logger.get().log(level, context, message, location);
         }
     }
 
