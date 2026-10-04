@@ -50,6 +50,10 @@ référence ; ils ne recopient pas leurs lignes. Une vérification lie conceptio
 Les résultats effectifs restent dans les rapports de CI ou de campagne cités par les notes ;
 aucun résultat de test C++ nouveau n'est revendiqué par ce dossier.
 
+Le [rapport de préparation de la revue initiale](regulatory/Initial_Baseline_Review.md) examine
+la révision fusionnée de #125, consigne les vérifications et propose le traitement des réserves.
+Il attend la décision nominative ; le registre reste proposé et les lacunes restent ouvertes.
+
 ## Sources et provenance
 
 [CMakeLists.txt](../CMakeLists.txt) fait foi pour les modules et les compilateurs admis ;
