@@ -78,7 +78,7 @@
       "status": "open",
       "issue": 113,
       "owner": "Ambroise Leclerc",
-      "closure": "Conception ADR-005 acceptée par Ambroise Leclerc le 2026-10-04 sur f3063bc4122cad41f23352721824db9094066b3d (#127). Liaisons #128/#129 implémentées et vérifiées sur 8fe4fb10bb65e92064529e48e44327f0e556c99e ; preuves dans docs/contextual-api-validation.md et référence/migration dans docs/migration/contextual-logging.md. Reste #130 : revue d’intégration/lisibilité sur composant réel et preuves complètes de l’expérience #113 avant clôture ; REQ-009/REQ-011 restent prévues jusque-là. Les résultats locaux ne valent pas qualification des budgets ou d’un dispositif."
+      "closure": "Conception ADR-005 acceptée sur f3063bc ; liaisons #128/#129 vérifiées sur 8fe4fb1. Intégration #130 réalisée et revue technique locale dans docs/contextual-api-integration.md sur c80790fee0e3fda26abc32a44d30504117105046 : cinq usages publics et composant stock avant/après mesurés, producteurs/consommateurs et refus exercés, guide achevé. Reste la revue et décision mainteneur sur ce lot et sa réserve de portée locale (#122 conserve application indépendante). REQ-009/REQ-011 restent prévues jusque-là ; aucune qualification de dispositif ni clôture de #117/#120/#121/#122."
     },
     {
       "id": "GAP-007",
@@ -347,6 +347,18 @@
         "include/mddlog/core/AuditBinding.cppm",
         "include/mddlog/core/AuditEvent.cppm"
       ]
+    },
+    {
+      "id": "CTRL-014",
+      "title": "Intégration locale des liaisons et politique hôte visible au point de mutation",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-005-contextual-logging-api.md"
+      ],
+      "implementation": [
+        "examples/InventoryWorker.hpp",
+        "examples/ContextualInventory.cpp"
+      ]
     }
   ],
   "verifications": [
@@ -578,6 +590,42 @@
       "scenario": "context-audit-streams-and-refusal",
       "evidence": "docs/contextual-api-validation.md",
       "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-020",
+      "title": "Mutation concrète et refus de dépassement du stock",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-014"
+      ],
+      "test": "tests/spec/ContextIntegrationSpec.cpp",
+      "scenario": "context-integration-stock-limits",
+      "evidence": "docs/contextual-api-integration.md",
+      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+    },
+    {
+      "id": "VER-021",
+      "title": "Équivalence des politiques de refus avant et après contextualisation",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-014"
+      ],
+      "test": "tests/spec/ContextIntegrationSpec.cpp",
+      "scenario": "context-integration-refusal-equivalence",
+      "evidence": "docs/contextual-api-integration.md",
+      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+    },
+    {
+      "id": "VER-022",
+      "title": "Exceptions et retours de portée sans phase audit implicite",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-014"
+      ],
+      "test": "tests/spec/ContextIntegrationSpec.cpp",
+      "scenario": "context-integration-interrupted-scope",
+      "evidence": "docs/contextual-api-integration.md",
+      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
     }
   ],
   "risks": [
@@ -607,7 +655,8 @@
         "CTRL-003",
         "CTRL-004",
         "CTRL-007",
-        "CTRL-013"
+        "CTRL-013",
+        "CTRL-014"
       ],
       "gaps": [
         "GAP-006",
@@ -702,7 +751,8 @@
         "CTRL-010",
         "CTRL-011",
         "CTRL-012",
-        "CTRL-013"
+        "CTRL-013",
+        "CTRL-014"
       ],
       "gaps": [
         "GAP-006",
@@ -732,7 +782,8 @@
         "CTRL-003",
         "CTRL-004",
         "CTRL-011",
-        "CTRL-013"
+        "CTRL-013",
+        "CTRL-014"
       ],
       "gaps": [
         "GAP-006",
@@ -929,7 +980,8 @@
       ],
       "controls": [
         "CTRL-011",
-        "CTRL-012"
+        "CTRL-012",
+        "CTRL-014"
       ],
       "verifications": [
         "VER-011",
@@ -937,7 +989,10 @@
         "VER-013",
         "VER-014",
         "VER-015",
-        "VER-016"
+        "VER-016",
+        "VER-020",
+        "VER-021",
+        "VER-022"
       ],
       "gaps": [
         "GAP-006"
@@ -967,12 +1022,16 @@
         "RISK-010"
       ],
       "controls": [
-        "CTRL-013"
+        "CTRL-013",
+        "CTRL-014"
       ],
       "verifications": [
         "VER-017",
         "VER-018",
-        "VER-019"
+        "VER-019",
+        "VER-020",
+        "VER-021",
+        "VER-022"
       ],
       "gaps": [
         "GAP-006"

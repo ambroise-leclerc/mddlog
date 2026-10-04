@@ -151,3 +151,22 @@ producteur et canal, sans ordre global entre anneaux. Drains et persistance rest
 il conserve le `shared_ptr` aussi longtemps que la liaison : celle-ci n'acquiert aucune propriété
 partagée de la destination. Le chemin audit gouverné conseille la liaison directe à `AuditRing`,
 plutôt que la sérialisation par mutex de `SimpleLogger::logAudit`.
+
+## Intégrer un composant et consommer hors métier
+
+[InventoryWorker](../../examples/InventoryWorker.hpp) et sa [composition exécutable](../../examples/ContextualInventory.cpp)
+montrent une migration complète d'une modification de stock. `adjustBefore` assemble les champs
+à chaque événement ; `apply` reçoit delta et temps, puis conserve demande, mutation et refus
+d'issue comme faits distincts. Le composant possède deux liaisons, avec des capacités de
+diagnostic et d'audit indépendantes ; les anneaux restent possédés par la composition.
+
+L'application consommatrice copie les enregistrements avant d'acquitter les vues et ne relit
+pas celles-ci ensuite. Pour plusieurs producteurs, elle crée un couple d'anneaux et une
+identité de flux par producteur. Elle arrête et joint les threads, termine les derniers
+drains, puis détruit composants/liaisons et enfin anneaux. Les copies de liaisons utilisées
+par les threads exigent elles aussi cette durée de vie. La saturation d'une demande audit
+bloque ici la mutation ; celle du résultat après mutation exige une réaction hôte distincte.
+
+Reproduction : `ctest --preset ninja-clang -R 'examples.contextual' --output-on-failure`.
+Le [rapport d'intégration](../contextual-api-integration.md) mesure les usages, énonce chaque
+critère de #113 et distingue la démonstration locale de l'application indépendante #122.

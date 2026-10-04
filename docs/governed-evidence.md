@@ -120,3 +120,11 @@ The [context verification report](contextual-api-validation.md) records the exte
 GovernedBinding/AuditBinding template bodies and context/description factories with
 nonconstant arguments. These additions retain the same separate source, allocation and
 exception checks; the earlier campaigns above retain their original revisions and limits.
+
+## Intégration applicative locale #130
+
+Le [rapport d’intégration](contextual-api-integration.md) sur `c80790f` réexécute les cinq
+contrôles du cœur et les consommateurs source/installés. Le composant stock installé lie
+seulement `mddlog::core` et exerce phases/refus et arrêt de producteurs/consommateurs.
+Aucun module gouverné, budget de record ou graphe d’import n’est modifié par ce lot ;
+ces preuves ne qualifient pas une application indépendante ni un WCET.

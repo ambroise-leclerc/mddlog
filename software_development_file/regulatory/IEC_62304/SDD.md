@@ -64,8 +64,10 @@ pour la construction gouvernée sans accesseur levant ; aucun composant tiers no
 
 [Les preuves locales](../../../docs/contextual-api-validation.md) couvrent VER-011–019,
 les consommateurs sources/installés, la frontière et les tailles sur un tuple précis.
-GAP-006 reste ouvert pour la revue d'intégration #130 ; REQ-009/REQ-011 restent prévues
-pour l'expérience complète. RISK-008/010 bénéficient des contrôles de copies, de séparation
+[L’intégration #130](../../../docs/contextual-api-integration.md) fournit CTRL-014/VER-020–022 :
+composant stock, équivalence avant/après et producteurs/consommateur avec arrêt explicite.
+GAP-006 reste ouvert pour la revue et décision mainteneur ; REQ-009/REQ-011 restent prévues
+pour l’expérience acceptée complète. L’application indépendante reste #122. RISK-008/010 bénéficient des contrôles de copies, de séparation
 et d'admission visible ; les risques restent ouverts et l'hôte maîtrise toujours SPSC,
 durée de vie des destinations et réponse aux refus. Aucune confidentialité ou qualification
 de dispositif n'est fournie ; RISK-009 conserve sa limite.

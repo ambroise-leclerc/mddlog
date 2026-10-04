@@ -1,6 +1,6 @@
 # Vérification des liaisons contextualisées — #128/#129
 
-Statut : **implémenté et vérifié localement**, preuves à revoir dans #130 ; aucun gel 1.0
+Statut : **implémenté et vérifié localement**, campagne historique des primitives ; intégration réalisée dans #130 ; aucun gel 1.0
 ou profil de dispositif accepté. La conception [ADR-005](adr/ADR-005-contextual-logging-api.md)
 a été acceptée par Ambroise Leclerc le 2026-10-04 sur `f3063bc4122cad41f23352721824db9094066b3d`.
 La présente campagne vise la révision logicielle `8fe4fb10bb65e92064529e48e44327f0e556c99e`.
@@ -96,8 +96,9 @@ L'[exécutable](../examples/ContextualUsage.cpp) utilise directement les nouvell
 liaisons. Ses cinq paires avant/après restent compilées et exécutées ; les fonctions métier
 portent messages, phases, temps et politique de refus, avec contexte/destination à la composition.
 Le [rapport initial](contextual-api-study.md) conserve la comparaison acceptée et sa révision.
-La revue sur un composant applicatif réel, les preuves complètes de durée de vie et de concurrence,
-la clôture de l'expérience #113 et la migration intégrée relèvent encore de #130.
+La [campagne d’intégration #130](contextual-api-integration.md) ajoute un composant stock
+concret, la mesure actuelle des cinq usages et un scénario de producteurs/consommateur avec
+arrêt explicite. Sa revue mainteneur et la clôture de l’expérience #113 restent dues.
 
 REQ-009/REQ-011 restent au statut prévu pour l'expérience complète jusqu'à cette revue ;
 leurs contrôles et les primitives de #128/#129 sont ici implémentés. GAP-006 reste ouvert pour

@@ -203,3 +203,11 @@ que composant/opération/corrélation ; AuditDescription et AuditContext possèd
 séparées. GovernedBinding et AuditBinding empruntent leurs anneaux. DiagnosticBinding,
 unique template d'adaptateur, projette vers les deux loggers historiques. L'étude actuelle
 utilise ces modules ; la révision de conception approuvée reste le SHA indiqué dans Approval.
+
+## Intégration #130
+
+Le [rapport](../contextual-api-integration.md) mesure les cinq usages avec l’API publique
+et un composant concret de stock, compare les mutations et le refus avant/après, et exerce
+producteurs et consommateur avec copie avant acquittement et arrêt avant destruction.
+Ce lot ne modifie aucune signature ni le modèle SPSC. La revue technique locale est
+disponible ; la décision mainteneur sur les résultats reste distincte de l’Approval ci-dessus.
