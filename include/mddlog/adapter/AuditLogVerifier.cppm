@@ -163,11 +163,20 @@ struct BoundaryNote {
     return note;
 }
 
+/** @brief Bytes after the last valid frame of a stream's last segment (9.4, 9.5): unused space, or the trace of a cut. Never parsed, never a record. */
+struct TrailingRegion {
+    std::uint32_t segmentIndex = 0;
+    std::uint64_t offset       = 0;
+    std::uint64_t length       = 0;
+};
+
 /** @brief The 7.5 report of one stream or ledger, with how its records stand against what the ledgers recorded about its prefix. */
 struct StreamBoundaryReport {
     StreamReport      report;
     bool              ledger      = false;
     StreamDisposition disposition = StreamDisposition::Whole;
+    /** @brief The trailing bytes of the stream's last segment, when there are any: what a power cut during an append or a sync leaves (9.5). */
+    std::optional<TrailingRegion> trailing;
 };
 
 /** @brief What a reader reports for a whole log: per stream, then the boundaries. Nothing is folded into one "valid" result (7.5, 10.6). */
@@ -263,7 +272,11 @@ private:
         out.disposition           = ev.disposition;
         const StreamImage* stream = log.image().find(ev.id);
         const TrimRecord   trim   = ev.trim.value_or(TrimRecord{});
-        const auto         note   = [&](BoundaryKind kind, std::uint64_t position = 0, std::uint64_t second = 0) {
+        if (stream != nullptr && !stream->segments.empty() && stream->segments.back().trailingBytes != 0) {
+            const SegmentImage& last = stream->segments.back();
+            out.trailing             = TrailingRegion{.segmentIndex = last.index, .offset = last.validEnd, .length = last.trailingBytes};
+        }
+        const auto note = [&](BoundaryKind kind, std::uint64_t position = 0, std::uint64_t second = 0) {
             notes.push_back(makeBoundaryNote(kind, ev.id, position, second, trim.ledger, trim.ledgerSequence));
         };
 

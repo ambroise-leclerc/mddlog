@@ -396,29 +396,91 @@ const speclab::Register powerAndDurability{
     "integration",
     [] {
         return speclab::Test("audit-e2e-durability")
-            .Then("a cut before, during or after an append: trailing bytes are reported, no record at or below the durable position is missing",
+            .Then("a cut before, during or after an append: the reader reports the trailing bytes, and no record at or below the durable position is missing",
                   [] {
                       speclab::core::Checks checks;
-                      for (const Effect effect : {Effect::CutBefore, Effect::CutPartial, Effect::CutAfter}) {
+                      struct Case {
+                          Effect        effect;
+                          std::uint64_t lastPresent;
+                          std::uint64_t trailing;
+                      };
+                      // Records 1 … 5 are confirmed; record 6 is cut. Unconfirmed bytes are kept, so what the append wrote is what the reader finds.
+                      for (const Case expected : {
+                               Case{ .effect = Effect::CutBefore, .lastPresent = 5, .trailing = 0},
+                               Case{.effect = Effect::CutPartial, .lastPresent = 5, .trailing = 9},
+                               Case{  .effect = Effect::CutAfter, .lastPresent = 6, .trailing = 0}
+                      }) {
                           Device device;
                           checks.expect(device.start(pump), "started");
                           (void)device.produce(4);
-                          device.medium->inject(
-                              {.operation = Operation::Append, .ordinal = device.medium->calls(Operation::Append) + 2, .effect = effect, .partialBytes = 9});
+                          device.medium->inject({.operation    = Operation::Append,
+                                                 .ordinal      = device.medium->calls(Operation::Append) + 2,
+                                                 .effect       = expected.effect,
+                                                 .partialBytes = 9});
                           (void)device.produce(4);
                           const std::uint64_t durable = device.sink->durablePosition(pump);
+                          checks.expect(durable == 5, "durable through 5 when power is lost");
                           device.powerLoss(Unconfirmed::Kept);
-                          const auto& report = reportOf(device.read(), pump);
-                          checks.expect(report.verdict == Verdict::Unanchored && report.lastPresent >= durable && durable >= 4,
-                                        "the reader finds every durably confirmed record and no finding");
+                          const LogReport report = device.read();
+                          const auto*     stream = report.find(pump);
+                          checks.expect(stream != nullptr && stream->report.verdict == Verdict::Unanchored
+                                            && stream->report.lastPresent == expected.lastPresent,
+                                        "every durably confirmed record is read, and a complete frame past it is a record");
+                          checks.expect(stream != nullptr && stream->trailing.has_value() == (expected.trailing != 0)
+                                            && (expected.trailing == 0 || stream->trailing->length == expected.trailing),
+                                        "the reader reports the partial frame as trailing bytes, and reads no record from them");
                           checks.expect(device.start(pumpNew), "the next start succeeds");
-                          const bool trailing = std::ranges::any_of(device.sink->recovery().findings, [](const RecoveryFinding& finding) {
-                              return finding.kind == RecoveryFindingKind::TrailingBytes && finding.streamId == pump;
-                          });
-                          checks.expect(trailing == (effect == Effect::CutPartial), "a partial frame is reported as trailing bytes, and read as no record");
                       }
                       checks.raise();
                   })
+            .Then(
+                "a cut before, during or after a sync takes effect, whatever the medium keeps of unconfirmed bytes: no anchor past the durable position",
+                [] {
+                    speclab::core::Checks checks;
+                    struct Case {
+                        Effect        effect;
+                        Unconfirmed   policy;
+                        std::uint64_t lastPresent;
+                        bool          trailing;
+                    };
+                    // Records 1 … 4 are confirmed and anchored at 4; the sync of record 5 is cut. CutPartial persists 9 bytes of record 5's frame.
+                    for (const Case expected : {
+                             Case{ .effect = Effect::CutBefore, .policy = Unconfirmed::Dropped, .lastPresent = 4, .trailing = false},
+                             Case{.effect = Effect::CutPartial, .policy = Unconfirmed::Dropped, .lastPresent = 4,  .trailing = true},
+                             Case{  .effect = Effect::CutAfter, .policy = Unconfirmed::Dropped, .lastPresent = 5, .trailing = false},
+                             Case{ .effect = Effect::CutBefore,    .policy = Unconfirmed::Kept, .lastPresent = 5, .trailing = false},
+                             Case{.effect = Effect::CutPartial,    .policy = Unconfirmed::Kept, .lastPresent = 5, .trailing = false},
+                             Case{  .effect = Effect::CutAfter,    .policy = Unconfirmed::Kept, .lastPresent = 5, .trailing = false},
+                             Case{ .effect = Effect::CutBefore,    .policy = Unconfirmed::Half, .lastPresent = 4,  .trailing = true},
+                             Case{.effect = Effect::CutPartial,    .policy = Unconfirmed::Half, .lastPresent = 4,  .trailing = true},
+                             Case{  .effect = Effect::CutAfter,    .policy = Unconfirmed::Half, .lastPresent = 5, .trailing = false}
+                    }) {
+                        Device device;
+                        checks.expect(device.start(pump), "started");
+                        (void)device.produce(4);
+                        checks.expect(device.sink->advanceAnchor(pump), "anchored at 4");
+                        device.medium->inject(
+                            {.operation = Operation::Sync, .ordinal = device.medium->calls(Operation::Sync) + 1, .effect = expected.effect, .partialBytes = 9});
+                        (void)device.produce(3);
+                        const std::uint64_t durable = device.sink->durablePosition(pump);
+                        checks.expect(durable == 4, "the cut sync never answered durable: durable through 4");
+                        checks.expect(device.adapter->healthSnapshot().reportedLosses == 1, "record 5, handed off and never confirmed, is a reported loss");
+                        device.powerLoss(expected.policy);
+                        const LatestAnswer latest = device.provider.latest(pump);
+                        const auto*        anchor = std::get_if<Anchor>(&latest);
+                        checks.expect(anchor != nullptr && anchor->position == 4 && anchor->position <= durable, "no anchor past the durable position");
+                        const LogReport report = device.read();
+                        const auto*     stream = report.find(pump);
+                        checks.expect(stream != nullptr && stream->report.verdict == Verdict::Anchored && stream->report.anchoredThrough == 4
+                                          && stream->report.lastPresent == expected.lastPresent,
+                                      "Anchored through 4, and a record past it only if the medium kept its whole frame");
+                        checks.expect(stream != nullptr && stream->trailing.has_value() == expected.trailing,
+                                      "a frame kept in part is reported as trailing bytes, and read as no record");
+                        checks.expect(device.start(pumpNew), "the next start succeeds");
+                        checks.expect(reportOf(device.read(), pump).verdict == Verdict::Anchored, "and the old stream still reads Anchored through 4");
+                    }
+                    checks.raise();
+                })
             .Then("a medium that cannot confirm durability: nothing is confirmed, nothing is anchored, and the reader says unanchored",
                   [] {
                       speclab::core::Checks checks;
