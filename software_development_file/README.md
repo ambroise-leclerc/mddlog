@@ -130,9 +130,10 @@ Chaque épique #113–#122 actualise les données concernées, la conception et 
 
 ## Évolution après la base initiale
 
-Le lot #127 de #113 propose [ADR-005](../docs/adr/ADR-005-contextual-logging-api.md) et une
-[étude avant/après](../docs/contextual-api-study.md) compilable. Cette nouvelle conception
-attend sa propre revue ; elle n'est pas couverte par la décision initiale #124. GAP-006
-reste ouvert, les exigences concernées restent prévues. Le découpage #127–#130 conserve
-une livraison et une revue par lot ; les résultats de l'étude ne qualifient pas les budgets
-ou l'application indépendante des futurs lots.
+La conception [ADR-005](../docs/adr/ADR-005-contextual-logging-api.md) du lot #127 est acceptée
+le 2026-10-04 sur `f3063bc`, indépendamment de l'acceptation initiale #124. #128/#129
+implémentent les liaisons et leurs contrôles ; [les preuves](../docs/contextual-api-validation.md)
+identifient la révision logicielle et [la référence/migration](../docs/migration/contextual-logging.md).
+Le registre contient CTRL-011–013 et VER-011–019 sans changer la décision historique de `review`.
+GAP-006 reste ouvert pour #130 ; les exigences de l'expérience complète restent prévues.
+Les résultats locaux ne qualifient pas les budgets temporels ou l'application indépendante.

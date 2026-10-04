@@ -112,3 +112,11 @@ metadata/personality symbols alone are not throw sites and are not forbidden.
 
 The implementation draws on [MduXNoHeapScan.cmake at the pinned reference revision](https://github.com/ambroise-leclerc/MduX/blob/d972d77bc5cefdbe105ad7933ee61746fb5eb45b/cmake/MduXNoHeapScan.cmake),
 but keeps allocation and exception profiles independent and makes no whole-program guarantee.
+
+## Context factories and producer bindings (#128/#129)
+
+The [context verification report](contextual-api-validation.md) records the extended
+11-module governed graph and the current source/installed consumers. The probe now emits
+GovernedBinding/AuditBinding template bodies and context/description factories with
+nonconstant arguments. These additions retain the same separate source, allocation and
+exception checks; the earlier campaigns above retain their original revisions and limits.

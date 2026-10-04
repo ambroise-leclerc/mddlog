@@ -191,3 +191,15 @@ Aucune réserve supplémentaire n'est exprimée ; les limites de l'étude et les
 futures restent celles du rapport. Cette décision porte sur la conception du composant,
 sans revue indépendante revendiquée ni acceptation de risques de dispositif. #128/#129
 peuvent démarrer ; le gel final reste #121 et l'acceptation des preuves de publication #122.
+
+## Réalisation #128/#129
+
+Les [modules et preuves](../contextual-api-validation.md) et la
+[référence/migration](../migration/contextual-logging.md) concrétisent les signatures.
+Les factories renvoient `std::expected` avec erreurs typées ; cette décision de construction
+est distincte des résultats d'émission, conservés sous `WriteResult`/`AuditWriteResult`.
+Le cœur ne fait appel à aucun accesseur levant d'`expected`. DiagnosticContext ne stocke
+que composant/opération/corrélation ; AuditDescription et AuditContext possèdent des options
+séparées. GovernedBinding et AuditBinding empruntent leurs anneaux. DiagnosticBinding,
+unique template d'adaptateur, projette vers les deux loggers historiques. L'étude actuelle
+utilise ces modules ; la révision de conception approuvée reste le SHA indiqué dans Approval.

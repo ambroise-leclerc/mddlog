@@ -47,17 +47,25 @@ restent à établir. L'hôte appelle aujourd'hui les primitives de pilotage ; #1
 hors code métier. Les suites de tests et guides de migration liés par les VER décrivent ce qui
 est exercé ; leur couverture n'équivaut pas à une validation applicative réelle.
 
-## Proposition de contextes pour la 1.0 (#113/#127)
+## Contextes et liaisons pour la 1.0 (#113/#127–129)
 
-[ADR-005](../../../docs/adr/ADR-005-contextual-logging-api.md) est **proposée**, sans
-modification des modules publics ou des formats. Elle précise capture possédée, contexte
-d'opération indépendant, origine diagnostic, temps gouverné par événement, filtre avant
-fabrique de message et phases d'audit explicites. Les liaisons empruntent un anneau par
-producteur ; elles ne modifient pas SPSC et leurs destructeurs n'émettent rien.
+[ADR-005](../../../docs/adr/ADR-005-contextual-logging-api.md) est acceptée le 2026-10-04
+sur `f3063bc`. CTRL-011–013 sont implémentés : valeurs possédées et bornées, factories à
+refus typé, contextes dérivés indépendants, liaison diagnostic et description/contexte audit
+séparés. Les liaisons empruntent un anneau par producteur sans changer SPSC ; les destructeurs
+n'émettent rien. Le temps gouverné et les phases restent explicites par événement, le canal
+et les résultats d'admission restent ceux d'ADR-001/002. Les formats d'ADR-004 ne changent pas.
 
-L'[étude](../../../docs/contextual-api-study.md) décrit l'exécutable et ses limites.
-GAP-006 suit l'acceptation #127 puis réalisation diagnostic #128, audit #129 et preuves
-#130. REQ-009/REQ-011 restent prévues ; RISK-008/009/010 ne sont pas clos par cette
-proposition. Les mesures envisagées sont la copie exacte des identifiants, des contextes
-indépendants et une politique d'admission visible ; aucune qualification de ces mesures
-n'est revendiquée. Aucun composant tiers nouveau : la chaîne DEP existante reste utilisée.
+[La référence/migration](../../../docs/migration/contextual-logging.md) précise signatures,
+origines, durée de vie des vues et filtres avant fabrique. SimpleLogger expose son filtre
+et reçoit les champs structurés ; TextLogger reçoit une projection texte. Aucune allocation
+ou horloge de ces adaptateurs ne remonte dans le cœur. std::expected est utilisé seulement
+pour la construction gouvernée sans accesseur levant ; aucun composant tiers nouveau.
+
+[Les preuves locales](../../../docs/contextual-api-validation.md) couvrent VER-011–019,
+les consommateurs sources/installés, la frontière et les tailles sur un tuple précis.
+GAP-006 reste ouvert pour la revue d'intégration #130 ; REQ-009/REQ-011 restent prévues
+pour l'expérience complète. RISK-008/010 bénéficient des contrôles de copies, de séparation
+et d'admission visible ; les risques restent ouverts et l'hôte maîtrise toujours SPSC,
+durée de vie des destinations et réponse aux refus. Aucune confidentialité ou qualification
+de dispositif n'est fournie ; RISK-009 conserve sa limite.

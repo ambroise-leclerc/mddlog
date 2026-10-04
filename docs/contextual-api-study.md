@@ -2,8 +2,9 @@
 
 Date : 2026-10-04. Statut : **conception acceptée**, décision du 2026-10-04 sur `f3063bc`.
 Base : `develop` à `67a15e8`, après acceptation de #124 ; évolution sur
-`113-contextual-api-design`. La révision exacte des fichiers étudiés est celle du commit
-contenant ce rapport. Aucune campagne de qualification du profil 1.0 n'est revendiquée.
+`113-contextual-api-design`. L'étude de conception et les prototypes examinés sont figés à
+`f3063bc4122cad41f23352721824db9094066b3d`. L'exécutable actuel utilise les modules publics
+réalisés ensuite ; leurs preuves sont dans [le rapport de réalisation](contextual-api-validation.md). Aucune campagne de qualification du profil 1.0 n'est revendiquée.
 
 ## Découpage retenu
 
@@ -26,9 +27,10 @@ la livraison sur develop et les lots d'implémentation restent distincts. #113 e
 
 [ContextualUsage.cpp](../examples/ContextualUsage.cpp) est un démonstrateur de composant
 `pump` : il ne pilote pas un dispositif réel et ne remplace pas la revue applicative #130/#122.
-Ses petites classes locales `study` représentent les formes proposées ; elles ne sont pas
-exportées, installées ni incluses dans `FILE_SET cxx_modules`. Les modules publics restent
-ceux de la v0.2. Tous les paramètres de destination/contexte sont préparés dans `main` ;
+À la révision de conception acceptée, ses petites classes locales `study` représentaient
+les formes proposées sans être exportées ni installées. Les mesures suivantes décrivent
+cette étude initiale ; les modules publics réalisés ensuite remplacent ces prototypes dans
+l'exécutable courant. Tous les paramètres de destination/contexte sont préparés dans `main` ;
 les fonctions avant/après contiennent seulement l'instrumentation et la politique d'action.
 
 Décompte manuel sur le code formaté : lignes non vides à l'intérieur des fonctions métier,
@@ -115,7 +117,10 @@ La fixture documentaire inclut les deux nouvelles références pour vérifier le
 son dépôt temporaire. `git diff --check` réussit. Aucune acceptation mainteneur n'est déduite
 de ces résultats.
 
-## Réserves pour la revue
+## Réserves de l’étude acceptée
+
+Ces réserves décrivent le prototype à `f3063bc`. Le [rapport de réalisation](contextual-api-validation.md)
+précise leur traitement par #128/#129 et les travaux restant ouverts.
 
 - Le diagnostic final doit rendre l'erreur de création typée ; le prototype utilise `optional`.
 - La description et le contexte d'audit doivent devenir des options distinctes ; le prototype
@@ -132,10 +137,10 @@ de ces résultats.
   être précisés en #128 ; aucune perte silencieuse de corrélation n'est acceptable.
 - La qualification d'un composant réel, les budgets et le gel final restent dus à leurs lots.
 
-## Décision attendue
+## Décision enregistrée
 
-Revoir l'injection, les copies possédées, le temps par événement, les deux canaux, la politique
-de filtre concurrent et les cinq exemples. Consigner acceptation/réserves, mainteneur, date
-et révision dans `Approval` d'ADR-005. La contrainte vient de #113, jalon A :
-« Faire accepter une décision de conception et des exemples compilables avant de figer les signatures. »
-Le présent lot rend cette décision concrète ; les nouvelles signatures publiques attendent cette revue.
+Ambroise Leclerc accepte explicitement le 2026-10-04 la proposition à la révision
+`f3063bc4122cad41f23352721824db9094066b3d` (réponse « oui » pour engager #128/#129).
+La décision est enregistrée dans `Approval` d'ADR-005, avec la portée et les limites de l'étude.
+La contrainte de revue préalable de #113 est satisfaite ; l'acceptation des implémentations,
+le gel #121 et les qualifications futures restent distincts.

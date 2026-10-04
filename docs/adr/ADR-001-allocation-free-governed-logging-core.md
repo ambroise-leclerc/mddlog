@@ -655,3 +655,13 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
   drain (#38), and the boundary checks (#39) landed. This revision aligns implementation
   names, examples, and historical status; it makes no new normative decision. Review again if
   capacities, record layout, or the drain contract change.
+
+## Context factories (ADR-005)
+
+[ADR-005](ADR-005-contextual-logging-api.md), accepted on 2026-10-04, selects typed
+`std::expected` factories for owned diagnostic/audit context construction. This is the
+separate factory decision anticipated by Decision 3; emission still returns the existing
+`WriteResult` or `AuditWriteResult`. The core never calls throwing expected accessors.
+[Context verification](../contextual-api-validation.md) covers source/installed consumers
+and allocation/exception scans of the factories and bindings. No admission, SPSC or zone
+contract is amended.
