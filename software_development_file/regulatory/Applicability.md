@@ -14,7 +14,7 @@ authentification d'auteur, horloge fiable implicite et garantie temporelle du sy
 La classe de sécurité IEC 62304 dépend du dispositif et de ses mesures de maîtrise ; le titre
 de l'ADR-001 ne classe pas automatiquement mddlog ni toutes ses intégrations en classe C.
 
-## Matrice proposée à la revue de #124
+## Matrice retenue pour la base initiale de #124
 
 | Référence retenue et source officielle | Portée proposée et justification | Responsable de revue |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ de l'ADR-001 ne classe pas automatiquement mddlog ni toutes ses intégrations en
 Les fiches éditeurs ont été consultées le 2026-10-04 pour les éditions et le périmètre général.
 Le texte intégral des normes n'a pas été examiné : **références de clauses à confirmer** dans
 GAP-002. Ce dossier n'attribue aucun numéro de clause et ne reprend pas ceux du modèle MduX.
-Les éditions ci-dessus sont une base proposée, pas une déclaration des normes applicables dans
+Les éditions ci-dessus sont la base documentaire retenue, pas une déclaration des normes applicables dans
 chaque juridiction ; le fabricant examine les éditions, amendements et adoptions locales requis.
 
 Pour IEC 81001-5-1, la [fiche de la publication](https://webstore.iec.ch/en/publication/63293)

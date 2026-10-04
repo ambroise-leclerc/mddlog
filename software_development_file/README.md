@@ -7,22 +7,25 @@ ni une certification, ni la validation d'un dispositif, ni un système qualité 
 
 ## Maîtrise documentaire
 
-- Version du dossier : 1, préparation du 2026-10-04 ; statut : **proposé, non accepté**.
+- Version du dossier : 1, préparation du 2026-10-04 ; statut : **base initiale acceptée**, selon la décision du registre.
 - Base logicielle : v0.2.0, commit `e7012f299b3c976b37b43b53add43e5e6e4636b8`.
-- Révision de develop examinée : `8344aba4e5516e446ea1b73e52b87547bb79bffb` ; même arbre que v0.2.0.
+- Révision logicielle examinée et testée : `7f0477a8e552e8eb44520ddc7372a6457e04995a` ; mêmes sources C++ que v0.2.0.
 - Auteur : contributeur identifié par l'historique Git de chaque document.
 - Responsable de la revue de projet : Ambroise Leclerc, mainteneur indiqué par [CODEOWNERS](../.github/CODEOWNERS).
-- Date de revue : aucune revue de cette base encore enregistrée ; suivi GAP-001.
+- Date de décision : 2026-10-04 ; approbateur : Ambroise Leclerc.
+- Révision documentaire acceptée : `9b636ff50606fe92a489344f5100d9f76885f643` ; elle contient le rapport et l’enregistrement de la décision.
 - Version et historique de chaque document : Git ; la révision du dossier soumis est le SHA
-  du commit contenant les documents. Ne pas utiliser le SHA de base comme preuve de leur acceptation.
-- La décision, la révision relue, la date et les réserves seront consignées dans le champ
+  du commit contenant les documents. Le SHA logiciel testé et le SHA documentaire accepté sont
+  distincts. Les corrections éditoriales de traçabilité après décision sont identifiées par Git ;
+  elles ne déplacent pas automatiquement la révision acceptée vers un HEAD mutable.
+- La décision, la révision relue, la date et les dispositions sont consignées dans le champ
   `review` du [registre](register.json). Ne pas déduire une acceptation d'un test réussi.
 
 La base initiale de #124 est soumise par Ambroise Leclerc, également responsable de la revue de projet et de
-plusieurs lacunes. Une revue réalisée par lui seul sera une **auto-revue non indépendante**.
+plusieurs lacunes. La décision initiale cumule auteur, relecteur et approbateur : elle est une **auto-revue non indépendante**.
 Le projet assume cette limite organisationnelle ; aucune indépendance de revue ni satisfaction
-d'exigences IEC 62304/ISO 13485 par ce cumul de rôles n'est revendiquée. GAP-019 exige que la
-décision consigne auteurs, relecteurs, approbateurs et cumuls. Le fabricant détermine les revues
+d'exigences IEC 62304/ISO 13485 par ce cumul de rôles n'est revendiquée. La décision de `review`
+consigne les cumuls et la limite d'indépendance, levant GAP-019. Le fabricant détermine les revues
 et qualifications nécessaires dans son propre système qualité ; cette acceptation de projet
 ne les remplace pas. Aucun relecteur indépendant n'est actuellement désigné.
 
@@ -47,8 +50,16 @@ Le [registre JSON](register.json), format 2, est la **source unique** des exigen
 contrôles, vérifications, dépendances et lacunes. Les documents expliquent ces données par
 référence ; ils ne recopient pas leurs lignes. Une vérification lie conception et implémentation
 à un test existant et à une note de preuves. Sa présence ne constitue pas un résultat d'exécution.
-Les résultats effectifs restent dans les rapports de CI ou de campagne cités par les notes ;
-aucun résultat de test C++ nouveau n'est revendiqué par ce dossier.
+Les résultats effectifs restent dans les rapports de CI ou de campagne cités par les notes.
+Le dossier ne revendique aucun résultat de test C++ propre : il référence les résultats de ces
+campagnes et leurs limites. Les 155/155 cités dans le rapport de revue proviennent de la campagne
+locale sur la révision logicielle `7f0477a`, sans nouvelle campagne revendiquée pour la révision
+documentaire acceptée `9b636ff`. Leur portée reste celle du profil exécuté.
+
+Le [rapport de préparation de la revue initiale](regulatory/Initial_Baseline_Review.md) examine
+la révision fusionnée de #125, consigne les vérifications et propose le traitement des réserves.
+La décision nominative est enregistrée dans le registre ; GAP-001 et GAP-019 sont clos.
+Les autres lacunes restent ouvertes, avec dispositions explicites pour la base initiale.
 
 ## Sources et provenance
 
@@ -110,7 +121,9 @@ revendiquer les capacités différées. Une acceptation sans cette décision par
 
 Le contrôle ne vérifie ni l'accessibilité des liens
 externes, ni les clauses, ni la vérité d'une preuve, ni l'acceptabilité d'un risque.
-La revue de #124 doit confirmer applicabilité, architecture, couverture, responsabilités et
-réserves avant de démarrer la conception de #113. La livraison de ce lot ne clôt pas #124.
+La base initiale de #124 est acceptée avec les limites explicites de `review.acceptedGaps`.
+GAP-002 est reporté vers #122 ; les autres qualifications conservent leurs épiques responsables.
+La conception de #113 peut démarrer après livraison de cette décision sur develop ; la clôture
+de #124 suit cette livraison. Cette décision ne vaut pas acceptation finale de la 1.0.
 Chaque épique #113–#122 actualise les données concernées, la conception et ses preuves ;
 #122 accepte le dossier final avant la publication selon le [processus de release](../docs/release-process.md).

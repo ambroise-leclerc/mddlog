@@ -3,29 +3,39 @@
   "baseline": {
     "version": "0.2.0",
     "commit": "e7012f299b3c976b37b43b53add43e5e6e4636b8",
-    "examinedCommit": "8344aba4e5516e446ea1b73e52b87547bb79bffb"
+    "examinedCommit": "7f0477a8e552e8eb44520ddc7372a6457e04995a"
   },
   "review": {
-    "status": "proposed",
+    "status": "accepted",
     "reviewer": "Ambroise Leclerc",
-    "reviewedCommit": null,
-    "date": null,
-    "decision": null,
+    "reviewedCommit": "9b636ff50606fe92a489344f5100d9f76885f643",
+    "date": "2026-10-04",
+    "decision": "Ambroise Leclerc accepte explicitement la base initiale de #124 le 2026-10-04 après présentation du rapport Initial_Baseline_Review.md et de ses dispositions (réponse : « j’accepte »). Auteur, relecteur de la base et approbateur : Ambroise Leclerc ; auto-revue non indépendante, sans certification ni acceptation de risque de dispositif. L’approbation GitHub par AM-L demeure une revue de PR dont l’indépendance et la désignation pour l’acceptation ne sont pas établies. Acceptation limitée au dossier initial et aux mécanismes/couvertures cités : les qualifications futures restent ouvertes. GAP-002 est transféré à #122 ; GAP-002 à GAP-005 ne bloquent plus la base initiale et les autres limites des exigences implémentées sont motivées dans acceptedGaps. Le jalon de conception #113 peut démarrer après livraison de cette décision sur develop. Révision documentaire de référence : 9b636ff50606fe92a489344f5100d9f76885f643, contenant le rapport soumis en 6b27b6d et l’enregistrement de la décision. Révision logicielle de la campagne citée : 7f0477a8e552e8eb44520ddc7372a6457e04995a. Les corrections de traçabilité ultérieures sont identifiées par Git ; elles ne constituent pas une nouvelle campagne C++.",
     "reservations": [
       "GAP-001",
-      "GAP-002",
-      "GAP-003",
-      "GAP-004",
-      "GAP-005",
       "GAP-019"
     ],
-    "acceptedGaps": {}
+    "acceptedGaps": {
+      "GAP-002": "Limite de la base initiale acceptée : aucun numéro de clause ni conformité normative revendiqués ; fiches éditeurs uniquement. Examen sur copies autorisées maintenu ouvert et transféré à #122 avant acceptation finale.",
+      "GAP-003": "Le dossier initial distingue couverture et résultats ; une campagne locale et la CI documentaire sont citées. Conservation pérenne et campagnes de robustesse restent ouvertes en #120/#122, sans validation de toutes les plateformes.",
+      "GAP-004": "La procédure de problèmes et les limites de sécurité sont documentées ; canal privé et réponse opérationnelle aux vulnérabilités doivent être établis en #122 avant publication. Aucun processus opérationnel déjà qualifié présumé.",
+      "GAP-005": "Inventaire initial, contraintes, provenance et licences connues documentés ; versions exactes, notices et classement SOUP du profil restent à examiner en #121 et par le fabricant. Aucune qualification du profil acceptée.",
+      "GAP-007": "Primitives et doubles de test de persistance reconnus ; qualification d’un support réel reste due en #114. Les essais en mémoire ne prouvent pas la durabilité d’un déploiement.",
+      "GAP-008": "Interface et verdicts synthétiques reconnus ; fournisseur indépendant réel et position du lecteur persistée restent dus en #115. Aucune indépendance réelle ni protection contre rollback combiné présumée.",
+      "GAP-009": "Primitives de transmission, sync et santé reconnues ; composition/pilotage centralisés hors code métier restent à livrer en #116. L’application conserve sa politique de refus et d’échec.",
+      "GAP-012": "Contrats et tests du lecteur existant reconnus ; outil d’inspection/export versionné reste à livrer en #119, sans couverture supplémentaire présumée.",
+      "GAP-013": "Scénarios ciblés existants reconnus ; tests génératifs, fuzz et preuves de concurrence étendues restent dus en #120, sans exhaustivité des interleavings revendiquée.",
+      "GAP-014": "Distribution et formats actuels sont documentés ; stabilité 1.0, compatibilité et matrice exacte restent à figer et vérifier en #121.",
+      "GAP-015": "Cette décision accepte la base documentaire initiale uniquement ; application indépendante, chaîne réelle, preuves de persistance et acceptation du dossier final restent dues en #122.",
+      "GAP-016": "Signature et cycle de vie des clés demeurent différés en #123, hors critères de publication 1.0 ; aucune preuve d’auteur n’est reconnue par le chaînage.",
+      "GAP-018": "Capacités et refus implémentés avec couverture unitaire reconnue ; qualification des entrées réelles, capacités et politique hôte sur le profil reste ouverte en #117."
+    }
   },
   "gaps": [
     {
       "id": "GAP-001",
       "title": "Revoir et accepter la base initiale",
-      "status": "open",
+      "status": "closed",
       "issue": 124,
       "owner": "Ambroise Leclerc",
       "closure": "Décision nominative avec date, SHA du dossier et réserves ; vérifier applicabilité, exigences, architecture et traçabilité. Consigner les cumuls de rôles et la limite d’indépendance traitée dans GAP-019."
@@ -34,7 +44,7 @@
       "id": "GAP-002",
       "title": "Confirmer les clauses sur des copies normatives autorisées",
       "status": "open",
-      "issue": 124,
+      "issue": 122,
       "owner": "Ambroise Leclerc",
       "closure": "Examiner éditions/amendements retenus, dont ISH1:2025, consigner références confirmées sans reproduire le texte protégé."
     },
@@ -169,7 +179,7 @@
     {
       "id": "GAP-019",
       "title": "Consigner la limite d’indépendance de la revue initiale",
-      "status": "open",
+      "status": "closed",
       "issue": 124,
       "owner": "Ambroise Leclerc",
       "closure": "Décision de revue indiquant auteur, relecteur, approbateur et leurs éventuels cumuls ; auto-revue identifiée comme non indépendante. Limite de cette acceptation de projet consignée et besoins de revue/qualification du fabricant explicités ; ne revendiquer ni revue indépendante ni satisfaction d’une exigence normative non examinée."
