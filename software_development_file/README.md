@@ -9,13 +9,15 @@ ni une certification, ni la validation d'un dispositif, ni un système qualité 
 
 - Version du dossier : 1, préparation du 2026-10-04 ; statut : **base initiale acceptée**, selon la décision du registre.
 - Base logicielle : v0.2.0, commit `e7012f299b3c976b37b43b53add43e5e6e4636b8`.
-- Révision de develop examinée : `8344aba4e5516e446ea1b73e52b87547bb79bffb` ; même arbre que v0.2.0.
+- Révision logicielle examinée et testée : `7f0477a8e552e8eb44520ddc7372a6457e04995a` ; mêmes sources C++ que v0.2.0.
 - Auteur : contributeur identifié par l'historique Git de chaque document.
 - Responsable de la revue de projet : Ambroise Leclerc, mainteneur indiqué par [CODEOWNERS](../.github/CODEOWNERS).
 - Date de décision : 2026-10-04 ; approbateur : Ambroise Leclerc.
-- Révision acceptée : `7f0477a8e552e8eb44520ddc7372a6457e04995a` ; rapport de revue lié ci-dessous.
+- Révision documentaire acceptée : `9b636ff50606fe92a489344f5100d9f76885f643` ; elle contient le rapport et l’enregistrement de la décision.
 - Version et historique de chaque document : Git ; la révision du dossier soumis est le SHA
-  du commit contenant les documents. Ne pas utiliser le SHA de base comme preuve de leur acceptation.
+  du commit contenant les documents. Le SHA logiciel testé et le SHA documentaire accepté sont
+  distincts. Les corrections éditoriales de traçabilité après décision sont identifiées par Git ;
+  elles ne déplacent pas automatiquement la révision acceptée vers un HEAD mutable.
 - La décision, la révision relue, la date et les dispositions sont consignées dans le champ
   `review` du [registre](register.json). Ne pas déduire une acceptation d'un test réussi.
 
@@ -48,9 +50,11 @@ Le [registre JSON](register.json), format 2, est la **source unique** des exigen
 contrôles, vérifications, dépendances et lacunes. Les documents expliquent ces données par
 référence ; ils ne recopient pas leurs lignes. Une vérification lie conception et implémentation
 à un test existant et à une note de preuves. Sa présence ne constitue pas un résultat d'exécution.
-Les résultats effectifs restent dans les rapports de CI ou de campagne cités par les notes ;
-Les résultats de campagne sont cités séparément dans les rapports ; leur portée reste celle
-du profil exécuté.
+Les résultats effectifs restent dans les rapports de CI ou de campagne cités par les notes.
+Le dossier ne revendique aucun résultat de test C++ propre : il référence les résultats de ces
+campagnes et leurs limites. Les 155/155 cités dans le rapport de revue proviennent de la campagne
+locale sur la révision logicielle `7f0477a`, sans nouvelle campagne revendiquée pour la révision
+documentaire acceptée `9b636ff`. Leur portée reste celle du profil exécuté.
 
 Le [rapport de préparation de la revue initiale](regulatory/Initial_Baseline_Review.md) examine
 la révision fusionnée de #125, consigne les vérifications et propose le traitement des réserves.

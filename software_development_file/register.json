@@ -3,14 +3,14 @@
   "baseline": {
     "version": "0.2.0",
     "commit": "e7012f299b3c976b37b43b53add43e5e6e4636b8",
-    "examinedCommit": "8344aba4e5516e446ea1b73e52b87547bb79bffb"
+    "examinedCommit": "7f0477a8e552e8eb44520ddc7372a6457e04995a"
   },
   "review": {
     "status": "accepted",
     "reviewer": "Ambroise Leclerc",
-    "reviewedCommit": "7f0477a8e552e8eb44520ddc7372a6457e04995a",
+    "reviewedCommit": "9b636ff50606fe92a489344f5100d9f76885f643",
     "date": "2026-10-04",
-    "decision": "Ambroise Leclerc accepte explicitement la base initiale de #124 le 2026-10-04 après présentation du rapport Initial_Baseline_Review.md et de ses dispositions (réponse : « j’accepte »). Auteur, relecteur de la base et approbateur : Ambroise Leclerc ; auto-revue non indépendante, sans certification ni acceptation de risque de dispositif. L’approbation GitHub par AM-L demeure une revue de PR dont l’indépendance et la désignation pour l’acceptation ne sont pas établies. Acceptation limitée au dossier initial et aux mécanismes/couvertures cités : les qualifications futures restent ouvertes. GAP-002 est transféré à #122 ; GAP-002 à GAP-005 ne bloquent plus la base initiale et les autres limites des exigences implémentées sont motivées dans acceptedGaps. Le jalon de conception #113 peut démarrer après livraison de cette décision sur develop.",
+    "decision": "Ambroise Leclerc accepte explicitement la base initiale de #124 le 2026-10-04 après présentation du rapport Initial_Baseline_Review.md et de ses dispositions (réponse : « j’accepte »). Auteur, relecteur de la base et approbateur : Ambroise Leclerc ; auto-revue non indépendante, sans certification ni acceptation de risque de dispositif. L’approbation GitHub par AM-L demeure une revue de PR dont l’indépendance et la désignation pour l’acceptation ne sont pas établies. Acceptation limitée au dossier initial et aux mécanismes/couvertures cités : les qualifications futures restent ouvertes. GAP-002 est transféré à #122 ; GAP-002 à GAP-005 ne bloquent plus la base initiale et les autres limites des exigences implémentées sont motivées dans acceptedGaps. Le jalon de conception #113 peut démarrer après livraison de cette décision sur develop. Révision documentaire de référence : 9b636ff50606fe92a489344f5100d9f76885f643, contenant le rapport soumis en 6b27b6d et l’enregistrement de la décision. Révision logicielle de la campagne citée : 7f0477a8e552e8eb44520ddc7372a6457e04995a. Les corrections de traçabilité ultérieures sont identifiées par Git ; elles ne constituent pas une nouvelle campagne C++.",
     "reservations": [
       "GAP-001",
       "GAP-019"

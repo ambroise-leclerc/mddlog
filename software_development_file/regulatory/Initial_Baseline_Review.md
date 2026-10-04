@@ -3,8 +3,10 @@
 ## Identification et portée
 
 - Date de l'examen : 2026-10-04.
-- Révision du dossier et du logiciel examinée : `7f0477a8e552e8eb44520ddc7372a6457e04995a`,
+- Révision logicielle examinée et testée : `7f0477a8e552e8eb44520ddc7372a6457e04995a`,
   fusion de [la PR #125](https://github.com/ambroise-leclerc/mddlog/pull/125) dans develop.
+- Rapport soumis dans `6b27b6d` ; révision documentaire de référence acceptée :
+  `9b636ff50606fe92a489344f5100d9f76885f643`, contenant le dossier, ce rapport et l’enregistrement de la décision.
 - Référence fonctionnelle : v0.2.0 ; aucune différence dans `include/`, `CMakeLists.txt` et
   `tests/spec/` entre cette référence et la révision examinée.
 - Auteur du rapport : historique Git ; responsable de la décision : Ambroise Leclerc.
@@ -62,7 +64,7 @@ Ce rapport ne crée pas un deuxième inventaire d'exigences, de risques ou de te
 
 ## Vérifications exécutées pour cet examen
 
-Sur la révision examinée, le 2026-10-04 :
+Sur la révision logicielle `7f0477a`, le 2026-10-04 :
 
 | Vérification | Profil et commande | Résultat |
 | --- | --- | --- |
@@ -76,7 +78,8 @@ Les journaux de cette campagne locale sont des sorties de construction non versi
 leur conservation pérenne et le profil complet des futures campagnes restent GAP-003.
 Un résultat local ne représente pas toutes les plateformes. La
 [CI documentaire de la révision fusionnée](https://github.com/ambroise-leclerc/mddlog/actions/runs/37215863582)
-a également terminé avec succès. Ce résultat CI ne remplace pas une revue du fond.
+a également terminé avec succès. Ce résultat CI ne remplace pas une revue du fond. Aucun résultat C++ nouveau n’est revendiqué
+pour les commits documentaires ultérieurs ; les résultats ci-dessus restent ceux de `7f0477a`.
 
 ## Revue, identité et indépendance
 
