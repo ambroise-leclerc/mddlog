@@ -1,0 +1,942 @@
+{
+  "formatVersion": 1,
+  "baseline": {
+    "version": "0.2.0",
+    "commit": "e7012f299b3c976b37b43b53add43e5e6e4636b8",
+    "examinedCommit": "8344aba4e5516e446ea1b73e52b87547bb79bffb"
+  },
+  "review": {
+    "status": "proposed",
+    "reviewer": "Ambroise Leclerc",
+    "reviewedCommit": null,
+    "date": null,
+    "decision": null,
+    "reservations": [
+      "GAP-001",
+      "GAP-002",
+      "GAP-003",
+      "GAP-004",
+      "GAP-005"
+    ]
+  },
+  "gaps": [
+    {
+      "id": "GAP-001",
+      "title": "Revoir et accepter la base initiale",
+      "status": "open",
+      "issue": 124,
+      "owner": "Ambroise Leclerc",
+      "closure": "Décision nominative avec date, SHA du dossier et réserves ; vérifier applicabilité, exigences, architecture et traçabilité."
+    },
+    {
+      "id": "GAP-002",
+      "title": "Confirmer les clauses sur des copies normatives autorisées",
+      "status": "open",
+      "issue": 124,
+      "owner": "Ambroise Leclerc",
+      "closure": "Examiner éditions/amendements retenus, dont ISH1:2025, consigner références confirmées sans reproduire le texte protégé."
+    },
+    {
+      "id": "GAP-003",
+      "title": "Rattacher les résultats effectifs aux profils et révisions",
+      "status": "open",
+      "issue": 120,
+      "owner": "Mainteneur et responsable de campagne à désigner en #120",
+      "closure": "Journal de campagne ou CI identifié avec SHA, profil exact, options, commandes, résultats, anomalies et décision finale #122."
+    },
+    {
+      "id": "GAP-004",
+      "title": "Établir la réponse aux vulnérabilités",
+      "status": "open",
+      "issue": 122,
+      "owner": "Ambroise Leclerc",
+      "closure": "Canal privé, responsable opérationnel, triage, délais et communication testés et publiés avant 1.0."
+    },
+    {
+      "id": "GAP-005",
+      "title": "Confirmer classement SOUP et inventaire du profil",
+      "status": "open",
+      "issue": 121,
+      "owner": "Ambroise Leclerc et intégrateur du profil",
+      "closure": "Versions exactes, licences, anomalies et justification de classement examinées sur la chaîne réellement utilisée."
+    },
+    {
+      "id": "GAP-006",
+      "title": "Concevoir appels courts et contexte réutilisable",
+      "status": "open",
+      "issue": 113,
+      "owner": "Ambroise Leclerc",
+      "closure": "Décision d’API et exemples avant/après revus ; contexte explicite sûr en concurrence, sans identifiants documentaires imposés aux appels."
+    },
+    {
+      "id": "GAP-007",
+      "title": "Qualifier un support persistant réel",
+      "status": "open",
+      "issue": 114,
+      "owner": "Ambroise Leclerc",
+      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi."
+    },
+    {
+      "id": "GAP-008",
+      "title": "Qualifier un fournisseur indépendant et persister la position du lecteur",
+      "status": "open",
+      "issue": 115,
+      "owner": "Ambroise Leclerc",
+      "closure": "Indépendance, indisponibilité, rollback combiné et redémarrage du lecteur démontrés sur stockage réel."
+    },
+    {
+      "id": "GAP-009",
+      "title": "Centraliser le pilotage et la santé de l’audit",
+      "status": "open",
+      "issue": 116,
+      "owner": "Ambroise Leclerc",
+      "closure": "Composition et arrêt/reprise revus ; sync, tick, ancrage et rétention hors fonctions métier ; limites de durabilité explicites."
+    },
+    {
+      "id": "GAP-010",
+      "title": "Borner lecture et budgets mémoire/temps",
+      "status": "open",
+      "issue": 117,
+      "owner": "Ambroise Leclerc",
+      "closure": "Budgets fixés sur le profil puis mesurés sous charge, y compris archive et reprise."
+    },
+    {
+      "id": "GAP-011",
+      "title": "Borner surcharge et observer les échecs de sinks",
+      "status": "open",
+      "issue": 118,
+      "owner": "Ambroise Leclerc",
+      "closure": "Politiques de saturation et de panne mesurées, compteurs observables, file diagnostique maîtrisée."
+    },
+    {
+      "id": "GAP-012",
+      "title": "Livrer outil de vérification et export versionné",
+      "status": "open",
+      "issue": 119,
+      "owner": "Ambroise Leclerc",
+      "closure": "Inspection réelle avec verdicts et limites explicites, format versionné et compatible avec archives v0.2."
+    },
+    {
+      "id": "GAP-013",
+      "title": "Étendre robustesse et concurrence",
+      "status": "open",
+      "issue": 120,
+      "owner": "Ambroise Leclerc",
+      "closure": "Campagnes génératives, fuzz et concurrence avec critères et anomalies tracés ; limites des doubles conservées."
+    },
+    {
+      "id": "GAP-014",
+      "title": "Figer API, formats et distribution",
+      "status": "open",
+      "issue": 121,
+      "owner": "Ambroise Leclerc",
+      "closure": "Matrice exacte, compatibilité, migrations et consommateurs source/installés validés."
+    },
+    {
+      "id": "GAP-015",
+      "title": "Accepter le profil réel et les preuves finales",
+      "status": "open",
+      "issue": 122,
+      "owner": "Ambroise Leclerc",
+      "closure": "Application indépendante, chaîne réelle, rollback après redémarrage et dossier à jour acceptés pour le SHA publié."
+    },
+    {
+      "id": "GAP-016",
+      "title": "Signature et cycle de vie des clés différés",
+      "status": "open",
+      "issue": 123,
+      "owner": "Ambroise Leclerc",
+      "closure": "Conception et qualification dédiées ; hors critères de publication 1.0, aucune preuve d’auteur revendiquée."
+    }
+  ],
+  "controls": [
+    {
+      "id": "CTRL-001",
+      "title": "Séparation cœur/adaptateurs",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-001-allocation-free-governed-logging-core.md"
+      ],
+      "implementation": [
+        "CMakeLists.txt",
+        "cmake/governed-policy.json",
+        "scripts/check-governed.py"
+      ]
+    },
+    {
+      "id": "CTRL-002",
+      "title": "Champs possédés bornés et refus explicites",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-001-allocation-free-governed-logging-core.md"
+      ],
+      "implementation": [
+        "include/mddlog/core/InlineString.cppm",
+        "include/mddlog/core/Record.cppm",
+        "include/mddlog/core/WriteResult.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-003",
+      "title": "Admission d’audit et identité/séquence par flux",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-002-regulatory-audit-event-model.md"
+      ],
+      "implementation": [
+        "include/mddlog/core/AuditEvent.cppm",
+        "include/mddlog/core/AuditRing.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-004",
+      "title": "Transmission et santé sans promesse de durabilité",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-002-regulatory-audit-event-model.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditDrain.cppm",
+        "include/mddlog/sinks/AuditSink.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-005",
+      "title": "Encodage canonique et chaînage",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditCanonical.cppm",
+        "include/mddlog/adapter/AuditChain.cppm",
+        "include/mddlog/adapter/Sha256.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-006",
+      "title": "Verdicts relatifs à l’ancrage et à la position retenue",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditAnchor.cppm",
+        "include/mddlog/adapter/AuditVerifier.cppm",
+        "include/mddlog/adapter/AuditLogVerifier.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-007",
+      "title": "Confirmation après sync et santé du stockage",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditStore.cppm",
+        "include/mddlog/adapter/AuditMedium.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-008",
+      "title": "Ledger, reprise, rotation et rétention",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditLedger.cppm",
+        "include/mddlog/adapter/AuditLog.cppm",
+        "include/mddlog/adapter/AuditLayout.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-009",
+      "title": "SPSC et acquittement explicite",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-001-allocation-free-governed-logging-core.md"
+      ],
+      "implementation": [
+        "include/mddlog/core/Ring.cppm",
+        "include/mddlog/core/AuditRing.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-010",
+      "title": "Registre synchronisé et transport borné",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-003-application-integration-and-sink-ownership.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/SinkRegistry.cppm",
+        "include/mddlog/adapter/TransportConsumer.cppm"
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "id": "VER-001",
+      "title": "Contrôles de frontière",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-001"
+      ],
+      "test": "tests/boundary/TestGovernedChecks.py",
+      "scenario": null,
+      "evidence": "docs/governed-evidence.md",
+      "limits": "Contrôles source/graphe/symboles et violations ciblées ; pas de preuve sémantique globale ni de temps réel."
+    },
+    {
+      "id": "VER-002",
+      "title": "Capacités et refus",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-002"
+      ],
+      "test": "tests/spec/GovernedRecordSpec.cpp",
+      "scenario": "governed-record-identifier-refusal",
+      "evidence": "docs/governed-evidence.md",
+      "limits": "Tests de valeurs et frontière UTF-8 ; pas de qualification de toutes les entrées possibles."
+    },
+    {
+      "id": "VER-003",
+      "title": "Admission et séquence",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-003"
+      ],
+      "test": "tests/spec/AuditRingSpec.cpp",
+      "scenario": "audit-admission-sequence",
+      "evidence": "docs/audit-scenario-validation.md",
+      "limits": "Admission en mémoire uniquement ; ordre local par flux."
+    },
+    {
+      "id": "VER-004",
+      "title": "Transmission et reprise",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004"
+      ],
+      "test": "tests/spec/AuditDrainSpec.cpp",
+      "scenario": "audit-failure-and-retry",
+      "evidence": "docs/audit-scenario-validation.md",
+      "limits": "Acceptation du sink de test ne démontre pas une durabilité réelle."
+    },
+    {
+      "id": "VER-005",
+      "title": "Vecteurs canoniques",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-005"
+      ],
+      "test": "tests/spec/AuditCanonicalSpec.cpp",
+      "scenario": "audit-canonical-vectors",
+      "evidence": "docs/audit-persistence-validation.md",
+      "limits": "Octets/digests de référence ; aucune authentification d’auteur."
+    },
+    {
+      "id": "VER-006",
+      "title": "Rollback avec position retenue",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-006"
+      ],
+      "test": "tests/spec/AuditAnchorSpec.cpp",
+      "scenario": "audit-anchor-retained-position",
+      "evidence": "docs/audit-persistence-validation.md",
+      "limits": "Fournisseur et position en mémoire ; persistance et indépendance réelles non qualifiées."
+    },
+    {
+      "id": "VER-007",
+      "title": "Durabilité et coupures simulées",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditStorageSpec.cpp",
+      "scenario": "audit-storage-power-cuts",
+      "evidence": "docs/audit-persistence-validation.md",
+      "limits": "Coupures injectées dans InMemoryStorageMedium ; pas de support physique."
+    },
+    {
+      "id": "VER-008",
+      "title": "Reprise et continuité",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-008"
+      ],
+      "test": "tests/spec/AuditEndToEndSpec.cpp",
+      "scenario": "audit-e2e-resumption",
+      "evidence": "docs/audit-persistence-validation.md",
+      "limits": "Chaîne complète avec doubles ; pas de validation de déploiement."
+    },
+    {
+      "id": "VER-009",
+      "title": "Concurrence SPSC",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-009"
+      ],
+      "test": "tests/spec/RingLogConcurrencySpec.cpp",
+      "scenario": "ring-spsc-saturation-reuse",
+      "evidence": "docs/governed-evidence.md",
+      "limits": "Anneau diagnostic ; pas de preuve de tous les interleavings ni de concurrence du sink audit."
+    },
+    {
+      "id": "VER-010",
+      "title": "Panne de transport",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-010"
+      ],
+      "test": "tests/spec/TransportConsumerSpec.cpp",
+      "scenario": "transport-consumer-asynchronous-failure-detaches",
+      "evidence": "docs/migration/transport-consumer.md",
+      "limits": "File de transport bornée et retrait ; ne borne pas la file de SimpleLogger."
+    }
+  ],
+  "risks": [
+    {
+      "id": "RISK-001",
+      "title": "Événement perdu ou refusé",
+      "effect": "Anneau plein, identifiant invalide ou politique hôte ignorant un refus : audit attendu absent.",
+      "controls": [
+        "CTRL-002",
+        "CTRL-003",
+        "CTRL-004"
+      ],
+      "gaps": [
+        "GAP-007",
+        "GAP-009",
+        "GAP-011"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-002",
+      "title": "Admission confondue avec durabilité ou réussite",
+      "effect": "L’application autorise une action ou revendique une preuve sur une simple admission.",
+      "controls": [
+        "CTRL-003",
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "gaps": [
+        "GAP-006",
+        "GAP-009",
+        "GAP-015"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-003",
+      "title": "Coupure d’alimentation",
+      "effect": "Cache ou écriture partielle perdue, continuité rompue ; le dispositif doit traiter les effets système.",
+      "controls": [
+        "CTRL-007",
+        "CTRL-008"
+      ],
+      "gaps": [
+        "GAP-007",
+        "GAP-015"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-004",
+      "title": "Corruption, réécriture ou troncature",
+      "effect": "Support modifiable et suffixe non ancré : altération indétectable hors couverture authentique.",
+      "controls": [
+        "CTRL-005",
+        "CTRL-006",
+        "CTRL-008"
+      ],
+      "gaps": [
+        "GAP-007",
+        "GAP-008",
+        "GAP-012"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-005",
+      "title": "Rollback du journal et de son ancrage",
+      "effect": "Sans position retenue indépendante et persistée, un état ancien cohérent peut être pris pour courant.",
+      "controls": [
+        "CTRL-006"
+      ],
+      "gaps": [
+        "GAP-008",
+        "GAP-015"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-006",
+      "title": "Fournisseur compromis ou indisponible",
+      "effect": "Une autorité compromise invalide les garanties ; une panne réduit la couverture vérifiable.",
+      "controls": [
+        "CTRL-006"
+      ],
+      "gaps": [
+        "GAP-008",
+        "GAP-009"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-007",
+      "title": "Saturation et épuisement de ressources",
+      "effect": "Queue diagnostique non bornée, lecteur allouant ou consommateur lent : mémoire ou service épuisés.",
+      "controls": [
+        "CTRL-003",
+        "CTRL-009",
+        "CTRL-010"
+      ],
+      "gaps": [
+        "GAP-010",
+        "GAP-011"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-008",
+      "title": "Concurrence et durées de vie incorrectes",
+      "effect": "Plusieurs producteurs sur SPSC ou ring détruit avant déliaison : perte, ordre erroné ou accès invalide.",
+      "controls": [
+        "CTRL-009",
+        "CTRL-010"
+      ],
+      "gaps": [
+        "GAP-006",
+        "GAP-009",
+        "GAP-013"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-009",
+      "title": "Fuite de données sensibles",
+      "effect": "Messages et identifiants persistés accessibles sans chiffrement ni contrôle d’accès fourni par mddlog.",
+      "controls": [],
+      "gaps": [
+        "GAP-006",
+        "GAP-007",
+        "GAP-015"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-010",
+      "title": "Mauvaise utilisation de l’API",
+      "effect": "Contexte implicite ou destruction de portée interprétée comme réussite ; orchestration oubliée.",
+      "controls": [
+        "CTRL-003",
+        "CTRL-004"
+      ],
+      "gaps": [
+        "GAP-006",
+        "GAP-009"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-011",
+      "title": "Chaîne de construction ou dépendance défectueuse",
+      "effect": "BMI corrompu, outil ou dépendance compromis : logiciel ou preuves incorrects.",
+      "controls": [
+        "CTRL-001"
+      ],
+      "gaps": [
+        "GAP-004",
+        "GAP-005",
+        "GAP-014"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-012",
+      "title": "Auteur attribué sans preuve",
+      "effect": "Un digest non signé pris pour identité de l’auteur ; chaînage et authenticité confondus.",
+      "controls": [
+        "CTRL-005",
+        "CTRL-006"
+      ],
+      "gaps": [
+        "GAP-016"
+      ],
+      "status": "open",
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Le cœur reste séparé des adaptateurs, I/O et clés.",
+      "status": "implemented",
+      "risks": [
+        "RISK-011"
+      ],
+      "controls": [
+        "CTRL-001"
+      ],
+      "verifications": [
+        "VER-001"
+      ],
+      "gaps": [
+        "GAP-003"
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Le diagnostic gouverné possède des champs bornés et rapporte refus/troncature.",
+      "status": "implemented",
+      "risks": [
+        "RISK-001"
+      ],
+      "controls": [
+        "CTRL-002"
+      ],
+      "verifications": [
+        "VER-002"
+      ],
+      "gaps": []
+    },
+    {
+      "id": "REQ-003",
+      "text": "L’audit expose admission explicite, identité et ordre par flux sans preuve d’exécution.",
+      "status": "implemented",
+      "risks": [
+        "RISK-001",
+        "RISK-002",
+        "RISK-010"
+      ],
+      "controls": [
+        "CTRL-003"
+      ],
+      "verifications": [
+        "VER-003"
+      ],
+      "gaps": [
+        "GAP-015"
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "La transmission rapporte sa santé et ne promet pas la durabilité.",
+      "status": "implemented",
+      "risks": [
+        "RISK-001",
+        "RISK-002"
+      ],
+      "controls": [
+        "CTRL-004"
+      ],
+      "verifications": [
+        "VER-004"
+      ],
+      "gaps": [
+        "GAP-009"
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Octets canoniques et digests sont déterministes et versionnés.",
+      "status": "implemented",
+      "risks": [
+        "RISK-004",
+        "RISK-012"
+      ],
+      "controls": [
+        "CTRL-005"
+      ],
+      "verifications": [
+        "VER-005"
+      ],
+      "gaps": [
+        "GAP-014",
+        "GAP-016"
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "Le lecteur limite ses verdicts à la couverture d’ancrage et à la position retenue.",
+      "status": "implemented",
+      "risks": [
+        "RISK-004",
+        "RISK-005",
+        "RISK-006"
+      ],
+      "controls": [
+        "CTRL-006"
+      ],
+      "verifications": [
+        "VER-006"
+      ],
+      "gaps": [
+        "GAP-008",
+        "GAP-012"
+      ]
+    },
+    {
+      "id": "REQ-007",
+      "text": "La confirmation durable suit un sync conforme ; les pannes et reprises sont observables.",
+      "status": "implemented",
+      "risks": [
+        "RISK-002",
+        "RISK-003",
+        "RISK-004"
+      ],
+      "controls": [
+        "CTRL-007",
+        "CTRL-008"
+      ],
+      "verifications": [
+        "VER-007",
+        "VER-008"
+      ],
+      "gaps": [
+        "GAP-007",
+        "GAP-015"
+      ]
+    },
+    {
+      "id": "REQ-008",
+      "text": "Un anneau a un producteur et un consommateur ; vues acquittées avant réemploi.",
+      "status": "implemented",
+      "risks": [
+        "RISK-007",
+        "RISK-008"
+      ],
+      "controls": [
+        "CTRL-009"
+      ],
+      "verifications": [
+        "VER-009"
+      ],
+      "gaps": [
+        "GAP-013"
+      ]
+    },
+    {
+      "id": "REQ-009",
+      "text": "Les appels courants sont courts, avec contexte explicite local réutilisable et sûr en concurrence ; une commodité globale reste facultative.",
+      "status": "planned",
+      "risks": [
+        "RISK-008",
+        "RISK-009",
+        "RISK-010"
+      ],
+      "controls": [],
+      "verifications": [],
+      "gaps": [
+        "GAP-006"
+      ]
+    },
+    {
+      "id": "REQ-010",
+      "text": "Configuration, fréquences et rétention vivent au point de composition ; pilotage hors métier.",
+      "status": "planned",
+      "risks": [
+        "RISK-002",
+        "RISK-006",
+        "RISK-010"
+      ],
+      "controls": [],
+      "verifications": [],
+      "gaps": [
+        "GAP-009"
+      ]
+    },
+    {
+      "id": "REQ-011",
+      "text": "Les commodités d’audit préservent un résultat explicite ; la fin de portée ne prouve pas la réussite.",
+      "status": "planned",
+      "risks": [
+        "RISK-002",
+        "RISK-010"
+      ],
+      "controls": [],
+      "verifications": [],
+      "gaps": [
+        "GAP-006"
+      ]
+    },
+    {
+      "id": "REQ-012",
+      "text": "La lecture et le diagnostic sous surcharge respectent des budgets mesurés.",
+      "status": "planned",
+      "risks": [
+        "RISK-007"
+      ],
+      "controls": [
+        "CTRL-010"
+      ],
+      "verifications": [
+        "VER-010"
+      ],
+      "gaps": [
+        "GAP-010",
+        "GAP-011"
+      ]
+    },
+    {
+      "id": "REQ-013",
+      "text": "Une 1.0 conserve API/formats qualifiés et se construit en source et depuis le package installé.",
+      "status": "planned",
+      "risks": [
+        "RISK-011"
+      ],
+      "controls": [],
+      "verifications": [],
+      "gaps": [
+        "GAP-014",
+        "GAP-015"
+      ]
+    },
+    {
+      "id": "REQ-014",
+      "text": "Le dossier et ses réserves sont acceptés sur une révision explicite avant les travaux 1.0 puis publication.",
+      "status": "planned",
+      "risks": [],
+      "controls": [],
+      "verifications": [],
+      "gaps": [
+        "GAP-001",
+        "GAP-002",
+        "GAP-003",
+        "GAP-004",
+        "GAP-005",
+        "GAP-015"
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "DEP-001",
+      "name": "Bibliothèque standard et runtime de threads",
+      "scope": "deployed",
+      "version": "C++23 ; implémentation liée au compilateur du profil",
+      "provenance": "CMakeLists.txt",
+      "license": "Licences spécifiques libstdc++ (GPL avec exception runtime), libc++ (Apache-2.0 avec exceptions LLVM) ou runtime MSVC ; notices exactes à relever pour le profil.",
+      "classification": "Classement SOUP proposé pour bibliothèques préexistantes ; confirmation GAP-005.",
+      "knownIssues": "Garanties std/atomiques/modules liées au tuple ; limites des contrôles de frontière.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-002",
+      "name": "SpecLab",
+      "scope": "test",
+      "version": "v0.4.0, d85c1f74d95a25b2bf2733316149ba7936ed7df6",
+      "provenance": "tests/CMakeLists.txt",
+      "license": "EUPL-1.2, LICENSE du dépôt au SHA épinglé consulté.",
+      "classification": "Test seulement, non déployé.",
+      "knownIssues": "Défauts du runner peuvent affecter les résultats ; révision immuable et contrôle de découverte.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-003",
+      "name": "CPM.cmake",
+      "scope": "build",
+      "version": "0.42.0 vendue",
+      "provenance": "cmake/CPM.cmake",
+      "license": "MIT ; notice conservée dans le fichier.",
+      "classification": "Outil de construction, non déployé.",
+      "knownIssues": "Téléchargements dépendants du réseau ; examiner provenance et cache.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-004",
+      "name": "Compilateurs et outils LLVM",
+      "scope": "build",
+      "version": "Contraintes CMake ; référence de format/analyse LLVM 21",
+      "provenance": "CMakeLists.txt",
+      "license": "GCC GPL avec exceptions runtime ; LLVM Apache-2.0 avec exceptions ; MSVC propriétaire. À relever pour chaque installation.",
+      "classification": "Outils de construction/vérification, non SOUP déployé sauf runtimes DEP-001.",
+      "knownIssues": "GCC 16.2 exclu : corruption BMI ; AppleClang exclu ; import std expérimental.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-005",
+      "name": "CMake et Ninja",
+      "scope": "build",
+      "version": "CMake 4.0–4.3 ; Ninja compatible modules, version exacte à enregistrer par campagne",
+      "provenance": "CMakePresets.json",
+      "license": "CMake BSD-3-Clause ; Ninja Apache-2.0 ; distribution exacte à confirmer GAP-005.",
+      "classification": "Outils de génération/construction, non déployés.",
+      "knownIssues": "Gate expérimental import std dépendant de version CMake.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-006",
+      "name": "Python",
+      "scope": "verification",
+      "version": "3.9+ pour les contrôles de frontière et du dossier",
+      "provenance": "scripts/check-governed.py",
+      "license": "PSF ; notices de la distribution exacte à relever.",
+      "classification": "Vérification seulement, non déployé.",
+      "knownIssues": "Les contrôles lexicaux/documentaires ne prouvent pas la sémantique C++.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-007",
+      "name": "Git, actions GitHub et runners CI",
+      "scope": "verification",
+      "version": "Versions/révisions référencées par les workflows ; profil exact dans les logs",
+      "provenance": ".github/workflows/clang-build.yml",
+      "license": "Git GPL-2.0 ; actions et images : licences/provenances à inventorier pour le profil GAP-005.",
+      "classification": "Configuration et preuves seulement, non déployés.",
+      "knownIssues": "Images et tags d’actions évolutifs ; une configuration CI n’est pas un résultat.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-008",
+      "name": "Outils optionnels",
+      "scope": "build",
+      "version": "ccache 4.8+ pour BMIs ; Doxygen/cppcheck selon options",
+      "provenance": "cmake/Cache.cmake",
+      "license": "Licences et versions exactes à relever si utilisés, GAP-005.",
+      "classification": "Outils optionnels, non déployés.",
+      "knownIssues": "Cache nommé soumis au contrôle d’intégrité ; outils absents ne prouvent pas une analyse passée.",
+      "monitoring": "Mainteneur : examiner avis éditeur et anomalies à chaque mise à jour et revue de release ; profil exact et responsable système à confirmer GAP-005.",
+      "gaps": [
+        "GAP-005"
+      ]
+    }
+  ]
+}

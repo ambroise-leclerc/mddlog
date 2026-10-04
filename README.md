@@ -160,6 +160,13 @@ Ces normes décrivent des processus et des responsabilités du développement de
 
 La [note de preuves](docs/governed-evidence.md) énonce ce que couvrent les contrôles du graphe de modules, des sources et des symboles d'allocation et d'exception. Les [preuves de scénarios](docs/audit-scenario-validation.md) décrivent les cas d'audit testés. Ce sont des contrôles d'ingénierie, pas un dossier de certification.
 
+Le [dossier de développement logiciel](software_development_file/README.md) établit la base
+documentaire proposée pour le jalon 0 de [#112](https://github.com/ambroise-leclerc/mddlog/issues/112)
+et son préalable [#124](https://github.com/ambroise-leclerc/mddlog/issues/124). Il distingue les
+contrats implémentés, la couverture existante et les lacunes de qualification, avec un registre
+unique et des modèles en français pour les intégrateurs. Cette base attend sa revue de fond ;
+les modèles doivent être complétés pour le dispositif et son profil réel.
+
 ### Livraisons et feuille de route
 
 - **Livré (v0.1.0) :** cœur de journalisation borné sans allocation ([ADR-001](docs/adr/ADR-001-allocation-free-governed-logging-core.md) ; épique [#8](https://github.com/ambroise-leclerc/mddlog/issues/8)).

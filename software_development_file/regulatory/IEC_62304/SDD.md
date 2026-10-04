@@ -1,0 +1,42 @@
+# Conception détaillée et contrats d'erreur
+
+Maîtrise et statut : [index](../../README.md). Les CTRL et VER du [registre](../../register.json)
+relient ces contrats aux sources et tests ; les ADR restent la définition de conception.
+
+## Diagnostic gouverné
+
+InlineString possède ses octets. GovernedRecord tronque le message à une frontière UTF-8
+avec résultat explicite ; il refuse les identifiants trop longs. RawTime ne consulte pas
+l'horloge. RingLog<N> accepte ou refuse sans attendre un sink ; `drain()` expose deux spans,
+à traiter avant l'acquittement qui permet de réutiliser les slots. Un producteur et un consommateur
+par anneau ; ni ordre global entre anneaux ni permission de plusieurs producteurs sur le même.
+
+## Audit
+
+AuditInput sépare catégorie et phase. AuditEvent exige les identifiants conformes aux champs,
+refuse le préfixe d'action réservé `mddlog.` et conserve une identité de flux et une séquence.
+AuditRing attribue une séquence à l'admission. Une admission ne signifie ni exécution de l'action,
+ni effet clinique, ni durabilité. L'hôte vérifie le résultat et pilote sa réponse au refus.
+Une portée détruite ne prouve pas la réussite d'une action ; Requested, Completed et Failed
+sont des déclarations explicites. AuditSinkAdapter rend refus et reprise de transmission visibles.
+
+## Adaptation et persistance
+
+SinkRegistry protège inscription et retrait ; TransportConsumer découple producteur et transport
+avec une file bornée. Cela ne borne pas automatiquement la file de SimpleLogger. TextLogger
+fournit groupes et callbacks synchrones ; le contexte réutilisable unifié de #113 reste prévu.
+
+Le contrat canonique versionné et le chaînage déterministe sont contrôlés par vecteurs de
+référence. PersistingAuditSink distingue append, synchronisation, état durable et santé.
+Le ledger décrit continuité, fermeture, rotation et retrait. La vérification signale couverture
+d'ancrage, incohérence, suffixe absent et rollback selon les informations disponibles ; sans
+position retenue indépendante, un ancien journal et son ancien ancrage ne permettent pas
+l'exclusion du rollback. Les règles exactes restent dans ADR-004 et les sources de CTRL-005–008.
+
+## Limites de conception ouvertes
+
+Aucun backend fichier/flash ni fournisseur indépendant réel n'est livré. Aucune signature ne
+prouve l'auteur. Le lecteur matérialise des données dans des conteneurs allouants : ses budgets
+restent à établir. L'hôte appelle aujourd'hui les primitives de pilotage ; #116 doit les regrouper
+hors code métier. Les suites de tests et guides de migration liés par les VER décrivent ce qui
+est exercé ; leur couverture n'équivaut pas à une validation applicative réelle.

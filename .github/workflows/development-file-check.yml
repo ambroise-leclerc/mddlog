@@ -1,0 +1,24 @@
+name: Development File Check
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check development file structure and references
+        run: python3 scripts/check-development-file.py
+      - name: Test rejection of inconsistent dossiers
+        run: python3 -m unittest discover -s tests/documentation -p 'Test*.py'
