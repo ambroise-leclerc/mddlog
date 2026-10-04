@@ -1,6 +1,6 @@
 # Étude d'usage contextualisé — #113/#127
 
-Date : 2026-10-04. Statut : **proposition prête à la revue**, sans acceptation de conception.
+Date : 2026-10-04. Statut : **conception acceptée**, décision du 2026-10-04 sur `f3063bc`.
 Base : `develop` à `67a15e8`, après acceptation de #124 ; évolution sur
 `113-contextual-api-design`. La révision exacte des fichiers étudiés est celle du commit
 contenant ce rapport. Aucune campagne de qualification du profil 1.0 n'est revendiquée.
@@ -19,7 +19,8 @@ Pas de sous-issue par méthode ou par champ : chacun conserve tests, migration e
 
 Ce lot prépare le jalon A : inventaire, capture, filtrage, propriété, erreurs et alternatives
 dans [ADR-005](adr/ADR-005-contextual-logging-api.md), plus usages compilables.
-Il ne clôt ni #127 (acceptation attendue), ni #113, ni GAP-006.
+La conception est acceptée à la révision `f3063bc4122cad41f23352721824db9094066b3d` ;
+la livraison sur develop et les lots d'implémentation restent distincts. #113 et GAP-006 restent ouverts.
 
 ## Démonstrateur et comparaison
 

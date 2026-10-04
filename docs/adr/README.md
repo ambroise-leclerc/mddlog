@@ -19,7 +19,7 @@ capability as delivered from an ADR's existence alone.
 | [002](ADR-002-regulatory-audit-event-model.md) | Regulatory audit-event model, separate from application logging | Accepted |
 | [003](ADR-003-application-integration-and-sink-ownership.md) | Application integration and sink ownership | Accepted |
 | [004](ADR-004-audit-persistence-and-tamper-evidence.md) | Audit persistence and tamper evidence | Accepted |
-| [005](ADR-005-contextual-logging-api.md) | Explicit contexts and producer bindings (#113/#127) | Proposed |
+| [005](ADR-005-contextual-logging-api.md) | Explicit contexts and producer bindings (#113/#127) | Accepted |
 
 ## How the four relate
 

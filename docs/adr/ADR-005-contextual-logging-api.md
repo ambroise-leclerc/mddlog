@@ -2,12 +2,13 @@
 
 ## Status
 
-**Proposed**, 2026-10-04 — lot [#127](https://github.com/ambroise-leclerc/mddlog/issues/127)
+**Accepted**, 2026-10-04 — lot [#127](https://github.com/ambroise-leclerc/mddlog/issues/127)
 de [#113](https://github.com/ambroise-leclerc/mddlog/issues/113), programme
 [#112](https://github.com/ambroise-leclerc/mddlog/issues/112).
-La base initiale #124 est acceptée sur `develop` (`67a15e8`). Cette proposition attend
-une décision du mainteneur sur une révision précise. Les noms ci-dessous sont des noms
-d'étude : aucune nouvelle signature publique n'est figée ou livrée.
+La base initiale #124 est acceptée sur `develop` (`67a15e8`). Ambroise Leclerc accepte
+cette conception et ses exemples à la révision `f3063bc4122cad41f23352721824db9094066b3d`
+le 2026-10-04. Les noms d'étude restent ajustables lors de la réalisation #128/#129 ;
+l'acceptation de conception ne vaut pas livraison ou qualification de l'API.
 
 ## Context
 
@@ -43,7 +44,7 @@ visibles. L'hôte minimise les identifiants sensibles et détermine sa politique
 La revue de lisibilité est une revue d'API de composant, sans validation d'aptitude à
 l'utilisation d'un dispositif. La conception ne modifie pas les quatre contrats existants.
 
-## Decision proposée
+## Decision
 
 ### 1. Injection explicite, contextes possédés
 
@@ -183,6 +184,10 @@ GAP-006, RISK-008/009/010. Aucune dépendance nouvelle n'est introduite.
 
 ## Approval
 
-En attente. Consigner mainteneur, révision examinée, date, décision et réserves après revue
-de cette proposition et des exemples compilés. L'acceptation initiale de #124 ne vaut pas
-acceptation de cette ADR. Ni compilation ni cohérence documentaire ne remplacent cette décision.
+Ambroise Leclerc accepte explicitement la conception le 2026-10-04 (réponse : « oui »
+à la demande d'acceptation de l'ADR-005 pour engager #128 et #129). Révision examinée :
+`f3063bc4122cad41f23352721824db9094066b3d`, incluant l'étude et les résultats locaux.
+Aucune réserve supplémentaire n'est exprimée ; les limites de l'étude et les qualifications
+futures restent celles du rapport. Cette décision porte sur la conception du composant,
+sans revue indépendante revendiquée ni acceptation de risques de dispositif. #128/#129
+peuvent démarrer ; le gel final reste #121 et l'acceptation des preuves de publication #122.
