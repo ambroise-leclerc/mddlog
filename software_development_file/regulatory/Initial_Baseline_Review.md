@@ -8,7 +8,7 @@
 - Référence fonctionnelle : v0.2.0 ; aucune différence dans `include/`, `CMakeLists.txt` et
   `tests/spec/` entre cette référence et la révision examinée.
 - Auteur du rapport : historique Git ; responsable de la décision : Ambroise Leclerc.
-- Statut : **examen préparatoire terminé ; décision d'acceptation non enregistrée**.
+- Statut : **examen terminé ; base initiale acceptée par décision du registre du 2026-10-04**.
 
 Ce rapport examine l'aptitude du dossier à servir de base au programme 1.0 selon
 [#124](https://github.com/ambroise-leclerc/mddlog/issues/124). Il ne prononce aucune conformité
@@ -21,7 +21,7 @@ preuves finales d'ADR-004. La décision faisant autorité reste le champ `review
 | Critère de #124 | Constat sur la révision examinée | Limite de la conclusion |
 | --- | --- | --- |
 | A — Périmètre et applicabilité | [Applicability](Applicability.md) sépare composant/fabricant, cinq références et éditions, usages visés/exclus et responsables ; absence de classification automatique. | Les fiches éditeurs ne vérifient pas les clauses. GAP-002 demeure ouvert. |
-| A — Maîtrise et traçabilité | [Index](../README.md), [plans](Plans.md) et registre relient exigence, risque éventuel, contrôle, conception/source, test, note de preuves et lacune. | La décision nominative manque encore ; GAP-001 et GAP-019 restent ouverts. |
+| A — Maîtrise et traçabilité | [Index](../README.md), [plans](Plans.md) et registre relient exigence, risque éventuel, contrôle, conception/source, test, note de preuves et lacune. | La décision initiale est maintenant enregistrée ; les autres qualifications restent ouvertes. |
 | B — Documents renseignés et modèles | Architecture, conception, SOUP, risques, cybersécurité, qualité, aptitude à l'utilisation et plans sont renseignés ; les modèles correspondants sont séparés. | L'application et ses données cliniques, risques, supports et budgets restent propres au fabricant. |
 | B — Architecture effective | [SAD](IEC_62304/SAD.md) et [SDD](IEC_62304/SDD.md) correspondent au FILE_SET et aux contrats examinés dans les sources. | Les primitives d'ADR-004 sont présentes ; aucun support ou fournisseur indépendant réel n'est livré. |
 | B — Risques et dépendances | Le registre distingue contrôles existants, absence de contrôle, limites hôte et lacunes assignées ; [SOUP](IEC_62304/SOUP.md) sépare déploiement, tests et outils. | Les licences/runtime exacts et le classement du profil restent à confirmer ; la surveillance est un plan. |
@@ -88,15 +88,17 @@ L'identité du relecteur, sa désignation pour cette acceptation et son indépen
 de l'auteur ne sont pas établies par un pseudonyme GitHub.
 
 Une décision prise par Ambroise Leclerc en tant qu'auteur et approbateur constitue l'auto-revue
-non indépendante déjà décrite dans l'index. GAP-019 doit être levé en consignant cette limite
-et les cumuls de rôles dans la décision, sans attribuer une certification ou une satisfaction
+non indépendante déjà décrite dans l'index. La décision a levé GAP-019 en consignant cette limite
+et les cumuls de rôles, sans attribuer une certification ou une satisfaction
 d'exigence normative au processus. Les revues que requiert le fabricant restent sa responsabilité.
 
-## Proposition de traitement avant acceptation
+## Dispositions soumises et acceptées
 
 Aucune nouvelle discordance de contrat n'a été relevée dans les éléments examinés qui
-empêcherait l'utilisation du dossier comme base initiale. La recommandation est de soumettre
-cette base à une acceptation de projet limitée, avec les dispositions suivantes :
+empêcherait l'utilisation du dossier comme base initiale. Les dispositions suivantes ont été soumises
+à la décision de projet, puis acceptées explicitement par Ambroise Leclerc le 2026-10-04.
+Leur formulation ci-dessous conserve la proposition examinée ; l’état et les justifications
+faisant autorité sont ceux du registre :
 
 1. Consigner une décision nominative portant sur le SHA examiné, le présent rapport et la limite
    d'indépendance ; elle permettrait de clore GAP-001 et GAP-019. La fusion de #125 ne suffit pas.
@@ -120,5 +122,9 @@ cette base à une acceptation de projet limitée, avec les dispositions suivante
    acceptation initiale enregistrée et livrée, commencer la conception de #113. #122 conserve
    sa porte d'acceptation finale avant publication.
 
-Cette proposition ne modifie ni `review`, ni les réserves, ni les issues. Sa mise en œuvre
-requiert la décision du mainteneur sur les reports et les limites décrits ci-dessus.
+La décision explicite du mainteneur du 2026-10-04 (« j'accepte »), portant sur la base examinée,
+la limite d'indépendance et les reports proposés, est maintenant enregistrée dans `review`.
+GAP-001 et GAP-019 sont clos ; GAP-002 est rattaché à #122. Les autres GAP gardent leurs états
+ouverts et leurs épiques responsables. La décision sera livrée par la
+[PR #126](https://github.com/ambroise-leclerc/mddlog/pull/126) ; la clôture de #124 attend sa
+fusion dans develop. Le texte de décision n'est pas dupliqué ici : consulter le registre.

@@ -21,6 +21,12 @@ class DevelopmentFileTest(unittest.TestCase):
         shutil.copytree(REPOSITORY / 'software_development_file', self.root / 'software_development_file')
         self.register = self.root / 'software_development_file/register.json'
         self.data = json.loads(self.register.read_text(encoding='utf-8'))
+        # Start mutation tests from a proposed review even after the real baseline is accepted.
+        self.data['review'].update(status='proposed', reviewedCommit=None, date=None,
+                                   decision=None, acceptedGaps={})
+        for row in self.data['gaps']:
+            if row['id'] in self.data['review']['reservations']:
+                row['status'] = 'open'
         # Copy only referenced files; the mutation fixture needs no modules or downloaded packages.
         referenced = set()
         for row in self.data['controls']:
