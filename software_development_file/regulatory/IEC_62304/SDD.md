@@ -66,8 +66,9 @@ pour la construction gouvernée sans accesseur levant ; aucun composant tiers no
 les consommateurs sources/installés, la frontière et les tailles sur un tuple précis.
 [L’intégration #130](../../../docs/contextual-api-integration.md) fournit CTRL-014/VER-020–022 :
 composant stock, équivalence avant/après et producteurs/consommateur avec arrêt explicite.
-GAP-006 reste ouvert pour la revue et décision mainteneur ; REQ-009/REQ-011 restent prévues
-pour l’expérience acceptée complète. L’application indépendante reste #122. RISK-008/010 bénéficient des contrôles de copies, de séparation
+La décision de clôture du rapport d'intégration enregistre revue AM-L et confirmation
+explicite d'Ambroise Leclerc, pour les lots livrés sur `develop` à `2588124`. GAP-006 est clos ;
+REQ-009/REQ-011 sont implémentées avec la réserve d'intégration locale. L'application indépendante reste #122. RISK-008/010 bénéficient des contrôles de copies, de séparation
 et d'admission visible ; les risques restent ouverts et l'hôte maîtrise toujours SPSC,
 durée de vie des destinations et réponse aux refus. Aucune confidentialité ou qualification
 de dispositif n'est fournie ; RISK-009 conserve sa limite.

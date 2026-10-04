@@ -1,6 +1,8 @@
 # Intégration des contextes et revue de lisibilité — #130
 
-Statut : **réalisation et revue technique locale disponibles, revue mainteneur à effectuer**.
+Statut : **lot accepté pour le périmètre API et intégration locale de #113**, livré par
+[PR #131](https://github.com/ambroise-leclerc/mddlog/pull/131) sur `develop` à
+`25881242e5dfc0ba93c6b42a73931b0b7006f51d`.
 La conception ADR-005 est acceptée ; l'acceptation du prototype n'est pas celle de ce lot.
 Campagne initiale du 2026-10-04 sur `c80790fee0e3fda26abc32a44d30504117105046`,
 après les liaisons vérifiées sur `8fe4fb1`. Vérification actualisée le même jour sur
@@ -116,15 +118,42 @@ Ce scénario exerce une ordonnance particulière et ne remplace pas #120.
 | Diagnostic en une instruction | Les paires composant/opération/gouverné et `InventoryWorker::apply` ; composition séparée. |
 | Audit préparé, sémantique et admission visibles | `apply` et `auditAfter`, résultat distinguant mutation et refus ; deux temps et phases explicites. |
 | Aucun stockage/ancrage/drain/rétention à l'émission | Les deux méthodes stock et les cinq usages ; drains dans la composition/consommation uniquement. Pilotage de persistance #116 distinct. |
-| Avant/après compilés et revue sur composant concret | Six paires mesurées ci-dessus, scénario `equivalence`. Revue technique locale fournie ; application indépendante #122 et revue mainteneur restent dues. |
+| Avant/après compilés et revue sur composant concret | Six paires mesurées ci-dessus, scénario `equivalence`. Revue technique locale et revue de PR acceptées selon la décision ci-dessous ; application indépendante maintenue en #122. |
 | Contextes, source, temporaires, refus, troncature, filtres | VER-011–019 et rapport #128/#129 ; scénarios stock et producteurs/consommateur ci-dessus. |
 | Aucun résultat inventé à la sortie de portée | `context-integration-interrupted-scope`, destruction après refus d'issue, phases explicitement déclarées par l'hôte. |
 | Migration/référence et frontière du cœur | Guide contextualisé, consommateurs source/installés, cinq contrôles `build.core.*` ; aucun changement de module du cœur par ce lot. |
 
-Ces preuves permettent la revue ; elles ne constituent pas une acceptation tacite. GAP-006
-reste ouvert jusqu'à la décision mainteneur sur cette révision et la réserve de portée
-locale/#122. REQ-009/REQ-011 restent prévues pour l'expérience acceptée complète. Ne pas clore
-#113 ou #130, ni réutiliser l'acceptation initiale du dossier comme acceptation de ce lot.
+## Décision de clôture de #113/#127–130
+
+AM-L a [approuvé la revue de PR](https://github.com/ambroise-leclerc/mddlog/pull/131#pullrequestreview-5408137269)
+le 2026-10-04 à 20:47:58 UTC sur `b2b985f03dd0edc43d988fe0264e1ea50cc3d67b`, puis fusionné
+la PR #131 à 20:48:11 UTC. Le commit livré `25881242e5dfc0ba93c6b42a73931b0b7006f51d`
+a le même arbre source que la révision approuvée ; ce constat n'attribue pas une nouvelle
+campagne locale au SHA de fusion. Les campagnes gardent les révisions identifiées ci-dessous.
+
+Ambroise Leclerc confirme explicitement l'enregistrement de cette décision, des réserves
+présentées et la clôture des cinq issues par son instruction « Faites tout cela ».
+Auteur et approbateur du lot : Ambroise Leclerc ; relecteur de PR : compte GitHub AM-L.
+La désignation du compte ne permet pas d'affirmer l'indépendance de la revue ou l'absence de
+cumul de rôles. La décision historique de la base #124 et l'Approval de conception ADR-005
+restent distincts et inchangés.
+
+Les sept critères C sont acceptés pour les usages publics et le composant stock local,
+avec les réserves explicites suivantes :
+
+- L'application indépendante et la chaîne d'audit réelle demeurent à établir en #122.
+- Les budgets du profil (#117), la robustesse étendue (#120), le gel final (#121), les
+  backends (#114/#115) et le pilotage de persistance (#116) ne sont pas qualifiés par ce lot.
+- La catégorie d'audit est copiée sans contrôle de plage par la factory et l'admission
+  existante ; l'hôte fournit une valeur nommée et valide les conversions externes, selon
+  le guide. Ce point de revue est accepté comme limite, sans modification du contrat.
+- Les destinations restent empruntées ; l'hôte maîtrise durée de vie, SPSC, confidentialité
+  et réaction à un refus critique. Les risques associés restent ouverts.
+
+GAP-006 est clos pour ce périmètre ; REQ-009/REQ-011 sont implémentées, avec contrôles et
+vérifications traçables. Les issues #127/#128/#129/#130 et #113 peuvent être clôturées.
+Cette acceptation de projet ne vaut ni acceptation finale du dossier 1.0, ni qualification
+d'un dispositif, ni revue normative indépendante.
 
 ## Campagne et reproduction
 

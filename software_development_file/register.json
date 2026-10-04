@@ -75,10 +75,10 @@
     {
       "id": "GAP-006",
       "title": "Concevoir appels courts et contexte réutilisable",
-      "status": "open",
+      "status": "closed",
       "issue": 113,
       "owner": "Ambroise Leclerc",
-      "closure": "Conception ADR-005 acceptée sur f3063bc ; liaisons #128/#129 vérifiées sur 8fe4fb1. Intégration #130 réalisée et revue technique locale dans docs/contextual-api-integration.md avec campagne initiale c80790f puis vérification actualisée sur f64161be3f7aac918a7bed8b63fe2e8a15b62456 (construction et 172/172 tests locaux réussis, CI verte) : cinq usages publics et composant stock avant/après mesurés, producteurs/consommateurs et refus exercés, guide achevé. Reste la revue et décision mainteneur sur ce lot et sa réserve de portée locale (#122 conserve application indépendante). REQ-009/REQ-011 restent prévues jusque-là ; aucune qualification de dispositif ni clôture de #117/#120/#121/#122."
+      "closure": "Clos pour le périmètre API/intégration locale de #113 : ADR-005 acceptée sur f3063bc ; lots #127–130 livrés par PR #131 sur develop à 25881242e5dfc0ba93c6b42a73931b0b7006f51d. Revue de PR approuvée par AM-L le 2026-10-04 sur b2b985f03dd0edc43d988fe0264e1ea50cc3d67b ; Ambroise Leclerc confirme explicitement l’enregistrement de la décision et la clôture des lots (instruction « Faites tout cela »). Réserve acceptée : composant stock local, application indépendante maintenue en #122 ; validation de catégorie hors plage non ajoutée, limite héritée documentée et conversions externes maîtrisées par l’hôte. Critères C et décision dans docs/contextual-api-integration.md. REQ-009/REQ-011 implémentées avec CTRL-011–014/VER-011–022. Pas de clôture des budgets #117, robustesse #120, gel #121, pilotage #116 ni qualifications #122 ; aucune revue indépendante ou qualification de dispositif revendiquée."
     },
     {
       "id": "GAP-007",
@@ -492,7 +492,7 @@
       "test": "tests/spec/DiagnosticContextSpec.cpp",
       "scenario": "context-diagnostic-owned-and-nested",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-012",
@@ -504,7 +504,7 @@
       "test": "tests/spec/DiagnosticContextSpec.cpp",
       "scenario": "context-diagnostic-identifier-failures",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-013",
@@ -516,7 +516,7 @@
       "test": "tests/spec/DiagnosticContextSpec.cpp",
       "scenario": "context-governed-source-time-and-refusal",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-014",
@@ -529,7 +529,7 @@
       "test": "tests/spec/DiagnosticContextSpec.cpp",
       "scenario": "context-diagnostic-producer-isolation",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-015",
@@ -541,7 +541,7 @@
       "test": "tests/spec/DiagnosticBindingSpec.cpp",
       "scenario": "context-text-filter-source-and-temporaries",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-016",
@@ -553,7 +553,7 @@
       "test": "tests/spec/DiagnosticBindingSpec.cpp",
       "scenario": "context-simple-structured-fields-and-filter",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-017",
@@ -565,7 +565,7 @@
       "test": "tests/spec/AuditContextSpec.cpp",
       "scenario": "context-audit-identifier-validation",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-018",
@@ -577,7 +577,7 @@
       "test": "tests/spec/AuditContextSpec.cpp",
       "scenario": "context-audit-owned-phases-and-time",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-019",
@@ -589,7 +589,7 @@
       "test": "tests/spec/AuditContextSpec.cpp",
       "scenario": "context-audit-streams-and-refusal",
       "evidence": "docs/contextual-api-validation.md",
-      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130 acceptée pour le périmètre local, décision enregistrée dans docs/contextual-api-integration.md ; budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
     },
     {
       "id": "VER-020",
@@ -601,7 +601,7 @@
       "test": "tests/spec/ContextIntegrationSpec.cpp",
       "scenario": "context-integration-stock-limits",
       "evidence": "docs/contextual-api-integration.md",
-      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+      "limits": "Composant applicatif local ; revue mainteneur acceptée pour #113/#130, décision enregistrée dans docs/contextual-api-integration.md ; application indépendante encore à valider en #122, sans qualification exhaustive de concurrence."
     },
     {
       "id": "VER-021",
@@ -613,7 +613,7 @@
       "test": "tests/spec/ContextIntegrationSpec.cpp",
       "scenario": "context-integration-refusal-equivalence",
       "evidence": "docs/contextual-api-integration.md",
-      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+      "limits": "Composant applicatif local ; revue mainteneur acceptée pour #113/#130, décision enregistrée dans docs/contextual-api-integration.md ; application indépendante encore à valider en #122, sans qualification exhaustive de concurrence."
     },
     {
       "id": "VER-022",
@@ -625,7 +625,7 @@
       "test": "tests/spec/ContextIntegrationSpec.cpp",
       "scenario": "context-integration-interrupted-scope",
       "evidence": "docs/contextual-api-integration.md",
-      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+      "limits": "Composant applicatif local ; revue mainteneur acceptée pour #113/#130, décision enregistrée dans docs/contextual-api-integration.md ; application indépendante encore à valider en #122, sans qualification exhaustive de concurrence."
     }
   ],
   "risks": [
@@ -972,7 +972,7 @@
     {
       "id": "REQ-009",
       "text": "Les appels courants sont courts, avec contexte explicite local réutilisable et sûr en concurrence ; une commodité globale reste facultative.",
-      "status": "planned",
+      "status": "implemented",
       "risks": [
         "RISK-008",
         "RISK-009",
@@ -1016,7 +1016,7 @@
     {
       "id": "REQ-011",
       "text": "Les commodités d’audit préservent un résultat explicite ; la fin de portée ne prouve pas la réussite.",
-      "status": "planned",
+      "status": "implemented",
       "risks": [
         "RISK-002",
         "RISK-010"

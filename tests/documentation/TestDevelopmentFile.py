@@ -71,7 +71,10 @@ class DevelopmentFileTest(unittest.TestCase):
         self.assertRejected('scenario absent')
 
     def test_planned_requirement_needs_open_gap(self):
-        self.data['gaps'][5]['status'] = 'closed'
+        planned = next(row for row in self.data['requirements'] if row['status'] == 'planned')
+        for gap in self.data['gaps']:
+            if gap['id'] in planned['gaps']:
+                gap['status'] = 'closed'
         self.assertRejected('planned requirement needs an open gap')
 
     def test_verification_must_cover_requirement_control(self):
