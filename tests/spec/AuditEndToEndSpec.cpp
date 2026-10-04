@@ -362,6 +362,10 @@ const speclab::Register resumption{
                       speclab::core::Checks checks;
                       Device                device;
                       anchoredThenStopped(device, 10, 13);
+                      const LatestAnswer before   = device.provider.latest(pump);
+                      const auto*        original = std::get_if<Anchor>(&before);
+                      checks.expect(original != nullptr && original->position == 10 && original->digest == chainDigestAt(pump, 10),
+                                    "the provider holds the anchor at 10, with H_10 of the records as written");
                       rewrite(device, pump, 13, 12, 13);
                       checks.expect(device.start(pumpNew), "restarted");
                       checks.expect(std::ranges::none_of(device.sink->restart().faults,
@@ -369,6 +373,16 @@ const speclab::Register resumption{
                                                              return fault.kind == IntegrityFaultKind::ContinuityFailed;
                                                          }),
                                     "no continuity fault: the alteration is not detectable");
+                      // 7.3: records reloaded from storage are never anchored, whether or not the continuity check passed.
+                      checks.expect(!device.sink->advanceAnchor(pump), "an attempt to advance the old stream's anchor is refused");
+                      checks.expect(!device.sink->closeStream(pump), "nor can the old stream be closed, which would attempt an anchor");
+                      (void)device.produce(2);
+                      device.sink->close();
+                      const LatestAnswer after = device.provider.latest(pump);
+                      const auto*        kept  = std::get_if<Anchor>(&after);
+                      checks.expect(kept != nullptr && kept->position == original->position && kept->digest == original->digest
+                                        && kept->counter == original->counter,
+                                    "after an orderly close of the session, the provider still holds the original position, digest and counter");
                       const auto& report = reportOf(device.read(), pump);
                       checks.expect(report.verdict == Verdict::Anchored && report.anchoredThrough == 10 && report.unanchoredFrom == 11,
                                     "Anchored through 10, records past it internally consistent and unanchored");
