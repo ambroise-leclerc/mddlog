@@ -1,5 +1,6 @@
 /** @brief Local application component: stock changes with explicit host audit refusal policy. */
-#pragma once
+#ifndef MDDLOG_EXAMPLES_INVENTORYWORKER_HPP
+#define MDDLOG_EXAMPLES_INVENTORYWORKER_HPP
 
 // Import std, mddlog.core.governedbinding and mddlog.core.auditbinding before this header.
 namespace inventory {
@@ -93,3 +94,5 @@ template <std::size_t Capacity>
     return {.request = request, .outcome = outcome, .diagnostic = diagnostic, .changed = valid};
 }
 }  // namespace inventory
+
+#endif  // MDDLOG_EXAMPLES_INVENTORYWORKER_HPP

@@ -88,9 +88,12 @@ void refusals() {
     {
         InventoryWorker worker(GovernedBinding(log, context), AuditBinding(audit, event, identity));
         const auto      result = worker.apply(5, RawTime::unavailable(), RawTime::unavailable());
-        require(result.changed && worker.quantity() == 5 && result.request.wasAdmitted() && result.outcome && !result.outcome->wasAdmitted()
-                    && result.outcome->refusal()->reason == AuditRefusalReason::RingFull,
+        require(result.changed && worker.quantity() == 5 && result.request.wasAdmitted() && result.outcome && !result.outcome->wasAdmitted(),
                 "outcome refusal preserves completed mutation");
+        if (result.outcome) {
+            const auto failure = result.outcome->refusal();
+            require(failure && failure->reason == AuditRefusalReason::RingFull, "exact outcome refusal reason");
+        }
         const auto blocked = worker.apply(7, RawTime::unavailable(), RawTime::unavailable());
         require(!blocked.changed && worker.quantity() == 5 && !blocked.request.wasAdmitted() && !blocked.outcome && !blocked.diagnostic,
                 "request refusal blocks mutation");
@@ -120,7 +123,7 @@ void concurrentLifecycle() {
     std::atomic<int>  secondAcknowledged{0};
     std::atomic<bool> stop{false};
     std::atomic<bool> healthy{true};
-    auto              produce = [&](auto worker, std::atomic<int>& acknowledged, std::stop_token cancellation) {
+    auto              produce = [&](auto worker, std::atomic<int>& acknowledged, const std::stop_token& cancellation) {
         for (int i = 0; i < iterations && !stop.load() && !cancellation.stop_requested(); ++i) {
             const auto result = worker.apply(1, RawTime::unavailable(), RawTime::unavailable());
             if (!result.changed || !result.outcome || !result.outcome->wasAdmitted() || !result.diagnostic
@@ -133,10 +136,10 @@ void concurrentLifecycle() {
         if (!stop.load() && worker.quantity() != iterations)
             healthy.store(false);
     };
-    std::jthread                firstProducer([&](std::stop_token cancellation) {
+    std::jthread                firstProducer([&](const std::stop_token& cancellation) {
         produce(first, firstAcknowledged, cancellation);
     });
-    std::jthread                secondProducer([&](std::stop_token cancellation) {
+    std::jthread                secondProducer([&](const std::stop_token& cancellation) {
         produce(second, secondAcknowledged, cancellation);
     });
     std::vector<GovernedRecord> diagnostics;
@@ -171,8 +174,8 @@ void concurrentLifecycle() {
     std::uint64_t firstSequence  = 0;
     std::uint64_t secondSequence = 0;
     for (const auto& value : events) {
-        auto&      sequence            = value.streamId() == "inventory-first:boot-4" ? firstSequence : secondSequence;
-        const auto expectedCorrelation = value.streamId() == "inventory-first:boot-4" ? "first" : "second";
+        auto&                  sequence            = value.streamId() == "inventory-first:boot-4" ? firstSequence : secondSequence;
+        const std::string_view expectedCorrelation = value.streamId() == "inventory-first:boot-4" ? "first" : "second";
         require(value.correlationId() == expectedCorrelation && value.sequence() == ++sequence, "stream isolation and copied sequences");
         require(value.phase() == (sequence % 2 == 1 ? AuditPhase::Requested : AuditPhase::Executed), "explicit alternating phases");
         if (sequence % 2 == 0)
@@ -190,7 +193,7 @@ void concurrentLifecycle() {
 
 int main(int argc, char** argv) {
     try {
-        const std::string_view scenario = argc > 1 ? argv[1] : "all";
+        const std::string_view scenario = argc > 1 ? std::span(argv, static_cast<std::size_t>(argc))[1] : "all";
         require(scenario == "all" || scenario == "equivalence" || scenario == "refusals" || scenario == "lifecycle", "unknown scenario");
         if (scenario == "all" || scenario == "equivalence")
             equivalence();

@@ -84,14 +84,16 @@ const speclab::Register interruptedScope{"Context integration: exceptions and ea
                                                                return binding.record(AuditPhase::Requested, RawTime::unavailable());
                                                            };
                                                            checks.expect(enter().wasAdmitted(), "early return admits only request");
+                                                           bool interrupted = false;
                                                            try {
                                                                AuditBinding binding(ring, *event, *identity);
                                                                checks.expect(binding.record(AuditPhase::Requested, RawTime::unavailable()).wasAdmitted(),
                                                                              "explicit request before exception");
                                                                throw std::runtime_error("host action interrupted");
                                                            } catch (const std::runtime_error&) {
-                                                               // Host decides recovery later; no phase is inferred from the exception.
+                                                               interrupted = true;  // Host decides recovery later, without an inferred phase.
                                                            }
+                                                           checks.expect(interrupted, "host observes the interruption");
                                                            const auto events = ring.drain();
                                                            checks.expect(events.size() == 2 && ring.admittedCount() == 2, "destructors added no event");
                                                            for (const auto& value : events.first())
