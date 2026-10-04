@@ -1,8 +1,19 @@
-# mddlog — registro C++23 para el software de productos sanitarios
+# mddlog
 
-[🇫🇷 Français](README.md) · [🇬🇧 English](README.en-GB.md) · [🇩🇪 Deutsch](README.de.md) · 🇪🇸 Español
+**Biblioteca de logging C++23** para productos sanitarios críticos y software regulado o safety-critical.
 
-**mddlog** es una biblioteca de módulos C++23 para el registro de diagnóstico y la trazabilidad de auditoría en el software de productos sanitarios y otros sistemas embebidos regulados. Separa tres cosas que se confunden con facilidad: un mensaje de diagnóstico, un evento de auditoría admitido en memoria y un registro de auditoría conservado de forma duradera y verificable. Cada paso devuelve un resultado explícito, y cada garantía queda acotada por escrito.
+[🇫🇷 Français](README.md) · [🇬🇧 English](README.en-GB.md) · 🇪🇸 Español
+
+```cpp
+import mddlog.log;
+
+mddlog::Log::info("Bomba lista");
+mddlog::Log::error("Oclusión detectada en la vía A");
+```
+
+- **Logs de diagnóstico**: los niveles habituales, sinks y una fachada `Log` lista para usar.
+- **Núcleo acotado, sin asignación de memoria**: capacidad fija, rechazo explícito en lugar de sobrescritura silenciosa.
+- **Registro de auditoría**: eventos separados de los logs, persistidos, encadenados y verificables frente a un anclaje independiente.
 
 [Decisiones de arquitectura](docs/adr/README.md) · [Validación de la persistencia de auditoría](docs/audit-persistence-validation.md) · [Guía de admisión de auditoría](docs/migration/audit-admission.md) · [Guía del libro de registro de auditoría](docs/migration/audit-ledger.md) · [Evidencias del núcleo gobernado](docs/governed-evidence.md) · [Registro de cambios](CHANGELOG.md) · [Versiones](https://github.com/ambroise-leclerc/mddlog/releases)
 

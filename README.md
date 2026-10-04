@@ -1,8 +1,19 @@
-# mddlog — journalisation C++23 pour le logiciel de dispositifs médicaux
+# mddlog
 
-🇫🇷 Français · [🇬🇧 English](README.en-GB.md) · [🇩🇪 Deutsch](README.de.md) · [🇪🇸 Español](README.es.md)
+**Bibliothèque de logging C++23** pour les dispositifs médicaux critiques et les logiciels réglementés ou safety-critical.
 
-**mddlog** est une bibliothèque de modules C++23 pour la journalisation de diagnostic et la traçabilité d'audit des logiciels de dispositifs médicaux et des systèmes embarqués réglementés. Elle sépare trois choses que l'on confond facilement : un message de diagnostic, un événement d'audit admis en mémoire, et un enregistrement d'audit conservé durablement et vérifiable. Chaque étape rend un résultat explicite, et chaque garantie est bornée par écrit.
+🇫🇷 Français · [🇬🇧 English](README.en-GB.md) · [🇪🇸 Español](README.es.md)
+
+```cpp
+import mddlog.log;
+
+mddlog::Log::info("Pompe prête");
+mddlog::Log::error("Occlusion détectée sur la voie A");
+```
+
+- **Logs de diagnostic** : niveaux classiques, sinks et façade `Log`, prêts à l'emploi.
+- **Cœur borné, sans allocation** : capacité fixe, refus explicite plutôt qu'écrasement silencieux.
+- **Journal d'audit** : événements distincts des logs, persistés, chaînés et vérifiables contre un ancrage indépendant.
 
 [Décisions d'architecture](docs/adr/README.md) · [Validation de la persistance d'audit](docs/audit-persistence-validation.md) · [Guide d'admission d'audit](docs/migration/audit-admission.md) · [Guide du registre d'audit](docs/migration/audit-ledger.md) · [Preuves du cœur gouverné](docs/governed-evidence.md) · [Journal des modifications](CHANGELOG.md) · [Versions](https://github.com/ambroise-leclerc/mddlog/releases)
 

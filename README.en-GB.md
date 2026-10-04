@@ -1,8 +1,19 @@
-# mddlog — C++23 logging for medical device software
+# mddlog
 
-[🇫🇷 Français](README.md) · 🇬🇧 English · [🇩🇪 Deutsch](README.de.md) · [🇪🇸 Español](README.es.md)
+**C++23 logging library** for critical medical devices and regulated or safety-critical software.
 
-**mddlog** is a C++23 modules library for diagnostic logging and audit trails in medical device software and other regulated embedded systems. It keeps apart three things that are easily confused: a diagnostic message, an audit event admitted in memory, and an audit record kept durably and verifiably. Every step returns an explicit result, and every guarantee is bounded in writing.
+[🇫🇷 Français](README.md) · 🇬🇧 English · [🇪🇸 Español](README.es.md)
+
+```cpp
+import mddlog.log;
+
+mddlog::Log::info("Pump ready");
+mddlog::Log::error("Occlusion detected on line A");
+```
+
+- **Diagnostic logs**: the usual levels, sinks and a ready-to-use `Log` facade.
+- **Bounded, allocation-free core**: fixed capacity, explicit refusal rather than silent overwriting.
+- **Audit trail**: events kept apart from logs, persisted, chained and verifiable against an independent anchor.
 
 [Architecture decisions](docs/adr/README.md) · [Audit persistence validation](docs/audit-persistence-validation.md) · [Audit admission guide](docs/migration/audit-admission.md) · [Audit ledger guide](docs/migration/audit-ledger.md) · [Governed-core evidence](docs/governed-evidence.md) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/ambroise-leclerc/mddlog/releases)
 
