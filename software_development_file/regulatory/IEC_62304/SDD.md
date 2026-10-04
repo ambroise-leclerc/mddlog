@@ -13,11 +13,13 @@ par anneau ; ni ordre global entre anneaux ni permission de plusieurs producteur
 
 ## Audit
 
-AuditInput sépare catégorie et phase. AuditEvent exige les identifiants conformes aux champs,
-refuse le préfixe d'action réservé `mddlog.` et conserve une identité de flux et une séquence.
-AuditRing attribue une séquence à l'admission. Une admission ne signifie ni exécution de l'action,
+AuditInput sépare catégorie et phase. AuditEvent exige les identifiants conformes aux champs
+et conserve une identité de flux et une séquence. `AuditEvent::assign` autorise les actions
+préfixées par `mddlog.` pour permettre à l'adaptateur de construire les enregistrements du ledger.
+`AuditRing::tryRecord` refuse ce préfixe réservé lors de l'admission producteur et attribue une
+séquence à l'admission. Une admission ne signifie ni exécution de l'action,
 ni effet clinique, ni durabilité. L'hôte vérifie le résultat et pilote sa réponse au refus.
-Une portée détruite ne prouve pas la réussite d'une action ; Requested, Completed et Failed
+Une portée détruite ne prouve pas la réussite d'une action ; `Requested`, `Confirmed`, `Executed` et `Failed`
 sont des déclarations explicites. AuditSinkAdapter rend refus et reprise de transmission visibles.
 
 ## Adaptation et persistance
