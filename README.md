@@ -5,10 +5,24 @@
 🇫🇷 Français · [🇬🇧 English](README.en-GB.md) · [🇪🇸 Español](README.es.md)
 
 ```cpp
-import mddlog.log;
+import std;
+import mddlog;
 
-mddlog::Log::info("Pompe prête");
-mddlog::Log::error("Occlusion détectée sur la voie A");
+int main() {
+    // Configuration au point de composition de l’application.
+    mddlog::SimpleLogger destination("pump", false);
+    destination.addSink(mddlog::createConsoleSink());
+    const auto context = mddlog::DiagnosticContext::create({
+        .component = "pump", .operationId = "prime", .correlationId = "call-7"
+    });
+    if (!context) return 1; // Traiter le refus de construction avant de créer la liaison.
+    mddlog::DiagnosticBinding logger(destination, *context);
+
+    // Dans le code métier : le contexte n’est plus répété.
+    logger.info("Pompe prête");
+    logger.error("Occlusion détectée sur la voie A");
+    logger.debugLazy([] { return std::format("state={}", 42); });
+}
 ```
 
 - **Logs de diagnostic** : niveaux classiques, sinks et façade `Log`, prêts à l'emploi.
@@ -17,7 +31,18 @@ mddlog::Log::error("Occlusion détectée sur la voie A");
 
 [Décisions d'architecture](docs/adr/README.md) · [Validation de la persistance d'audit](docs/audit-persistence-validation.md) · [Guide d'admission d'audit](docs/migration/audit-admission.md) · [Guide du registre d'audit](docs/migration/audit-ledger.md) · [Preuves du cœur gouverné](docs/governed-evidence.md) · [Journal des modifications](CHANGELOG.md) · [Versions](https://github.com/ambroise-leclerc/mddlog/releases)
 
-## Nouveautés de la version 0.2.0
+## Nouveautés de la version 0.3.0
+
+La v0.3.0 livre l’API contextualisée de [#113](https://github.com/ambroise-leclerc/mddlog/issues/113), conçue dans [ADR-005](docs/adr/ADR-005-contextual-logging-api.md). La configuration reste au point de composition ; les fonctions métier reçoivent une liaison réutilisable.
+
+- **Diagnostic** : `DiagnosticContext` possède composant, opération et corrélation ; `DiagnosticBinding` conserve la source du véritable appelant avec `SimpleLogger` ou `TextLogger`.
+- **Messages coûteux** : `debugLazy(factory)` et `logLazy(level, factory)` construisent le message après le filtre de l’adaptateur.
+- **Chemins gouvernés** : `GovernedBinding` conserve le temps explicite et `WriteResult` ; `AuditDescription`, `AuditContext` et `AuditBinding` séparent les invariants des phases et faits de chaque émission.
+- **Preuves et migration** : cinq usages avant/après, composant stock local et consommateurs source/installés. L’intégration locale est acceptée ; l’application indépendante #122 et le gel 1.0 #121 restent ouverts.
+
+Les API bas niveau et la façade globale `Log` restent disponibles. Voir le [guide des contextes](docs/migration/contextual-logging.md) et les [preuves d’intégration](docs/contextual-api-integration.md).
+
+## Capacités livrées en 0.2.0
 
 La v0.1.0 livrait un cœur de journalisation borné, sans allocation (ADR-001). La v0.2.0 y ajoute trois capacités complètes.
 
@@ -55,6 +80,7 @@ La v0.1.0 livrait un cœur de journalisation borné, sans allocation (ADR-001). 
 | --- | --- | --- |
 | Cœur de diagnostic gouverné (`mddlog::core`) | `GovernedRecord` à capacité fixe et `RingLog` un producteur / un consommateur ; heure fournie par l'hôte ; résultats explicites d'admission et de troncature | Ni sink, ni persistance, ni garantie temporelle à l'échelle du système |
 | Cœur d'audit (`mddlog::core`) | `AuditEvent` et `AuditRing` bornés ; identifiants exacts, catégorie et phase, identité de flux et séquence attribuée | Admis veut dire en mémoire ; un anneau plein refuse les nouveaux événements |
+| Contextes et liaisons (`mddlog::core`, adaptateurs via `mddlog::mddlog`) | `DiagnosticContext`, `GovernedBinding`, `AuditDescription`, `AuditContext`, `AuditBinding` et `DiagnosticBinding` | Contextes possédés, destinations empruntées ; refus et temps gouvernés explicites ; un producteur par anneau |
 | API d'audit publique (`mddlog::mddlog`) | `SimpleLogger::logAudit(AuditInput)` et `Log::logAudit(AuditInput)` renvoient le résultat d'admission après `setAuditRing()` | L'anneau lié doit survivre à sa liaison ; `Log::shutdown()` efface la liaison |
 | Transmission d'audit (`mddlog::mddlog`) | `AuditSinkAdapter` transmet à un `AuditSink`, publie sa santé et acquitte ce qui a été accepté | Un seul thread consommateur ; l'acceptation par un sink n'est pas un stockage durable |
 | Persistance d'audit (`mddlog::mddlog`) | `PersistingAuditSink` stocke, confirme durablement, tient un registre, fait tourner et retient ; `LogVerifier` rend un verdict par flux | La durabilité dépend du support ; la détection d'altération dépend d'un ancrage indépendant ; rien n'est signé |
@@ -65,32 +91,38 @@ Chaque anneau a **un producteur et un consommateur**. L'hôte fournit une identi
 
 ## Prise en main
 
-### Admettre un événement d'audit
+### Admettre un événement d’audit avec un contexte réutilisable
 
 ```cpp
-import mddlog.core.auditring;
+import mddlog.core.auditbinding;
 
 using namespace mddlog::core;
 
 AuditRing<64> audit{"device_789:boot_42:operator"};
-AuditInput input{
+const auto description = AuditDescription::create({
     .category = AuditCategory::RiskControl,
-    .phase = AuditPhase::Requested,
-    .time = RawTime::unavailable(),
     .action = "EMERGENCY_SHUTDOWN",
-    .actor = "operator_42",
-    .target = "pump_7",
     .riskRef = "RISK_17",
+});
+const auto context = AuditContext::create({
+    .actor = "operator_42", .target = "pump_7",
     .correlationId = "device_789:boot_42:input:41",
-    .sourceSequence = 41,
-    .detail = "Shutdown requested",
-};
+});
+if (!description || !context) {
+    // Traiter les identifiants refusés avant toute émission.
+    return 1;
+}
+AuditBinding events(audit, *description, *context);
 
-auto result = audit.tryRecord(input);
+const auto result = events.record(AuditPhase::Requested, RawTime::unavailable(),
+                                 {.detail = "Shutdown requested", .sourceSequence = 41});
 if (!result.wasAdmitted()) {
-    // Appliquer la politique de refus de l'hôte ; consulter result.refusal().
+    // Appliquer la politique de refus de l’hôte ; consulter result.refusal().
+    return 2;
 }
 ```
+
+La description et le contexte sont copiés ; la liaison emprunte l’anneau. Phase et heure restent explicites à chaque appel. `Requested` déclare une demande : la liaison n’exécute pas l’action et son destructeur n’émet rien. Une admission est une copie en mémoire, pas une confirmation durable.
 
 ### Persister et vérifier
 
@@ -174,7 +206,7 @@ pour le dispositif et son profil réel.
 - **Livré (v0.2.0) :** admission d'audit bornée, séquence par flux, refus explicite et transmission avec santé ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md) ; épique [#9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Livré (v0.2.0) :** registre de sinks synchronisé, consommateur de transport borné et journal texte, avec WebFront comme consommateur de référence ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md) ; épique [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Livré (v0.2.0), preuves en revue :** confirmation durable sur un support éligible, détection d'altération relative à un ancrage indépendant, redémarrage, rotation et rétention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md) ; épique [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). L'acceptation de ces preuves est une décision de revue distincte.
-- **Implémenté en développement vers la 1.0 :** contextes possédés et liaisons de diagnostic/audit, factories à erreur typée et filtrage paresseux d'adaptateur ([ADR-005 acceptée](docs/adr/ADR-005-contextual-logging-api.md), [API et migration](docs/migration/contextual-logging.md), [preuves locales](docs/contextual-api-validation.md) ; #128/#129 de [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). L’[intégration locale et ses mesures](docs/contextual-api-integration.md) sont acceptées pour #113/#130 avec réserve d’application indépendante en #122 ; le gel #121 reste ouvert.
+- **Livré (v0.3.0) :** contextes et liaisons de diagnostic/audit, filtrage paresseux et usages vérifiés ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). L’intégration du composant local est acceptée ; application indépendante #122, budgets #117, robustesse #120 et gel #121 restent ouverts.
 - **Différé :** signature et gestion des clés, format d'export ([ADR-004, décision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
 ## Compiler et vérifier

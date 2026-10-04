@@ -5,10 +5,24 @@
 [🇫🇷 Français](README.md) · [🇬🇧 English](README.en-GB.md) · 🇪🇸 Español
 
 ```cpp
-import mddlog.log;
+import std;
+import mddlog;
 
-mddlog::Log::info("Bomba lista");
-mddlog::Log::error("Oclusión detectada en la vía A");
+int main() {
+    // Configurar en el punto de composición de la aplicación.
+    mddlog::SimpleLogger destination("pump", false);
+    destination.addSink(mddlog::createConsoleSink());
+    const auto context = mddlog::DiagnosticContext::create({
+        .component = "pump", .operationId = "prime", .correlationId = "call-7"
+    });
+    if (!context) return 1; // Tratar el rechazo de construcción antes de crear el vínculo.
+    mddlog::DiagnosticBinding logger(destination, *context);
+
+    // En el código de negocio: sin repetir los campos del contexto.
+    logger.info("Bomba lista");
+    logger.error("Oclusión detectada en la vía A");
+    logger.debugLazy([] { return std::format("state={}", 42); });
+}
 ```
 
 - **Logs de diagnóstico**: los niveles habituales, sinks y una fachada `Log` lista para usar.
@@ -19,7 +33,18 @@ mddlog::Log::error("Oclusión detectada en la vía A");
 
 La versión de referencia es la francesa ([README](README.md)); los documentos enlazados están en inglés.
 
-## Novedades de la versión 0.2.0
+## Novedades de la versión 0.3.0
+
+La v0.3.0 entrega la API contextual de [#113](https://github.com/ambroise-leclerc/mddlog/issues/113), diseñada en [ADR-005](docs/adr/ADR-005-contextual-logging-api.md). La configuración permanece en el punto de composición; las funciones de negocio reciben un vínculo reutilizable.
+
+- **Diagnóstico**: `DiagnosticContext` posee componente, operación y correlación; `DiagnosticBinding` conserva el origen del llamante real con `SimpleLogger` o `TextLogger`.
+- **Mensajes costosos**: `debugLazy(factory)` y `logLazy(level, factory)` construyen el mensaje después del filtro del adaptador.
+- **Rutas gobernadas**: `GovernedBinding` mantiene la hora explícita y `WriteResult`; `AuditDescription`, `AuditContext` y `AuditBinding` separan los invariantes de las fases y hechos de cada evento.
+- **Evidencias y migración**: cinco usos antes/después, componente local de stock y consumidores de fuentes/instalados. La integración local está aceptada; la aplicación independiente #122 y la congelación 1.0 #121 siguen abiertas.
+
+Las API de bajo nivel y la fachada global `Log` siguen disponibles. Véanse la [guía de contextos](docs/migration/contextual-logging.md) y las [evidencias de integración](docs/contextual-api-integration.md).
+
+## Capacidades entregadas en 0.2.0
 
 La v0.1.0 ofrecía un núcleo de registro acotado y sin asignación de memoria (ADR-001). La v0.2.0 añade tres capacidades completas.
 
@@ -57,6 +82,7 @@ La v0.1.0 ofrecía un núcleo de registro acotado y sin asignación de memoria (
 | --- | --- | --- |
 | Núcleo de diagnóstico gobernado (`mddlog::core`) | `GovernedRecord` de capacidad fija y `RingLog` de un productor y un consumidor; hora proporcionada por el anfitrión; resultados explícitos de admisión y truncamiento | Sin sink, sin persistencia, sin garantía temporal a escala del sistema |
 | Núcleo de auditoría (`mddlog::core`) | `AuditEvent` y `AuditRing` acotados; identificadores exactos, categoría y fase, identidad de flujo y secuencia asignada | Admitido significa en memoria; un anillo lleno rechaza los nuevos eventos |
+| Contextos y vínculos (`mddlog::core`, adaptadores mediante `mddlog::mddlog`) | `DiagnosticContext`, `GovernedBinding`, `AuditDescription`, `AuditContext`, `AuditBinding` y `DiagnosticBinding` | Contextos propios, destinos prestados; rechazo y hora gobernados explícitos; un productor por anillo |
 | API de auditoría pública (`mddlog::mddlog`) | `SimpleLogger::logAudit(AuditInput)` y `Log::logAudit(AuditInput)` devuelven el resultado de admisión tras `setAuditRing()` | El anillo vinculado debe sobrevivir a su vínculo; `Log::shutdown()` borra el vínculo |
 | Entrega de auditoría (`mddlog::mddlog`) | `AuditSinkAdapter` entrega a un `AuditSink`, publica su estado y confirma lo aceptado | Un solo hilo consumidor; la aceptación por un sink no es un almacenamiento duradero |
 | Persistencia de auditoría (`mddlog::mddlog`) | `PersistingAuditSink` almacena, confirma de forma duradera, lleva un libro de registro, rota y retiene; `LogVerifier` devuelve un veredicto por flujo | La durabilidad depende del soporte; la detección de alteraciones, de un anclaje independiente; nada está firmado |
@@ -67,32 +93,38 @@ Cada anillo tiene **un productor y un consumidor**. El anfitrión proporciona un
 
 ## Primeros pasos
 
-### Admitir un evento de auditoría
+### Admitir un evento de auditoría con un contexto reutilizable
 
 ```cpp
-import mddlog.core.auditring;
+import mddlog.core.auditbinding;
 
 using namespace mddlog::core;
 
 AuditRing<64> audit{"device_789:boot_42:operator"};
-AuditInput input{
+const auto description = AuditDescription::create({
     .category = AuditCategory::RiskControl,
-    .phase = AuditPhase::Requested,
-    .time = RawTime::unavailable(),
     .action = "EMERGENCY_SHUTDOWN",
-    .actor = "operator_42",
-    .target = "pump_7",
     .riskRef = "RISK_17",
+});
+const auto context = AuditContext::create({
+    .actor = "operator_42", .target = "pump_7",
     .correlationId = "device_789:boot_42:input:41",
-    .sourceSequence = 41,
-    .detail = "Shutdown requested",
-};
+});
+if (!description || !context) {
+    // Tratar los identificadores rechazados antes de emitir eventos.
+    return 1;
+}
+AuditBinding events(audit, *description, *context);
 
-auto result = audit.tryRecord(input);
+const auto result = events.record(AuditPhase::Requested, RawTime::unavailable(),
+                                 {.detail = "Shutdown requested", .sourceSequence = 41});
 if (!result.wasAdmitted()) {
     // Aplicar la política de rechazo del anfitrión; consultar result.refusal().
+    return 2;
 }
 ```
+
+La descripción y el contexto se copian; el vínculo toma prestado el anillo. La fase y la hora siguen siendo explícitas en cada llamada. `Requested` declara una solicitud: el vínculo no ejecuta la acción y su destructor no emite nada. La admisión es una copia en memoria, no una confirmación duradera.
 
 ### Persistir y verificar
 
@@ -168,6 +200,7 @@ La [nota de evidencias](docs/governed-evidence.md) indica qué cubren los contro
 - **Entregado (v0.2.0):** admisión de auditoría acotada, secuencia por flujo, rechazo explícito y entrega con estado ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md); épica [#9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Entregado (v0.2.0):** registro de sinks sincronizado, consumidor de transporte acotado y registro de texto, con WebFront como consumidor de referencia ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); épica [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Entregado (v0.2.0), evidencias en revisión:** confirmación duradera en un soporte apto, detección de alteraciones relativa a un anclaje independiente, reinicio, rotación y retención ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); épica [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). La aceptación de estas evidencias es una decisión de revisión aparte.
+- **Entregado (v0.3.0):** contextos y vínculos de diagnóstico/auditoría, filtrado perezoso y usos verificados ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). La integración del componente local está aceptada; la aplicación independiente #122, los presupuestos #117, la robustez #120 y la congelación #121 siguen abiertos.
 - **Aplazado:** firma y gestión de claves, formato de exportación ([ADR-004, decisión 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
 ## Compilar y verificar
