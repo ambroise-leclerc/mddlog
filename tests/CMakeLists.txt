@@ -2,6 +2,11 @@
 
 include(${CMAKE_SOURCE_DIR}/cmake/MddlogTestDiscovery.cmake)
 
+add_executable(mddlog_context_adapter_consumer consumer/ContextAdapterConsumer.cpp)
+target_link_libraries(mddlog_context_adapter_consumer PRIVATE mddlog::mddlog)
+add_test(NAME SourceTreeContextConsumer COMMAND mddlog_context_adapter_consumer)
+set_tests_properties(SourceTreeContextConsumer PROPERTIES LABELS "build;api")
+
 # The same core-only program also runs against the installed package. Keep it independent of
 # SpecLab and of mddlog::mddlog so linking or importing an adapter cannot mask a broken split.
 add_executable(mddlog_core_source_consumer consumer/CoreConsumer.cpp)
@@ -110,6 +115,10 @@ add_executable(mddlog_specs
     spec/SinkRegistrySpec.cpp
     spec/TransportConsumerSpec.cpp
     spec/TextLoggerSpec.cpp
+    spec/DiagnosticContextSpec.cpp
+    spec/DiagnosticBindingSpec.cpp
+    spec/AuditContextSpec.cpp
+    spec/ContextIntegrationSpec.cpp
     spec/VersionSpec.cpp
 )
 
@@ -133,3 +142,16 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 mddlog_discover_tests(mddlog_specs)
+
+# Run the executable before/after usage study when examples are enabled.
+if(TARGET mddlog_contextual_usage)
+    add_test(NAME examples.contextualUsage COMMAND mddlog_contextual_usage)
+    set_tests_properties(examples.contextualUsage PROPERTIES LABELS "examples;api")
+endif()
+
+if(TARGET mddlog_contextual_inventory)
+    foreach(scenario equivalence refusals lifecycle)
+        add_test(NAME examples.contextualInventory.${scenario} COMMAND mddlog_contextual_inventory ${scenario})
+        set_tests_properties(examples.contextualInventory.${scenario} PROPERTIES LABELS "examples;api;integration" TIMEOUT 20)
+    endforeach()
+endif()

@@ -127,3 +127,16 @@ La conception de #113 peut démarrer après livraison de cette décision sur dev
 de #124 suit cette livraison. Cette décision ne vaut pas acceptation finale de la 1.0.
 Chaque épique #113–#122 actualise les données concernées, la conception et ses preuves ;
 #122 accepte le dossier final avant la publication selon le [processus de release](../docs/release-process.md).
+
+## Évolution après la base initiale
+
+La conception [ADR-005](../docs/adr/ADR-005-contextual-logging-api.md) du lot #127 est acceptée
+le 2026-10-04 sur `f3063bc`, indépendamment de l'acceptation initiale #124. #128/#129
+implémentent les liaisons et leurs contrôles ; [les preuves](../docs/contextual-api-validation.md)
+identifient la révision logicielle et [la référence/migration](../docs/migration/contextual-logging.md).
+Le registre contient CTRL-011–013 et VER-011–019 sans changer la décision historique de `review`.
+L’[intégration #130](../docs/contextual-api-integration.md) ajoute CTRL-014/VER-020–022,
+un composant stock concret et la revue technique de lisibilité, avec vérification actualisée sur `f64161b`. GAP-006
+reste ouvert pour la décision mainteneur sur ce lot ; les exigences de l’expérience complète
+restent prévues. L’application indépendante reste #122.
+Les résultats locaux ne qualifient pas les budgets temporels ou l'application indépendante.

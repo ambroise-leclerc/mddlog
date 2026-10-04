@@ -129,20 +129,48 @@ public:
     }
 
     [[nodiscard]] static constexpr std::optional<AuditRefusal> validate(const AuditInput& input, std::string_view streamId) noexcept {
-        if (!validIdentifier(input.action, auditActionCapacity, true))
-            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Action};
-        if (!validIdentifier(input.actor, auditActorCapacity, false))
-            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Actor};
-        if (!validIdentifier(input.target, auditTargetCapacity, true))
-            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Target};
-        if (!validIdentifier(input.requirementRef, auditReferenceCapacity, false))
-            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::RequirementRef};
-        if (!validIdentifier(input.riskRef, auditReferenceCapacity, false))
-            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::RiskRef};
-        if (!validIdentifier(input.correlationId, auditCorrelationCapacity, false))
-            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::CorrelationId};
+        if (auto failure = validateIdentifier(AuditField::Action, input.action))
+            return failure;
+        if (auto failure = validateIdentifier(AuditField::Actor, input.actor))
+            return failure;
+        if (auto failure = validateIdentifier(AuditField::Target, input.target))
+            return failure;
+        if (auto failure = validateIdentifier(AuditField::RequirementRef, input.requirementRef))
+            return failure;
+        if (auto failure = validateIdentifier(AuditField::RiskRef, input.riskRef))
+            return failure;
+        if (auto failure = validateIdentifier(AuditField::CorrelationId, input.correlationId))
+            return failure;
         if (!validStreamId(streamId))
             return AuditRefusal{.reason = AuditRefusalReason::InvalidStream};
+        return std::nullopt;
+    }
+
+    /** @brief Validate one named identifier using the same rules as event admission; None is invalid. */
+    [[nodiscard]] static constexpr std::optional<AuditRefusal> validateIdentifier(AuditField field, std::string_view value) noexcept {
+        bool valid = false;
+        switch (field) {
+            case AuditField::Action:
+                valid = validIdentifier(value, auditActionCapacity, true);
+                break;
+            case AuditField::Actor:
+                valid = validIdentifier(value, auditActorCapacity, false);
+                break;
+            case AuditField::Target:
+                valid = validIdentifier(value, auditTargetCapacity, true);
+                break;
+            case AuditField::RequirementRef:
+            case AuditField::RiskRef:
+                valid = validIdentifier(value, auditReferenceCapacity, false);
+                break;
+            case AuditField::CorrelationId:
+                valid = validIdentifier(value, auditCorrelationCapacity, false);
+                break;
+            case AuditField::None:
+                break;
+        }
+        if (!valid)
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = field};
         return std::nullopt;
     }
 

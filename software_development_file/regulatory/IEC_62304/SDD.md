@@ -46,3 +46,28 @@ prouve l'auteur. Le lecteur matérialise des données dans des conteneurs alloua
 restent à établir. L'hôte appelle aujourd'hui les primitives de pilotage ; #116 doit les regrouper
 hors code métier. Les suites de tests et guides de migration liés par les VER décrivent ce qui
 est exercé ; leur couverture n'équivaut pas à une validation applicative réelle.
+
+## Contextes et liaisons pour la 1.0 (#113/#127–129)
+
+[ADR-005](../../../docs/adr/ADR-005-contextual-logging-api.md) est acceptée le 2026-10-04
+sur `f3063bc`. CTRL-011–013 sont implémentés : valeurs possédées et bornées, factories à
+refus typé, contextes dérivés indépendants, liaison diagnostic et description/contexte audit
+séparés. Les liaisons empruntent un anneau par producteur sans changer SPSC ; les destructeurs
+n'émettent rien. Le temps gouverné et les phases restent explicites par événement, le canal
+et les résultats d'admission restent ceux d'ADR-001/002. Les formats d'ADR-004 ne changent pas.
+
+[La référence/migration](../../../docs/migration/contextual-logging.md) précise signatures,
+origines, durée de vie des vues et filtres avant fabrique. SimpleLogger expose son filtre
+et reçoit les champs structurés ; TextLogger reçoit une projection texte. Aucune allocation
+ou horloge de ces adaptateurs ne remonte dans le cœur. std::expected est utilisé seulement
+pour la construction gouvernée sans accesseur levant ; aucun composant tiers nouveau.
+
+[Les preuves locales](../../../docs/contextual-api-validation.md) couvrent VER-011–019,
+les consommateurs sources/installés, la frontière et les tailles sur un tuple précis.
+[L’intégration #130](../../../docs/contextual-api-integration.md) fournit CTRL-014/VER-020–022 :
+composant stock, équivalence avant/après et producteurs/consommateur avec arrêt explicite.
+GAP-006 reste ouvert pour la revue et décision mainteneur ; REQ-009/REQ-011 restent prévues
+pour l’expérience acceptée complète. L’application indépendante reste #122. RISK-008/010 bénéficient des contrôles de copies, de séparation
+et d'admission visible ; les risques restent ouverts et l'hôte maîtrise toujours SPSC,
+durée de vie des destinations et réponse aux refus. Aucune confidentialité ou qualification
+de dispositif n'est fournie ; RISK-009 conserve sa limite.

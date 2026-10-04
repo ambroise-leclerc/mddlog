@@ -45,3 +45,15 @@ if(MDDLOG_INSTALL_EXAMPLES)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/examples
     )
 endif()
+
+# ADR-005 usage study with public context bindings.
+add_executable(mddlog_contextual_usage ContextualUsage.cpp)
+target_link_libraries(mddlog_contextual_usage PRIVATE mddlog::mddlog mddlog::core)
+target_compile_features(mddlog_contextual_usage PRIVATE cxx_std_23)
+set_target_properties(mddlog_contextual_usage PROPERTIES FOLDER "Examples")
+
+# Local application integration and lifecycle proof (#130).
+add_executable(mddlog_contextual_inventory ContextualInventory.cpp)
+target_link_libraries(mddlog_contextual_inventory PRIVATE mddlog::core)
+target_compile_features(mddlog_contextual_inventory PRIVATE cxx_std_23)
+set_target_properties(mddlog_contextual_inventory PROPERTIES FOLDER "Examples")

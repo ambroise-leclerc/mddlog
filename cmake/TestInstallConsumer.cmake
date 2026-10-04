@@ -97,6 +97,8 @@ int main() {\n\
 }\n\
 ")
 set(consumer_executables "consumer|main.cpp|mddlog::mddlog" "consumer_ring|main_ring.cpp|mddlog::mddlog,mddlog::core")
+file(COPY_FILE "${SOURCE_DIR}/tests/consumer/ContextAdapterConsumer.cpp" "${consumer_src}/main_context.cpp")
+list(APPEND consumer_executables "consumer_context|main_context.cpp|mddlog::mddlog")
 else()
     # Reuse the exact program exercised in-tree. Only mddlog::core may be linked here.
     file(MAKE_DIRECTORY "${consumer_src}")
@@ -106,6 +108,11 @@ endif()
 
 set(consumer_required_targets)
 set(consumer_target_definitions)
+# The same local application runs against the installed governed-only target.
+file(COPY "${SOURCE_DIR}/examples/ContextualInventory.cpp" "${SOURCE_DIR}/examples/InventoryWorker.hpp"
+    DESTINATION "${consumer_src}")
+list(APPEND consumer_executables "consumer_inventory|ContextualInventory.cpp|mddlog::core")
+
 # The consumer records each executable's real path per configuration, so no generator-specific
 # output layout (configuration subdirectories, .exe suffix) is guessed here.
 set(consumer_path_content)

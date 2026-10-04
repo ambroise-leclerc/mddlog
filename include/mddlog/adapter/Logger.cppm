@@ -11,6 +11,7 @@ export module mddlog.adapter.logger;
 import std;
 import mddlog.core.loglevel;
 import mddlog.core.auditring;
+import mddlog.core.diagnosticcontext;
 import mddlog.adapter.logrecord;
 import mddlog.sinks.sink;
 
@@ -100,11 +101,26 @@ public:
      */
     void
     log(LogLevel level, std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        if (!shouldLog(level))
+        if (!is(level))
             return;
 
         LogRecord record(level, message, category, loc);
         processLogRecord(std::move(record));
+    }
+
+    /** @brief Emit diagnostic context into structured fields, retaining the existing adapter clock. */
+    void log(LogLevel level, const DiagnosticContext& context, std::string_view message, const std::source_location& loc = std::source_location::current()) {
+        if (!is(level))
+            return;
+        LogRecord record(level, message, context.component(), loc);
+        record.operationId   = context.operationId();
+        record.correlationId = context.correlationId();
+        processLogRecord(std::move(record));
+    }
+
+    /** @brief Snapshot diagnostic enablement and threshold; a concurrent change is not transactional. */
+    [[nodiscard]] bool is(LogLevel level) const noexcept {
+        return enabled.load() && level >= minLevel.load();
     }
 
     /**
@@ -124,7 +140,7 @@ public:
                     std::string_view            sessionId,
                     std::string_view            deviceId,
                     const std::source_location& loc = std::source_location::current()) {
-        if (!shouldLog(level))
+        if (!is(level))
             return;
 
         LogRecord record(level, message, category, userId, sessionId, deviceId, loc);
@@ -261,13 +277,6 @@ public:
 private:
     mutable std::mutex                                 auditMutex;
     std::function<AuditWriteResult(const AuditInput&)> auditWriter;
-    /**
-     * @brief Check if a log level should be processed
-     */
-    bool shouldLog(LogLevel level) const noexcept {
-        return enabled.load() && level >= minLevel.load();
-    }
-
     /**
      * @brief Process a log record (sync or async)
      */

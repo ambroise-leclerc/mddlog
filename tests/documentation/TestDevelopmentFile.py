@@ -36,7 +36,9 @@ class DevelopmentFileTest(unittest.TestCase):
         for row in self.data['dependencies']:
             referenced.add(row['provenance'])
         referenced.update(('CMakePresets.json', 'CONTRIBUTING.md', 'LICENSE', '.github/CODEOWNERS',
-                           'docs/adr/README.md', 'docs/release-process.md'))
+                           'docs/adr/README.md', 'docs/release-process.md',
+                           'docs/adr/ADR-005-contextual-logging-api.md', 'docs/contextual-api-study.md',
+                           'docs/migration/contextual-logging.md'))
         for name in referenced:
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)

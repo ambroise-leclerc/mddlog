@@ -78,7 +78,7 @@
       "status": "open",
       "issue": 113,
       "owner": "Ambroise Leclerc",
-      "closure": "Décision d’API et exemples avant/après revus ; contexte explicite sûr en concurrence, sans identifiants documentaires imposés aux appels."
+      "closure": "Conception ADR-005 acceptée sur f3063bc ; liaisons #128/#129 vérifiées sur 8fe4fb1. Intégration #130 réalisée et revue technique locale dans docs/contextual-api-integration.md avec campagne initiale c80790f puis vérification actualisée sur f64161be3f7aac918a7bed8b63fe2e8a15b62456 (construction et 172/172 tests locaux réussis, CI verte) : cinq usages publics et composant stock avant/après mesurés, producteurs/consommateurs et refus exercés, guide achevé. Reste la revue et décision mainteneur sur ce lot et sa réserve de portée locale (#122 conserve application indépendante). REQ-009/REQ-011 restent prévues jusque-là ; aucune qualification de dispositif ni clôture de #117/#120/#121/#122."
     },
     {
       "id": "GAP-007",
@@ -310,6 +310,55 @@
         "include/mddlog/adapter/SinkRegistry.cppm",
         "include/mddlog/adapter/TransportConsumer.cppm"
       ]
+    },
+    {
+      "id": "CTRL-011",
+      "title": "Contextes diagnostic possédés et factories à refus typé",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-005-contextual-logging-api.md"
+      ],
+      "implementation": [
+        "include/mddlog/core/DiagnosticContext.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-012",
+      "title": "Liaisons diagnostic, vraie origine et filtrage avant fabrique",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-005-contextual-logging-api.md"
+      ],
+      "implementation": [
+        "include/mddlog/core/GovernedBinding.cppm",
+        "include/mddlog/adapter/DiagnosticBinding.cppm",
+        "include/mddlog/adapter/Logger.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-013",
+      "title": "Descriptions/contextes audit possédés et phases/admission explicites",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-005-contextual-logging-api.md"
+      ],
+      "implementation": [
+        "include/mddlog/core/AuditContext.cppm",
+        "include/mddlog/core/AuditBinding.cppm",
+        "include/mddlog/core/AuditEvent.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-014",
+      "title": "Intégration locale des liaisons et politique hôte visible au point de mutation",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-005-contextual-logging-api.md"
+      ],
+      "implementation": [
+        "examples/InventoryWorker.hpp",
+        "examples/ContextualInventory.cpp"
+      ]
     }
   ],
   "verifications": [
@@ -432,6 +481,151 @@
       "scenario": "transport-consumer-asynchronous-failure-detaches",
       "evidence": "docs/migration/transport-consumer.md",
       "limits": "File de transport bornée et retrait ; ne borne pas la file de SimpleLogger."
+    },
+    {
+      "id": "VER-011",
+      "title": "Copies possédées et contextes diagnostic imbriqués",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-011"
+      ],
+      "test": "tests/spec/DiagnosticContextSpec.cpp",
+      "scenario": "context-diagnostic-owned-and-nested",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-012",
+      "title": "Refus typés et limites des identifiants diagnostic",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-011"
+      ],
+      "test": "tests/spec/DiagnosticContextSpec.cpp",
+      "scenario": "context-diagnostic-identifier-failures",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-013",
+      "title": "Origine, temps, troncature et saturation gouvernés",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-012"
+      ],
+      "test": "tests/spec/DiagnosticContextSpec.cpp",
+      "scenario": "context-governed-source-time-and-refusal",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-014",
+      "title": "Isolation des contextes entre producteurs concurrents",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-011",
+        "CTRL-012"
+      ],
+      "test": "tests/spec/DiagnosticContextSpec.cpp",
+      "scenario": "context-diagnostic-producer-isolation",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-015",
+      "title": "Filtrage paresseux et rendu contextualisé TextLogger",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-012"
+      ],
+      "test": "tests/spec/DiagnosticBindingSpec.cpp",
+      "scenario": "context-text-filter-source-and-temporaries",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-016",
+      "title": "Projection structurée, seuil et compatibilité SimpleLogger",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-012"
+      ],
+      "test": "tests/spec/DiagnosticBindingSpec.cpp",
+      "scenario": "context-simple-structured-fields-and-filter",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-017",
+      "title": "Validation des identifiants de description et contexte audit",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-013"
+      ],
+      "test": "tests/spec/AuditContextSpec.cpp",
+      "scenario": "context-audit-identifier-validation",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-018",
+      "title": "Capture audit possédée et phases toujours explicites",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-013"
+      ],
+      "test": "tests/spec/AuditContextSpec.cpp",
+      "scenario": "context-audit-owned-phases-and-time",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-019",
+      "title": "Flux audit indépendants, saturation et refus explicites",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-013"
+      ],
+      "test": "tests/spec/AuditContextSpec.cpp",
+      "scenario": "context-audit-streams-and-refusal",
+      "evidence": "docs/contextual-api-validation.md",
+      "limits": "Campagne locale sur le profil et la révision cités ; revue d’intégration #130, budgets temporels #117, robustesse #120 et qualification applicative #122 restent ouverts."
+    },
+    {
+      "id": "VER-020",
+      "title": "Mutation concrète et refus de dépassement du stock",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-014"
+      ],
+      "test": "tests/spec/ContextIntegrationSpec.cpp",
+      "scenario": "context-integration-stock-limits",
+      "evidence": "docs/contextual-api-integration.md",
+      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+    },
+    {
+      "id": "VER-021",
+      "title": "Équivalence des politiques de refus avant et après contextualisation",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-014"
+      ],
+      "test": "tests/spec/ContextIntegrationSpec.cpp",
+      "scenario": "context-integration-refusal-equivalence",
+      "evidence": "docs/contextual-api-integration.md",
+      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
+    },
+    {
+      "id": "VER-022",
+      "title": "Exceptions et retours de portée sans phase audit implicite",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-014"
+      ],
+      "test": "tests/spec/ContextIntegrationSpec.cpp",
+      "scenario": "context-integration-interrupted-scope",
+      "evidence": "docs/contextual-api-integration.md",
+      "limits": "Composant applicatif local ; revue mainteneur et application indépendante #122 distinctes, sans qualification exhaustive de concurrence."
     }
   ],
   "risks": [
@@ -460,7 +654,9 @@
       "controls": [
         "CTRL-003",
         "CTRL-004",
-        "CTRL-007"
+        "CTRL-007",
+        "CTRL-013",
+        "CTRL-014"
       ],
       "gaps": [
         "GAP-006",
@@ -552,7 +748,11 @@
       "effect": "Plusieurs producteurs sur SPSC ou ring détruit avant déliaison : perte, ordre erroné ou accès invalide.",
       "controls": [
         "CTRL-009",
-        "CTRL-010"
+        "CTRL-010",
+        "CTRL-011",
+        "CTRL-012",
+        "CTRL-013",
+        "CTRL-014"
       ],
       "gaps": [
         "GAP-006",
@@ -580,7 +780,10 @@
       "effect": "Contexte implicite ou destruction de portée interprétée comme réussite ; orchestration oubliée.",
       "controls": [
         "CTRL-003",
-        "CTRL-004"
+        "CTRL-004",
+        "CTRL-011",
+        "CTRL-013",
+        "CTRL-014"
       ],
       "gaps": [
         "GAP-006",
@@ -775,8 +978,22 @@
         "RISK-009",
         "RISK-010"
       ],
-      "controls": [],
-      "verifications": [],
+      "controls": [
+        "CTRL-011",
+        "CTRL-012",
+        "CTRL-014"
+      ],
+      "verifications": [
+        "VER-011",
+        "VER-012",
+        "VER-013",
+        "VER-014",
+        "VER-015",
+        "VER-016",
+        "VER-020",
+        "VER-021",
+        "VER-022"
+      ],
       "gaps": [
         "GAP-006"
       ]
@@ -804,8 +1021,18 @@
         "RISK-002",
         "RISK-010"
       ],
-      "controls": [],
-      "verifications": [],
+      "controls": [
+        "CTRL-013",
+        "CTRL-014"
+      ],
+      "verifications": [
+        "VER-017",
+        "VER-018",
+        "VER-019",
+        "VER-020",
+        "VER-021",
+        "VER-022"
+      ],
       "gaps": [
         "GAP-006"
       ]
@@ -897,7 +1124,7 @@
       "provenance": "CMakeLists.txt",
       "license": "Licences spécifiques libstdc++ (GPL avec exception runtime), libc++ (Apache-2.0 avec exceptions LLVM) ou runtime MSVC ; notices exactes à relever pour le profil.",
       "classification": "Classement SOUP proposé pour bibliothèques préexistantes ; confirmation GAP-005.",
-      "knownIssues": "Garanties std/atomiques/modules liées au tuple ; limites des contrôles de frontière.",
+      "knownIssues": "Garanties std/atomiques/modules liées au tuple ; limites des contrôles de frontière. Les factories de contextes utilisent std::expected (ADR-005) ; leurs valeurs sont inline, les accesseurs levants ne sont pas appelés dans le cœur et les scans sont étendus aux corps de factories.",
       "monitoring": "Plan : mainteneur et intégrateur examinent avant mise à jour et release les défauts libstdc++ via https://gcc.gnu.org/bugzilla/ (accès automatisé bloqué lors de la consultation du 2026-10-04), les avis libc++/LLVM via https://github.com/llvm/llvm-project/security/advisories et le runtime MSVC via https://msrc.microsoft.com/update-guide. Filtrer sur le runtime réellement déployé et consigner version, avis examinés et anomalies du profil dans GAP-005.",
       "gaps": [
         "GAP-005"
