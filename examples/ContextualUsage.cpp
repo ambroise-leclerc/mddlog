@@ -13,40 +13,48 @@ using namespace mddlog::core;
 
 using TextBinding = mddlog::adapter::DiagnosticBinding<mddlog::adapter::TextLogger>;
 
+/** @brief Fail the executable when a usage contract is not observed. */
 void require(bool condition, std::string_view failure) {
     if (!condition)
         throw std::runtime_error(std::string(failure));
 }
 
 // Before/after pairs keep configuration in main, outside the business functions.
+/** @brief Repeat the component prefix through the existing text API. */
 void componentBefore(mddlog::adapter::TextLogger& logger) {
     logger.write(LogLevel::Info, "[pump::] Ready", std::source_location::current());
     logger.write(LogLevel::Info, "[pump::] Stopped", std::source_location::current());
 }
 
+/** @brief Emit component messages with invariants prepared by the host. */
 void componentAfter(TextBinding& logger) {
     logger.info("Ready");
     logger.info("Stopped");
 }
 
+/** @brief Repeat component, operation and correlation in each text call. */
 void operationBefore(mddlog::adapter::TextLogger& logger) {
     logger.write(LogLevel::Info, "[pump:prime:call-7] Started", std::source_location::current());
     logger.write(LogLevel::Info, "[pump:prime:call-7] Finished", std::source_location::current());
 }
 
+/** @brief Reuse one operation binding without repeating its identifiers. */
 void operationAfter(TextBinding& logger) {
     logger.info("Started");
     logger.info("Finished");
 }
 
+/** @brief Assemble a governed record explicitly at the business caller. */
 [[nodiscard]] WriteResult governedBefore(RingLog<4>& ring, RawTime time) {
     return ring.tryWrite({.time = time, .location = std::source_location::current(), .message = "Ready", .component = "pump"});
 }
 
+/** @brief Preserve caller source, explicit time and admission through a binding. */
 [[nodiscard]] WriteResult governedAfter(GovernedBinding<4>& logger, RawTime time) {
     return logger.info(time, "Ready");
 }
 
+/** @brief Emit independently through two host-owned rings with repeated field projections. */
 void producersBefore(RingLog<4>& first, RingLog<4>& second, RawTime time) {
     require(first.tryWrite({.time = time, .location = std::source_location::current(), .message = "Ready", .component = "pump"}).admission()
                 == Admission::Written,
@@ -62,11 +70,13 @@ void producersBefore(RingLog<4>& first, RingLog<4>& second, RawTime time) {
             "second producer admitted");
 }
 
+/** @brief Emit independently through two host-prepared producer bindings. */
 void producersAfter(GovernedBinding<4>& first, GovernedBinding<4>& second, RawTime time) {
     require(first.info(time, "Ready").admission() == Admission::Written, "first producer admitted");
     require(second.info(time, "Ready").admission() == Admission::Written, "second producer admitted");
 }
 
+/** @brief Assemble one explicit audit phase through the existing admission API. */
 [[nodiscard]] AuditWriteResult auditWriteBefore(AuditRing<8>& ring, AuditPhase phase, RawTime time) {
     return ring.tryRecord({.category      = AuditCategory::Operator,
                            .phase         = phase,
@@ -85,6 +95,7 @@ struct [[nodiscard]] ActionAttempt {
 };
 
 // A refused request blocks the action. A refused outcome cannot undo an action already performed.
+/** @brief Apply host refusal policy around direct audit admission and observed action outcome. */
 template <typename Action>
 [[nodiscard]] ActionAttempt auditBefore(AuditRing<8>& ring, RawTime time, Action&& action) {
     const auto request = auditWriteBefore(ring, AuditPhase::Requested, time);
@@ -95,6 +106,7 @@ template <typename Action>
     return {.admission = outcome, .actionRan = true, .actionSucceeded = succeeded};
 }
 
+/** @brief Apply the same host refusal policy with a reusable audit binding. */
 template <typename Action>
 [[nodiscard]] ActionAttempt auditAfter(AuditBinding<8>& audit, RawTime time, Action&& action) {
     const auto request = audit.record(AuditPhase::Requested, time);
@@ -108,6 +120,7 @@ template <typename Action>
 }  // namespace
 }  // namespace study
 
+/** @brief Execute all five usage comparisons and explicit refusal/lifetime checks. */
 // NOLINTNEXTLINE(bugprone-exception-escape): an uncaught study assertion fails the executable and CTest.
 int main() {
     using namespace study;

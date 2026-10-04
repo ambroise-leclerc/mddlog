@@ -9,6 +9,7 @@ WORKER = ROOT / 'examples/InventoryWorker.hpp'
 
 
 def body(path, name):
+    """Extract one named definition from the known comparison sources, retaining nested blocks."""
     source = path.read_text(encoding='utf-8')
     match = re.search(r'^[ \t]*(?:\[\[nodiscard\]\][ \t]*)?(?:[\w:<>&*]+[ \t]+)+'
                       + re.escape(name) + r'\([^{};]*?\)\s*(?:noexcept\s*)?\{', source, re.MULTILINE)
@@ -27,6 +28,7 @@ def body(path, name):
 
 
 def counts(path, names):
+    """Count nonempty body lines and invariant projections, including named helper bodies."""
     source = '\n'.join(body(path, name) for name in names)
     # Include policy/control flow and helper bodies, exclude empty lines and comments.
     lines = sum(bool(line.strip()) and not line.lstrip().startswith('//') for line in source.splitlines())
@@ -36,6 +38,7 @@ def counts(path, names):
 
 
 def main():
+    """Print the six before/after comparisons as the review report's Markdown table."""
     print('| Usage | Lignes avant | Lignes après | Projections invariantes avant/après |')
     print('| --- | ---: | ---: | ---: |')
     pairs = (

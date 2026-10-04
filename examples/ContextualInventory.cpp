@@ -8,21 +8,25 @@ import mddlog.core.auditbinding;
 namespace {
 using namespace inventory;
 
+/** @brief Fail the application scenario on a violated integration contract. */
 void require(bool condition, std::string_view message) {
     if (!condition)
         throw std::runtime_error(std::string(message));
 }
 
+/** @brief Copy host diagnostic identifiers and reject invalid composition. */
 DiagnosticContext diagnosticContext(std::string_view correlation) {
     auto value = DiagnosticContext::create({.component = "inventory", .operationId = "adjust", .correlationId = correlation});
     require(value.has_value(), "diagnostic composition");
     return *value;
 }
+/** @brief Declare the local stock action vocabulary once at composition. */
 AuditDescription description() {
     auto value = AuditDescription::create({.category = AuditCategory::Operator, .action = "inventory.adjust"});
     require(value.has_value(), "audit description composition");
     return *value;
 }
+/** @brief Copy actor, target and correlation into an independently owned audit context. */
 AuditContext auditContext(std::string_view correlation) {
     auto value = AuditContext::create({.actor = "operator-1", .target = "warehouse-1", .correlationId = correlation});
     require(value.has_value(), "audit context composition");
@@ -30,6 +34,7 @@ AuditContext auditContext(std::string_view correlation) {
 }
 
 // Composition owns destinations; all business objects are destroyed before those destinations.
+/** @brief Compare concrete mutations and emitted facts between direct admission and bound APIs. */
 void equivalence() {
     RingLog<8>      beforeLog;
     AuditRing<8>    beforeAudit("inventory-before:boot-1");
@@ -79,6 +84,7 @@ void equivalence() {
             "consumer acknowledgement");
 }
 
+/** @brief Exercise request refusal, outcome refusal and diagnostic saturation as distinct host facts. */
 void refusals() {
     const auto   context  = diagnosticContext("adjust-2");
     const auto   event    = description();
@@ -108,6 +114,7 @@ void refusals() {
     require(!rejected.changed && worker.quantity() == 2 && rejected.outcome && rejected.outcome->wasAdmitted(), "invalid delta leaves stock intact");
 }
 
+/** @brief Exercise copied bindings with concurrent consumers, slot reuse and explicit shutdown. */
 void concurrentLifecycle() {
     constexpr int iterations = 200;
     // One diagnostic and one audit ring per producer, owned before any copied binding or thread.
@@ -191,6 +198,7 @@ void concurrentLifecycle() {
 }
 }  // namespace
 
+/** @brief Run the selected local integration scenario and report failure through the exit status. */
 int main(int argc, char** argv) {
     try {
         const std::string_view scenario = argc > 1 ? std::span(argv, static_cast<std::size_t>(argc))[1] : "all";

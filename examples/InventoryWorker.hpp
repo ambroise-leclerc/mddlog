@@ -22,6 +22,7 @@ struct [[nodiscard]] AdjustmentResult {
 template <std::size_t DiagnosticCapacity, std::size_t AuditCapacity>
 class InventoryWorker {
 public:
+    /** @brief Copy prepared bindings; their destinations remain borrowed from the host. */
     InventoryWorker(GovernedBinding<DiagnosticCapacity> diagnosticBinding, AuditBinding<AuditCapacity> auditBinding) noexcept
         : logger(diagnosticBinding), audit(auditBinding) {}
 
@@ -39,6 +40,7 @@ public:
         return {.request = request, .outcome = outcome, .diagnostic = diagnostic, .changed = valid};
     }
 
+    /** @brief Inspect the local stock count after a completed or refused adjustment. */
     [[nodiscard]] int quantity() const noexcept {
         return stock;
     }

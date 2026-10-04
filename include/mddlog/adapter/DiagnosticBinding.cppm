@@ -65,7 +65,7 @@ public:
         log(core::LogLevel::Debug, message, location);
     }
 
-    /** @brief Emit a info diagnostic with this binding's context. */
+    /** @brief Emit an info diagnostic with this binding's context. */
     void info(std::string_view message, std::source_location location = std::source_location::current()) {
         log(core::LogLevel::Info, message, location);
     }
@@ -75,7 +75,7 @@ public:
         log(core::LogLevel::Warn, message, location);
     }
 
-    /** @brief Emit a error diagnostic with this binding's context. */
+    /** @brief Emit an error diagnostic with this binding's context. */
     void error(std::string_view message, std::source_location location = std::source_location::current()) {
         log(core::LogLevel::Error, message, location);
     }

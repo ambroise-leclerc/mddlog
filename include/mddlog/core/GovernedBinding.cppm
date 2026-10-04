@@ -41,7 +41,7 @@ public:
         return log(LogLevel::Debug, time, message, location);
     }
 
-    /** @brief Emit a info diagnostic; admission and truncation remain explicit. */
+    /** @brief Emit an info diagnostic; admission and truncation remain explicit. */
     [[nodiscard]] WriteResult info(RawTime time, std::string_view message, std::source_location location = std::source_location::current()) noexcept {
         return log(LogLevel::Info, time, message, location);
     }
@@ -51,7 +51,7 @@ public:
         return log(LogLevel::Warn, time, message, location);
     }
 
-    /** @brief Emit a error diagnostic; admission and truncation remain explicit. */
+    /** @brief Emit an error diagnostic; admission and truncation remain explicit. */
     [[nodiscard]] WriteResult error(RawTime time, std::string_view message, std::source_location location = std::source_location::current()) noexcept {
         return log(LogLevel::Error, time, message, location);
     }
