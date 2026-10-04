@@ -1,7 +1,28 @@
 # ADR-002: Regulatory audit-event model, separate from application logging
 
 ## Status
-Proposed — drafted for maintainer review, not yet acted on.
+Accepted — Decisions 1–6 are the audit contract the codebase is expected to conform to. They are
+implemented by #56 (`AuditEvent` and bounded admission), #57 (audit-only hand-off and health), #58
+(`logAudit()` migration and removal of `LogLevel::Audit`), #59 (scenario and boundary validation)
+and #94 (stream-identity enforcement and external-consumer review), under epic #9. Scenario,
+boundary and consumer evidence is recorded in [the validation report](../audit-scenario-validation.md).
+
+Accepted with these stated limits, which acceptance does not lift:
+
+- only levels 1 (admitted) and 2 (handed off) of Decision 3 are covered by this acceptance; level 3,
+  durable confirmation, belongs to ADR-004 (epic #11), whose persistence adapter now attaches it
+  (#91 to #93, see [its validation report](../audit-persistence-validation.md)). Level 3 holds only on
+  a storage medium that meets ADR-004 Decision 9, which the integrator establishes; elsewhere power
+  loss remains outside every guarantee;
+- the `Lifecycle` and `Operator` categories have no runtime call site in any known consumer; their
+  vocabularies are host-defined (Decision 6);
+- the optional monotonic value of Decision 5 is not carried: ordering within a stream rests on the
+  sequence, and civil time is an attribute;
+- stream uniqueness is enforced per consumer adapter only; across adapters, processes and boot
+  sessions it remains the host's obligation (Decision 5).
+
+Acceptance alone does not establish validation of a particular build or deployment (see
+Consequences and Approval).
 
 All MduX references in this record are pinned to commit
 [`d972d77`](https://github.com/ambroise-leclerc/MduX/tree/d972d77bc5cefdbe105ad7933ee61746fb5eb45b),
@@ -9,10 +30,12 @@ the baseline mddlog issue #5 verifies against.
 
 ## Context
 
-`README.md` lists, under Medical Device Compliance: "Audit Trail: Tamper-proof logging with
-cryptographic signatures", "Risk Management: Hazard tracking and mitigation logging per ISO 14971",
-"Regulatory Reporting: Automated compliance report generation", and an `AuditSink` marked
-`(planned)`. None of it exists in the current module set. What exists instead:
+When this record was written, `README.md` listed, under Medical Device Compliance: "Audit Trail:
+Tamper-proof logging with cryptographic signatures", "Risk Management: Hazard tracking and
+mitigation logging per ISO 14971", "Regulatory Reporting: Automated compliance report generation",
+and an `AuditSink` marked `(planned)`. None of it existed in the module set. The README has since
+been corrected and no longer makes the tamper-proof or reporting claims (see ADR-004). What existed
+instead:
 
 - `Audit` is one more value of the `LogLevel` enum (`include/mddlog/core/LogLevel.cppm:24`), ordered
   as the **highest** severity, above `Fatal`. Severity and audit-relevance are conflated: nothing
@@ -125,7 +148,8 @@ against ADR-001 Decision 2: `logAudit()` today takes unconstrained `std::string_
 `action`, `actor` and `target` become identifier-kind fields that **refuse** an over-long value
 rather than storing part of it. A caller passing a 4 KiB `eventType` gets a refused event, not a
 truncated one — and calling that "lossless" would be exactly the kind of wording this record is
-supposed to avoid. So the migration owes three things the implementing issue must supply:
+supposed to avoid. So the migration owes three things the implementing issue must supply (supplied by #58 and #59;
+see the migration guide and the validation report):
 
 - **A stated grammar and limit per identifier field** (permitted bytes and maximum length), chosen
   from what real call sites pass rather than guessed, and documented as a public constraint — a
@@ -163,9 +187,11 @@ about what happens afterwards. Replace it with three explicitly separated levels
    what the call's return value reports, and it is the only level this ADR promises.
 2. **Handed off** — a consumer took the event and acknowledged it. Reported asynchronously, not by
    the producing call.
-3. **Durably confirmed** — a storage backend confirmed it survives restart. **No backend offers this
-   today**; the level exists in the contract so that a future persistence ADR has somewhere to
-   attach it, and so that nothing in the meantime can be read as promising it.
+3. **Durably confirmed** — a storage backend confirmed it survives restart. ADR-004 attaches this
+   level: its persisting sink publishes a durable position only when a medium that meets ADR-004
+   Decision 9 answered a `sync` as durable. The library ships no such medium, only an in-memory test
+   double; whether a real medium qualifies is the integrator's to establish. Until then, nothing here
+   can be read as promising this level.
 
 Three consequences follow, and they are the substance of this decision:
 
@@ -175,8 +201,8 @@ Three consequences follow, and they are the substance of this decision:
 - **Post-admission losses have a reporting channel.** Anything lost after admission — a consumer
   that fails, a sink that throws — is counted and surfaced through a dedicated audit-health signal,
   not through the producing call's return value and never through a bare `catch (...)`.
-- **Power loss is explicitly outside every guarantee** while persistence is deferred. In-memory
-  admission survives nothing.
+- **Power loss is explicitly outside every guarantee** of levels 1 and 2. In-memory admission
+  survives nothing; only level 3, on an eligible medium, survives a restart.
 
 **Worked scenario — ring full, then consumer unavailable.** (a) Steady state: `record()` returns
 `Admitted`; the host observes a stable refusal counter. (b) The consumer stalls; the buffer fills;
@@ -253,9 +279,10 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   unreliable; an explicit "civil time unavailable/unreliable" state is representable, rather than
   being encoded as a zero or an epoch value.
 - **Sequence scope**: assigned by the producer, monotonic **per stream**, where a stream is one
-  producer within one boot session. Its exhaustion behavior and width must be stated by the
-  implementing issue (a 64-bit counter at any plausible event rate does not wrap within device
-  lifetime, which is the intended answer, but it should be written down rather than assumed).
+  producer within one boot session. The counter is 64 bits wide and starts at 1; refusals do not
+  consume a number. `UINT64_MAX` is admitted once, after which the stream permanently refuses with
+  `SequenceExhausted` rather than wrapping to an ambiguous value. At any plausible event rate this
+  is not reached within device lifetime, but the behavior is stated rather than assumed.
 - **Stream identity must identify the producer, not only the boot.** An earlier revision described
   it as "a boot-session identifier that changes on restart", which distinguishes restarts but not
   the concurrent producers ADR-001 Decision 4 explicitly allows (one ring each, aggregated by the
@@ -267,6 +294,11 @@ reboot. A sequence number is also not cryptographic integrity — it orders, it 
   property, where a globally unique identifier may leave some components implicit but must not give
   up the uniqueness. It is preserved through serialization, and **a producer destroyed and recreated
   within one boot session gets a new stream identity** whenever its counter restarts.
+  The library enforces what it can observe: `AuditSinkAdapter::addRing()` refuses a ring whose
+  identity is invalid or already registered on that adapter, including a recreated producer that
+  kept its identity, and reports the refusal as a configuration error in audit health. Uniqueness
+  across adapters, processes and boot sessions cannot be established from the string alone and
+  remains the host's obligation.
 - No global order is promised across independent producers or across devices; `(streamId, sequence)`
   identifies an event unambiguously, and that is the whole promise.
 
@@ -293,7 +325,9 @@ claims A's events and B's events have a defined relative order; only that no eve
 The provisional category set — `Lifecycle`, `Configuration`, `Access`, `RiskControl`, `Operator` —
 is **drafted, not requirements-derived**. It must be validated against the three scenarios the
 maintainer's review asks for (critical action with a distinct execution result; saturation then
-consumer failure; clock correction and restart) before this ADR moves to Accepted. MduX's own
+consumer failure; clock correction and restart) before this ADR moves to Accepted. #59 validated it
+against those scenarios, and #94 against the known external consumers; `Lifecycle` and `Operator`
+remain without a runtime call site, a gap accepted and stated in Status. MduX's own
 `AuditCategory` was scoped to that project's actual use rather than invented speculatively.
 
 And the limit that matters most: an `AuditEvent` type existing does not mean mddlog operates an
@@ -341,17 +375,17 @@ level is the attachment point for that future ADR.
   queue, and issue #5 does not currently scope them.
 - The record grows several identifier fields, each with a capacity that must be chosen; too small
   refuses legitimate values (ADR-001 Decision 2), too large wastes fixed footprint.
-- The README's "tamper-proof... cryptographic signatures" and "automated compliance report
-  generation" remain `(planned)` after this ADR — it only fixes what a future signing/export ADR
-  would operate on.
+- The README's former "tamper-proof... cryptographic signatures" and "automated compliance report
+  generation" were not delivered by this ADR. The README no longer makes either claim; ADR-004
+  bounds what may be claimed and defers signing, key management and export (its Decision 11).
 
 ### Risks and Mitigations
 - **"Bypasses filtering" is read as "cannot be tested or redirected".** *Mitigation*: bypassing
   `setMinLevel()` is not the same as being unobservable — an in-memory recording sink still sees
   every audit event, which is what issue #5's regression table needs.
 - **The three-level delivery contract is read as three delivered guarantees.** *Mitigation*: only
-  level 1 is promised; level 3 has no backend at all today, and Decision 3 says so in the same
-  paragraph that introduces it.
+  level 1 is promised by the call; level 3 holds only on a medium that meets ADR-004 Decision 9,
+  which the library does not ship, and Decision 3 says so in the same paragraph that introduces it.
 - **The category set is wrong because it was guessed.** *Mitigation*: Decision 6 makes validation
   against three concrete scenarios a precondition for Accepted status, not a follow-up.
 - **A host treats a refusal as a risk-control decision.** *Mitigation*: the Medical Device
@@ -368,6 +402,10 @@ All MduX links pinned to `d972d77bc5cefdbe105ad7933ee61746fb5eb45b`.
 - ADR-001 (this repository) — the bounded ring, the refuse-new overflow policy, and the field-kind truncation rules this ADR relies on.
 
 ## Approval
-- **Decision Date**: not yet approved — drafted for review.
-- **Approved By**: pending (project maintainer).
-- **Review Date**: before any work on persistent or cryptographically-sealed audit storage begins, and after the three validation scenarios in Decision 6 are documented.
+- **Decision Date**: 2026-10-02, after #56–#59 were merged and #94 completed epic #9.
+- **Approved By**: ambroise-leclerc (project maintainer).
+- **Review Date**: 2026-10-02. The three validation scenarios of Decision 6 are documented in the
+  validation report. ADR-004 now attaches durable confirmation (level 3); its evidence is in the
+  [persistence validation report](../audit-persistence-validation.md), and reviewing it is the
+  review this record called for. Review again when a runtime consumer first uses `Lifecycle` or
+  `Operator`, or if capacities or the identifier grammar change.

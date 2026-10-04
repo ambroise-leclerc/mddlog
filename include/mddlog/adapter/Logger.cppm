@@ -10,6 +10,7 @@ export module mddlog.adapter.logger;
 
 import std;
 import mddlog.core.loglevel;
+import mddlog.core.auditring;
 import mddlog.adapter.logrecord;
 import mddlog.sinks.sink;
 
@@ -131,30 +132,32 @@ public:
     }
 
     /**
-     * @brief Log an audit event
-     * @param message Audit message
-     * @param eventType Type of audit event
-     * @param userId User who triggered the event
-     * @param deviceId Device identifier
-     * @param riskLevel Associated risk level
-     * @param loc Caller's source location (auto-filled)
+     * @brief Bind one exclusively owned audit ring for admission through this logger.
      *
-     * Deliberately does not call shouldLog(): an audit trail entry must not be silenceable by
-     * disabling the logger or raising its minimum level, which would otherwise let a
-     * misconfigured or maliciously reconfigured logger erase compliance evidence. The record
-     * still goes through each sink's own shouldLog()/isEnabled() in writeToSinks() like any
-     * other record - since Audit is the highest LogLevel, a sink's minimum-level filter can
-     * never exclude it, but an explicitly disabled sink (Sink::setEnabled(false)) still will.
+     * The ring must outlive this binding and must not have another producer. Audit calls on
+     * this logger are serialized; the consumer may drain the ring independently. Configure
+     * AuditSinkAdapter with the same ring and a separate audit sink for hand-off.
      */
-    void logAudit(std::string_view            message,
-                  std::string_view            eventType,
-                  std::string_view            userId,
-                  std::string_view            deviceId,
-                  std::string_view            riskLevel = "",
-                  const std::source_location& loc       = std::source_location::current()) {
-        LogRecord record(LogLevel::Audit, message, "audit", userId, "", deviceId, loc);
-        record.setAuditInfo(eventType, riskLevel);
-        processLogRecord(std::move(record));
+    template <std::size_t Capacity>
+    void setAuditRing(AuditRing<Capacity>& ring) {
+        std::scoped_lock lock(auditMutex);
+        auditWriter = [&ring](const AuditInput& input) {
+            return ring.tryRecord(input);
+        };
+    }
+
+    /** @brief Remove the binding before destroying its ring. */
+    void clearAuditRing() {
+        std::scoped_lock lock(auditMutex);
+        auditWriter = {};
+    }
+
+    /** @brief Admit a complete audit event to memory, or return an explicit local refusal. */
+    [[nodiscard]] AuditWriteResult logAudit(const AuditInput& input) {
+        std::scoped_lock lock(auditMutex);
+        if (!auditWriter)
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::Unconfigured});
+        return auditWriter(input);
     }
 
     // Convenience methods for different log levels
@@ -256,6 +259,8 @@ public:
     }
 
 private:
+    mutable std::mutex                                 auditMutex;
+    std::function<AuditWriteResult(const AuditInput&)> auditWriter;
     /**
      * @brief Check if a log level should be processed
      */
@@ -328,6 +333,13 @@ private:
                 return !logQueue.empty() || !flushPromises.empty() || shuttingDown.load();
             });
 
+            // Take the pending flush requests BEFORE draining: every record a flush() call must wait
+            // for was queued before its request, so it is delivered by the drain below. A request
+            // that arrives while the lock is released during that drain stays queued for the next
+            // pass; fulfilling it here could release it ahead of records still in the queue.
+            std::queue<std::promise<void>> dueFlushes;
+            dueFlushes.swap(flushPromises);
+
             // Process all queued log records
             while (!logQueue.empty()) {
                 auto record = std::move(logQueue.front());
@@ -339,14 +351,15 @@ private:
                 lock.lock();
             }
 
-            // Process flush requests
-            while (!flushPromises.empty()) {
-                auto promise = std::move(flushPromises.front());
-                flushPromises.pop();
+            // Complete the flush requests taken above
+            if (!dueFlushes.empty()) {
                 lock.unlock();
 
                 flushSinks();
-                promise.set_value();
+                while (!dueFlushes.empty()) {
+                    dueFlushes.front().set_value();
+                    dueFlushes.pop();
+                }
 
                 lock.lock();
             }

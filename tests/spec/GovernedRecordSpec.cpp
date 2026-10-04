@@ -104,7 +104,7 @@ const speclab::Register recordAcceptsExactCapacitiesAndCapturesValues{
                       std::string           operation(mddlog::core::operationIdCapacity, 'o');
                       std::string           correlation(mddlog::core::correlationIdCapacity, 'r');
                       const auto            site = std::source_location::current();
-                      const RecordInput     input{.level         = LogLevel::Audit,
+                      const RecordInput     input{.level         = LogLevel::Info,
                                                   .time          = RawTime::available(epoch + std::chrono::nanoseconds{42}),
                                                   .location      = site,
                                                   .message       = message,
@@ -119,7 +119,7 @@ const speclab::Register recordAcceptsExactCapacitiesAndCapturesValues{
                       checks.expect(record.component() == component, "component is retained whole");
                       checks.expect(record.operationId() == operation, "operation is retained whole");
                       checks.expect(record.correlationId() == correlation, "correlation is retained whole");
-                      checks.expect(record.level() == LogLevel::Audit, "level is captured");
+                      checks.expect(record.level() == LogLevel::Info, "level is captured");
                       checks.expect(record.time().value() == epoch + std::chrono::nanoseconds{42}, "host time is captured");
                       checks.expect(record.location().line() == site.line(), "emission source location is captured");
 

@@ -4,7 +4,9 @@
     "mddlog.core.loglevel": ["std"],
     "mddlog.core.writeresult": ["std"],
     "mddlog.core.record": ["std", "mddlog.core.inlinestring", "mddlog.core.loglevel", "mddlog.core.writeresult"],
-    "mddlog.core.ring": ["std", "mddlog.core.record"]
+    "mddlog.core.ring": ["std", "mddlog.core.record"],
+    "mddlog.core.auditevent": ["std", "mddlog.core.inlinestring", "mddlog.core.record"],
+    "mddlog.core.auditring": ["std", "mddlog.core.auditevent"]
   },
   "links": {
     "mddlog-core": ["mddlog_options", "mddlog_warnings", "__CMAKE::CXX23"],

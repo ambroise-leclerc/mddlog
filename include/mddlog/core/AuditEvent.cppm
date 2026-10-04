@@ -1,0 +1,225 @@
+/** @brief Bounded runtime audit event and explicit admission result. */
+
+export module mddlog.core.auditevent;
+
+import std;
+export import mddlog.core.inlinestring;
+export import mddlog.core.record;
+
+export namespace mddlog::core {
+
+inline constexpr std::size_t auditActionCapacity    = 64;
+inline constexpr std::size_t auditActorCapacity     = 64;
+inline constexpr std::size_t auditTargetCapacity    = 96;
+inline constexpr std::size_t auditReferenceCapacity = 64;
+// A 96-byte source stream ID, ':' and the full 20-digit uint64 source sequence fit.
+inline constexpr std::size_t auditCorrelationCapacity = 117;
+inline constexpr std::size_t auditStreamCapacity      = 96;
+inline constexpr std::size_t auditDetailCapacity      = 160;
+
+/**
+ * @brief Case-sensitive ASCII prefix of the actions only the persistence adapter may write, as ledger records (ADR-004 10.1).
+ *
+ * Producer admission refuses these actions. AuditEvent::assign() does not, so that the adapter can build ledger records through a path it owns.
+ */
+inline constexpr std::string_view auditReservedActionPrefix = "mddlog.";
+
+/** @brief True when `action` begins with the reserved prefix, `"mddlog."` itself included (ADR-004 10.1). */
+[[nodiscard]] constexpr bool isReservedAuditAction(std::string_view action) noexcept {
+    if (action.size() < auditReservedActionPrefix.size())
+        return false;
+    for (std::size_t i = 0; i < auditReservedActionPrefix.size(); ++i) {
+        if (action[i] != auditReservedActionPrefix[i])
+            return false;
+    }
+    return true;
+}
+
+/** @brief Runtime event domain; this set remains subject to ADR-002 review. */
+enum class AuditCategory : std::uint8_t { Lifecycle, Configuration, Access, RiskControl, Operator };
+/** @brief A request, an optional confirmation, or the actual outcome. */
+enum class AuditPhase : std::uint8_t { Requested, Confirmed, Executed, Failed };
+enum class AuditField : std::uint8_t { None, Action, Actor, Target, RequirementRef, RiskRef, CorrelationId };
+/** @brief ReservedAction: a producer used an action under the reserved ledger namespace (ADR-004 10.1). The refusal names the action field. */
+enum class AuditRefusalReason : std::uint8_t { InvalidIdentifier, RingFull, SequenceExhausted, InvalidStream, Unconfigured, ReservedAction };
+
+struct AuditRefusal {
+    AuditRefusalReason reason = AuditRefusalReason::RingFull;
+    /** @brief The offending field for InvalidIdentifier, Action for ReservedAction; None for all other reasons. */
+    AuditField field = AuditField::None;
+};
+
+/** @brief Synchronous, in-memory admission only; no hand-off or durability is implied. */
+class [[nodiscard]] AuditWriteResult {
+public:
+    [[nodiscard]] static constexpr AuditWriteResult admitted(std::uint64_t assignedSequence, bool shortened) noexcept {
+        return {std::nullopt, assignedSequence, shortened};
+    }
+    [[nodiscard]] static constexpr AuditWriteResult refused(AuditRefusal failure) noexcept {
+        return {failure, 0, false};
+    }
+    [[nodiscard]] constexpr bool wasAdmitted() const noexcept {
+        return !failureValue.has_value();
+    }
+    [[nodiscard]] constexpr std::optional<AuditRefusal> refusal() const noexcept {
+        return failureValue;
+    }
+    [[nodiscard]] constexpr std::uint64_t sequence() const noexcept {
+        return sequenceValue;
+    }
+    [[nodiscard]] constexpr bool detailTruncated() const noexcept {
+        return shortenedValue;
+    }
+
+private:
+    constexpr AuditWriteResult(std::optional<AuditRefusal> failure, std::uint64_t assignedSequence, bool shortened) noexcept
+        : failureValue(failure), sequenceValue(assignedSequence), shortenedValue(shortened) {}
+    std::optional<AuditRefusal> failureValue;
+    std::uint64_t               sequenceValue;
+    bool                        shortenedValue;
+};
+
+/** @brief Caller-supplied facts; the audit ring assigns stream identity and sequence. */
+struct AuditInput {
+    AuditCategory                category = AuditCategory::Lifecycle;
+    AuditPhase                   phase    = AuditPhase::Requested;
+    RawTime                      time     = RawTime::unavailable();
+    std::string_view             action;
+    std::string_view             actor;
+    std::string_view             target;
+    std::string_view             requirementRef;
+    std::string_view             riskRef;
+    std::string_view             correlationId;
+    std::optional<std::uint64_t> sourceSequence;
+    std::string_view             detail;
+};
+
+/**
+ * @brief Owned audit record with exact identifiers and a truncatable UTF-8 detail.
+ *
+ * Identifier bytes are printable ASCII letters, digits, underscore, dot, colon, slash or
+ * hyphen. Action, target and stream identity must be nonempty. Optional identifiers may be empty.
+ * The caller owns uniqueness of stream identities across producers and boot sessions.
+ */
+class AuditEvent {
+public:
+    constexpr AuditEvent() noexcept = default;
+
+    [[nodiscard]] constexpr AuditWriteResult assign(const AuditInput& input, std::string_view streamId, std::uint64_t sequence) noexcept {
+        if (sequence == 0)
+            return AuditWriteResult::refused({.reason = AuditRefusalReason::SequenceExhausted});
+        if (auto failure = validate(input, streamId); failure.has_value())
+            return AuditWriteResult::refused(*failure);
+        AuditEvent next;
+        (void)next.actionValue.assignExact(input.action);
+        (void)next.actorValue.assignExact(input.actor);
+        (void)next.targetValue.assignExact(input.target);
+        (void)next.requirementValue.assignExact(input.requirementRef);
+        (void)next.riskValue.assignExact(input.riskRef);
+        (void)next.correlationValue.assignExact(input.correlationId);
+        (void)next.streamValue.assignExact(streamId);
+        next.categoryValue       = input.category;
+        next.phaseValue          = input.phase;
+        next.timeValue           = input.time;
+        next.sequenceValue       = sequence;
+        next.sourceSequenceValue = input.sourceSequence;
+        next.shortenedValue      = next.detailValue.assignTruncating(input.detail);
+        *this                    = next;
+        return AuditWriteResult::admitted(sequence, shortenedValue);
+    }
+
+    [[nodiscard]] static constexpr std::optional<AuditRefusal> validate(const AuditInput& input, std::string_view streamId) noexcept {
+        if (!validIdentifier(input.action, auditActionCapacity, true))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Action};
+        if (!validIdentifier(input.actor, auditActorCapacity, false))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Actor};
+        if (!validIdentifier(input.target, auditTargetCapacity, true))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::Target};
+        if (!validIdentifier(input.requirementRef, auditReferenceCapacity, false))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::RequirementRef};
+        if (!validIdentifier(input.riskRef, auditReferenceCapacity, false))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::RiskRef};
+        if (!validIdentifier(input.correlationId, auditCorrelationCapacity, false))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidIdentifier, .field = AuditField::CorrelationId};
+        if (!validStreamId(streamId))
+            return AuditRefusal{.reason = AuditRefusalReason::InvalidStream};
+        return std::nullopt;
+    }
+
+    [[nodiscard]] static constexpr bool validStreamId(std::string_view value) noexcept {
+        return validIdentifier(value, auditStreamCapacity, true);
+    }
+
+    [[nodiscard]] constexpr AuditCategory category() const noexcept {
+        return categoryValue;
+    }
+    [[nodiscard]] constexpr AuditPhase phase() const noexcept {
+        return phaseValue;
+    }
+    [[nodiscard]] constexpr RawTime time() const noexcept {
+        return timeValue;
+    }
+    [[nodiscard]] constexpr std::string_view action() const noexcept {
+        return actionValue.view();
+    }
+    [[nodiscard]] constexpr std::string_view actor() const noexcept {
+        return actorValue.view();
+    }
+    [[nodiscard]] constexpr std::string_view target() const noexcept {
+        return targetValue.view();
+    }
+    [[nodiscard]] constexpr std::string_view requirementRef() const noexcept {
+        return requirementValue.view();
+    }
+    [[nodiscard]] constexpr std::string_view riskRef() const noexcept {
+        return riskValue.view();
+    }
+    [[nodiscard]] constexpr std::string_view correlationId() const noexcept {
+        return correlationValue.view();
+    }
+    [[nodiscard]] constexpr std::string_view streamId() const noexcept {
+        return streamValue.view();
+    }
+    [[nodiscard]] constexpr std::uint64_t sequence() const noexcept {
+        return sequenceValue;
+    }
+    [[nodiscard]] constexpr std::optional<std::uint64_t> sourceSequence() const noexcept {
+        return sourceSequenceValue;
+    }
+    [[nodiscard]] constexpr std::string_view detail() const noexcept {
+        return detailValue.view();
+    }
+    [[nodiscard]] constexpr bool detailTruncated() const noexcept {
+        return shortenedValue;
+    }
+
+private:
+    [[nodiscard]] static constexpr bool validIdentifier(std::string_view value, std::size_t capacity, bool required) noexcept {
+        if (value.size() > capacity || (required && value.empty()))
+            return false;
+        return std::ranges::all_of(value, [](char ch) {
+            return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.' || ch == ':' || ch == '/'
+                   || ch == '-';
+        });
+    }
+
+    AuditCategory                          categoryValue = AuditCategory::Lifecycle;
+    AuditPhase                             phaseValue    = AuditPhase::Requested;
+    RawTime                                timeValue     = RawTime::unavailable();
+    InlineString<auditActionCapacity>      actionValue;
+    InlineString<auditActorCapacity>       actorValue;
+    InlineString<auditTargetCapacity>      targetValue;
+    InlineString<auditReferenceCapacity>   requirementValue;
+    InlineString<auditReferenceCapacity>   riskValue;
+    InlineString<auditCorrelationCapacity> correlationValue;
+    InlineString<auditStreamCapacity>      streamValue;
+    std::uint64_t                          sequenceValue = 0;
+    std::optional<std::uint64_t>           sourceSequenceValue;
+    InlineString<auditDetailCapacity>      detailValue;
+    bool                                   shortenedValue = false;
+};
+
+static_assert(std::is_trivially_copyable_v<AuditEvent>);
+static_assert(std::is_trivially_copyable_v<AuditWriteResult>);
+
+}  // namespace mddlog::core

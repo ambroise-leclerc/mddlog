@@ -11,8 +11,10 @@ int main() {  // NOLINT(bugprone-exception-escape): example code; an uncaught ex
     std::cout << "MddLog Basic Usage Example\n";
     std::cout << "==========================\n\n";
 
+    AuditRing<4> auditRing{"device_789:boot_demo:basic"};
     // Create a logger instance
     auto logger = std::make_unique<SimpleLogger>("MedicalDevice", true);
+    logger->setAuditRing(auditRing);
 
     // Add a console sink with colors
     auto consoleSink = createConsoleSink(true, true);
@@ -44,19 +46,32 @@ int main() {  // NOLINT(bugprone-exception-escape): example code; an uncaught ex
 
     logger->logMedical(LogLevel::Warn, "Heart rate threshold exceeded", "vital_signs", "user123", "session_456", "device_789");
 
-    std::cout << "\n3. Audit trail logging:\n";
+    std::cout << "\n3. In-memory audit admission:\n";
 
-    // Audit trail logging
-    logger->logAudit("User accessed patient data",
-                     "DATA_ACCESS",  // Event type
-                     "user123",      // User ID
-                     "device_789",   // Device ID
-                     "LOW"           // Risk level
-    );
-
-    logger->logAudit("System configuration changed", "CONFIG_CHANGE", "admin456", "device_789", "MEDIUM");
-
-    logger->logAudit("Emergency shutdown initiated", "EMERGENCY_SHUTDOWN", "system", "device_789", "HIGH");
+    const auto access        = logger->logAudit({.category      = AuditCategory::Access,
+                                                 .phase         = AuditPhase::Executed,
+                                                 .action        = "DATA_ACCESS",
+                                                 .actor         = "user123",
+                                                 .target        = "device_789",
+                                                 .correlationId = "device_789:boot_demo:ui:1",
+                                                 .detail        = "User accessed patient data"});
+    const auto configuration = logger->logAudit({.category      = AuditCategory::Configuration,
+                                                 .phase         = AuditPhase::Executed,
+                                                 .action        = "CONFIG_CHANGE",
+                                                 .actor         = "admin456",
+                                                 .target        = "device_789",
+                                                 .correlationId = "device_789:boot_demo:ui:2",
+                                                 .detail        = "System configuration changed"});
+    const auto shutdown      = logger->logAudit({.category      = AuditCategory::RiskControl,
+                                                 .phase         = AuditPhase::Requested,
+                                                 .action        = "EMERGENCY_SHUTDOWN",
+                                                 .actor         = "system",
+                                                 .target        = "device_789",
+                                                 .correlationId = "device_789:boot_demo:ui:3",
+                                                 .detail        = "Emergency shutdown requested"});
+    if (!access.wasAdmitted() || !configuration.wasAdmitted() || !shutdown.wasAdmitted())
+        return 1;
+    // Admission ends at memory. A real host must configure an AuditSinkAdapter and inspect its health.
 
     std::cout << "\n4. Multi-threaded logging test:\n";
 
@@ -90,6 +105,7 @@ int main() {  // NOLINT(bugprone-exception-escape): example code; an uncaught ex
 
     // Ensure all messages are processed
     logger->flush();
+    logger->clearAuditRing();
 
     auto end      = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);

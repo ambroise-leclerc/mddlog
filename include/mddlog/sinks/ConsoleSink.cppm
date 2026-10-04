@@ -22,21 +22,19 @@ export namespace mddlog::sinks {
 constexpr std::string_view getColorCode(core::LogLevel level) noexcept {
     switch (level) {
         case core::LogLevel::Trace:
-            return "\033[37m";    // White
+            return "\033[37m";  // White
         case core::LogLevel::Debug:
-            return "\033[36m";    // Cyan
+            return "\033[36m";  // Cyan
         case core::LogLevel::Info:
-            return "\033[32m";    // Green
+            return "\033[32m";  // Green
         case core::LogLevel::Warn:
-            return "\033[33m";    // Yellow
+            return "\033[33m";  // Yellow
         case core::LogLevel::Error:
-            return "\033[31m";    // Red
+            return "\033[31m";  // Red
         case core::LogLevel::Fatal:
-            return "\033[35m";    // Magenta
-        case core::LogLevel::Audit:
-            return "\033[1;34m";  // Bold Blue
+            return "\033[35m";  // Magenta
         default:
-            return "\033[0m";     // Reset
+            return "\033[0m";   // Reset
     }
 }
 
@@ -115,13 +113,6 @@ public:
                 stream << " [Op:" << record.operationId << "]";
             }
 
-            // Add audit information if present
-            if (!record.auditEventType.empty()) {
-                stream << " [Audit:" << record.auditEventType << "]";
-            }
-            if (!record.riskLevel.empty()) {
-                stream << " [Risk:" << record.riskLevel << "]";
-            }
 
 // Add thread information in debug builds
 #ifdef MDDLOG_DEBUG

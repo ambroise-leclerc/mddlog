@@ -43,11 +43,6 @@ struct LogRecord {
     std::string operationId;    ///< Operation/procedure identifier
     std::string correlationId;  ///< Governed correlation identifier, if supplied
 
-    // Audit trail fields
-    std::string auditEventType;      ///< Type of audit event
-    std::string riskLevel;           ///< Associated risk level
-    std::string complianceStandard;  ///< Applicable compliance standard
-
     // Additional metadata
     Metadata metadata;  ///< Custom key-value pairs
 
@@ -97,18 +92,6 @@ struct LogRecord {
           deviceId(did) {}
 
     /**
-     * @brief Set audit information
-     * @param eventType Type of audit event
-     * @param riskLvl Risk level assessment
-     * @param standard Compliance standard reference
-     */
-    void setAuditInfo(std::string_view eventType, std::string_view riskLvl = "", std::string_view standard = "IEC_62304") {
-        auditEventType     = eventType;
-        riskLevel          = riskLvl;
-        complianceStandard = standard;
-    }
-
-    /**
      * @brief Add custom metadata
      * @param key Metadata key
      * @param value Metadata value
@@ -122,7 +105,7 @@ struct LogRecord {
      * @return True if compliance features should be applied
      */
     [[nodiscard]] bool isComplianceRequired() const noexcept {
-        return isComplianceLevel(level) || !userId.empty() || !auditEventType.empty();
+        return isComplianceLevel(level) || !userId.empty();
     }
 
     /**

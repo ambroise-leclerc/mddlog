@@ -8,11 +8,20 @@ on:
     branches: [ master, develop ]
   pull_request:
     branches: [ master, develop ]
+    # Markdown changes nothing this workflow builds or tests; pushes to develop/master still run.
+    paths-ignore: [ '**.md' ]
   schedule:
     # Catches a regression that lands through a path with no PR, and keeps the job from rotting
     # unnoticed between changes that happen to touch it.
     - cron: '0 5 * * 2'
   workflow_dispatch:
+
+# A newer push to the same pull request supersedes the run in flight. Every other run gets a group
+# of its own (run_id): a shared per-branch group would let a newer push replace a still-pending
+# one, so an intermediate develop/master commit could go unchecked.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -71,7 +80,7 @@ jobs:
       env:
         ASAN_OPTIONS: detect_leaks=1
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      run: ctest --test-dir build-asan -E 'InstallTree(Consumer|CoreConsumer)' --output-on-failure --no-tests=error --timeout 120
+      run: ctest --test-dir build-asan -E 'InstallTree(Consumer|CoreConsumer)' --parallel --output-on-failure --no-tests=error --timeout 120
 
   thread-sanitize:
     name: TSan RingLog (GCC 16.1, Debug)
@@ -112,10 +121,10 @@ jobs:
     - name: Build and link TSan tests
       run: cmake --build build-tsan
 
-    - name: Run RingLog tests under TSan
+    - name: Run RingLog and SinkRegistry tests under TSan
       env:
         TSAN_OPTIONS: halt_on_error=1
-      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*RingLog' --output-on-failure --no-tests=error --timeout 60
+      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*(RingLog|SinkRegistry:)' --output-on-failure --no-tests=error --timeout 60
 
     - name: Verify governed boundary and negative controls
       run: ctest --test-dir build-tsan -L governed --verbose --no-tests=error --timeout 120

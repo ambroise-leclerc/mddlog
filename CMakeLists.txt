@@ -19,7 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/PreventInSourceBuilds.cmake)
 
-project(mddlog VERSION 0.1.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
+project(mddlog VERSION 0.2.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
 
 message(STATUS "CMAKE_EXPERIMENTAL_CXX_IMPORT_STD: ${CMAKE_EXPERIMENTAL_CXX_IMPORT_STD}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
@@ -203,6 +203,8 @@ set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/WriteResult.cppm
     include/mddlog/core/Record.cppm
     include/mddlog/core/Ring.cppm
+    include/mddlog/core/AuditEvent.cppm
+    include/mddlog/core/AuditRing.cppm
 )
 target_sources(mddlog-core
     PUBLIC
@@ -214,9 +216,25 @@ target_sources(mddlog-core
 target_sources(mddlog
     PUBLIC
     FILE_SET cxx_modules TYPE CXX_MODULES FILES
+        include/mddlog/adapter/SinkRegistry.cppm
+        include/mddlog/adapter/TextLogger.cppm
         include/mddlog/adapter/LogRecord.cppm
         include/mddlog/sinks/Sink.cppm
+        include/mddlog/sinks/AuditSink.cppm
         include/mddlog/adapter/RingDrain.cppm
+        include/mddlog/adapter/TransportConsumer.cppm
+        include/mddlog/adapter/AuditDrain.cppm
+        include/mddlog/adapter/Sha256.cppm
+        include/mddlog/adapter/AuditCanonical.cppm
+        include/mddlog/adapter/AuditChain.cppm
+        include/mddlog/adapter/AuditAnchor.cppm
+        include/mddlog/adapter/AuditVerifier.cppm
+        include/mddlog/adapter/AuditLayout.cppm
+        include/mddlog/adapter/AuditMedium.cppm
+        include/mddlog/adapter/AuditLedger.cppm
+        include/mddlog/adapter/AuditLog.cppm
+        include/mddlog/adapter/AuditLogVerifier.cppm
+        include/mddlog/adapter/AuditStore.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
         include/mddlog/mddlog.cppm

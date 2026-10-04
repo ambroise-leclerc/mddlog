@@ -10,6 +10,92 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ---
 
+## 0.2.0 — 4 October 2026
+
+Closes epics #9, #10 and #11: a regulatory audit-event model with bounded admission and explicit
+hand-off ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md)), the building blocks for
+integrating mddlog into an application ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md)),
+and audit persistence with tamper evidence relative to an independent anchor
+([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
+
+### Audit events, separate from diagnostic logging (epic #9, ADR-002)
+
+- **Bounded admission (#56).** `AuditEvent` carries exact identifiers (action, actor, target,
+  requirement and risk references, correlation), a category and a phase, a host-supplied time and a
+  stream identity; only `detail` may shorten, with a flag. `AuditRing<N>` assigns a per-stream
+  sequence to admitted events only and refuses rather than overwrites when full.
+- **Hand-off and health (#57).** `AuditSinkAdapter` drains audit rings to an `AuditSink`, releases
+  only the accepted prefix, keeps rejected events for retry and reports hand-off, failures, losses
+  after admission and pending events through its own health signal.
+- **Scenario validation (#59)** of categories, identifiers and MduX `ActionTrace` conversions, in
+  [`docs/audit-scenario-validation.md`](docs/audit-scenario-validation.md).
+- **Public API (#58).** `SimpleLogger::logAudit(AuditInput)` and `Log::logAudit(AuditInput)` return
+  the ring's admission result after `setAuditRing()`.
+- **Stream identities (#94).** The consumer refuses an invalid or already registered stream
+  identity. ADR-002 accepted on 2026-10-02.
+
+### Application integration (epic #10, ADR-003)
+
+- **`SinkRegistry` (#67):** synchronized registration with explicit handles and quiescent removal,
+  including self-removal from a callback.
+- **`TransportConsumer` (#68):** bounded rings drained on one consumer thread, with independent
+  health, failure isolation per transport, and suppression of reentrant logging feedback.
+- **`TextLogger` (#69, #70):** a diagnostic text adapter with independent per-group masks, caller
+  source and separate dumps, rendering through `SinkRegistry` callbacks.
+- **WebFront as reference consumer (#71, #72):** adopted and verified in WebFront's own repository
+  against a pinned mddlog; since #103, mddlog's tests contain and download no application code.
+  ADR-003 accepted, then amended by #103.
+
+### Audit persistence and tamper evidence (epic #11, ADR-004)
+
+- **Design accepted at milestone A (#84 to #88):** the anchor and the reader's monotonic position,
+  the canonical byte contract, storage and the meaning of "durably confirmed", retention and chain
+  state recovery, and the bounds on what may be claimed.
+- **Canonical serialization and chaining (#89):** a versioned canonical encoding of every audit field
+  and a SHA-256 chain per stream instance, fixed by reference vectors.
+- **Anchors and verification (#90):** an anchor provider interface, the reader's retained position,
+  and a verifier that reports one verdict per stream (Anchored with its range, Unanchored, anchor
+  unavailable, Incomplete, Altered, Rolled back, Conflict, Retired, Cannot verify, Inconsistent),
+  never an unqualified "valid".
+- **Storage and durable confirmation (#91):** `PersistingAuditSink` writes append-only segments
+  through a `StorageMedium`, publishes a durable position only after a sync answered durable, and
+  reports every storage failure through its health signal, never as an audit event.
+- **Restart, rotation and retention (#92):** a ledger per adapter start, chain state recovery with a
+  continuity check against the anchor, prefix rotation bounded by the anchor, whole-stream and
+  ledger retention, and `LogVerifier`, which reports each stream's verdict and every boundary.
+- **End-to-end validation (#93):** every validation scenario of ADR-004 Decision 5 and every
+  criterion of milestone C runs from producer admission to the reader's report, in
+  [`docs/audit-persistence-validation.md`](docs/audit-persistence-validation.md).
+
+### Breaking changes
+
+- `LogLevel::Audit` and the positional `logAudit(...)` overloads are removed; use
+  `logAudit(AuditInput)` ([`docs/migration/audit-admission.md`](docs/migration/audit-admission.md)).
+- Producer admission refuses every action beginning with `mddlog.`, reserved for the persistence
+  ledger (`AuditRefusalReason::ReservedAction`).
+
+### Known limits, stated because they are easy to mistake for defects
+
+- **Not certified or validated.** Nothing here qualifies mddlog as medical-device software or
+  validates it for production use.
+- **Durability depends on the medium.** The library ships only `InMemoryStorageMedium`, a test
+  double. Whether a real file, flash or device-log medium meets ADR-004 Decision 9, and so whether
+  "durably confirmed" holds on it, is for the integrator to establish.
+- **Tamper evidence is relative to an independent anchor, never tamper-proof.** The library ships
+  only `InMemoryAnchorProvider`. Records past the last anchor can be altered or truncated
+  undetectably; a rollback of log and anchor together is detected only with a retained position; a
+  compromised provider defeats the mechanism. Nothing is signed, so nothing proves who wrote a
+  record; signing, key management and an export format are deferred (ADR-004 Decision 11).
+- **ADR-004's evidence awaits review.** Its design is accepted; accepting the implementation's
+  evidence is a separate decision of the maintainer.
+- **Single consumer.** `AuditSinkAdapter`, `TransportConsumer` and `PersistingAuditSink` belong to
+  one consumer thread; ThreadSanitizer still runs the RingLog scenarios only.
+- **Host obligations.** Stream identities are unique per consumer adapter and per log; across
+  adapters, processes and boot sessions they remain the host's obligation. The `Lifecycle` and
+  `Operator` categories have no runtime call site in a known consumer.
+- **The allocating logger is unchanged.** `SimpleLogger` still uses an unbounded queue, and
+  `TextLogger` renders and calls back synchronously, allocating.
+
 ## 0.1.0 — 27 September 2026
 
 The first version, closing epic #8: a bounded, allocation-free governed logging core separated from

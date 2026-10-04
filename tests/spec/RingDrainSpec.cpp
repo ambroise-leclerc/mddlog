@@ -21,7 +21,7 @@ using mddlog::spec::RecordingSink;
                                     std::string_view component     = "adapter",
                                     std::string_view operationId   = "operation",
                                     std::string_view correlationId = "correlation") noexcept {
-    return {.level         = mddlog::LogLevel::Audit,
+    return {.level         = mddlog::LogLevel::Info,
             .time          = time,
             .location      = std::source_location::current(),
             .message       = message,
@@ -68,7 +68,7 @@ const speclab::Register governedFieldsAndTruncationReachRecordingSink{
                       const std::string longMessage(mddlog::core::messageCapacity + 1, 'x');
                       const auto        supplied = std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::milliseconds{123}};
                       const auto        site     = std::source_location::current();
-                      const RecordInput input{.level         = mddlog::LogLevel::Audit,
+                      const RecordInput input{.level         = mddlog::LogLevel::Info,
                                               .time          = RawTime::available(supplied),
                                               .location      = site,
                                               .message       = longMessage,
@@ -81,7 +81,7 @@ const speclab::Register governedFieldsAndTruncationReachRecordingSink{
                       const auto records = sink->records();
                       checks.expect(records.size() == 1, "recording sink receives one owned record");
                       const auto& record = records.front();
-                      checks.expect(record.level == mddlog::LogLevel::Audit, "level is retained");
+                      checks.expect(record.level == mddlog::LogLevel::Info, "level is retained");
                       checks.expect(record.message == std::string(mddlog::core::messageCapacity, 'x'), "bounded message bytes are retained");
                       checks.expect(record.messageTruncated, "message-truncation flag reaches the sink");
                       checks.expect(record.category == "pump" && record.operationId == "calibrate" && record.correlationId == "cycle-42",

@@ -95,8 +95,21 @@ add_executable(mddlog_specs
     spec/WriteResultSpec.cpp
     spec/GovernedRecordSpec.cpp
     spec/RingLogSpec.cpp
+    spec/AuditRingSpec.cpp
+    spec/AuditScenarioSpec.cpp
+    spec/AuditDrainSpec.cpp
+    spec/AuditCanonicalSpec.cpp
+    spec/AuditAnchorSpec.cpp
+    spec/AuditStorageSpec.cpp
+    spec/AuditLedgerSpec.cpp
+    spec/AuditRestartSpec.cpp
+    spec/AuditRetentionSpec.cpp
+    spec/AuditEndToEndSpec.cpp
     spec/RingLogConcurrencySpec.cpp
     spec/RingDrainSpec.cpp
+    spec/SinkRegistrySpec.cpp
+    spec/TransportConsumerSpec.cpp
+    spec/TextLoggerSpec.cpp
     spec/VersionSpec.cpp
 )
 
