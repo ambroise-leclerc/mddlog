@@ -14,7 +14,11 @@ ces résultats du profil de déploiement restant à qualifier.
 | Diagnostic à callbacks synchrones | `adapter::DiagnosticBinding<TextLogger>` | `mddlog.adapter.diagnosticbinding` | `mddlog::mddlog` |
 | Diagnostic avec sinks objets | `adapter::DiagnosticBinding<core::SimpleLogger>` | `mddlog.adapter.diagnosticbinding` | `mddlog::mddlog` |
 
-`import mddlog;` expose également les contextes et liaisons dans `mddlog`. Une application
+`import mddlog;` expose également les contextes et liaisons dans `mddlog`, ainsi que
+`Refusal`, `RefusalReason`, `IdentifierField`, `RingLog`, `WriteResult`, `Admission` et
+`TruncatedFields` pour nommer les refus et les résultats du diagnostic gouverné.
+Le consommateur `tests/consumer/ContextAdapterConsumer.cpp` vérifie ce chemin sans import
+direct du cœur, dans les arbres source et installé. Une application
 qui importe directement un module `mddlog.core.*` et utilise aussi les adaptateurs lie
 **les deux cibles** explicitement, comme le précise le [guide du cœur](governed-core.md).
 Les chemins `Log`, `SimpleLogger`, `TextLogger`, `RecordInput` et `AuditInput` restent utilisables.

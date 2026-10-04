@@ -35,6 +35,9 @@ epic #112 and the remaining 1.0 work are open.
   [accepted local integration](docs/contextual-api-integration.md).
 - The software development file records the accepted initial baseline and local API
   integration: GAP-006 closed, REQ-009/REQ-011 implemented, qualification gaps retained.
+- The umbrella module exports the diagnostic refusal, ring and write-result types needed
+  to use its contextual API without direct core imports. Source and installed consumers
+  inspect a construction refusal and exercise governed admission and saturation.
 - All three READMEs show the contextual syntax. Existing low-level APIs and the global
   `Log` facade remain available; no audit encoding or SPSC contract is changed.
 
