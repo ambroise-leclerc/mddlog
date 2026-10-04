@@ -19,7 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/PreventInSourceBuilds.cmake)
 
-project(mddlog VERSION 0.1.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
+project(mddlog VERSION 0.2.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
 
 message(STATUS "CMAKE_EXPERIMENTAL_CXX_IMPORT_STD: ${CMAKE_EXPERIMENTAL_CXX_IMPORT_STD}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
