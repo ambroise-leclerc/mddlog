@@ -26,7 +26,8 @@ ADR-001 defines the bounded, allocation-free core and the zone boundary. ADR-002
 record and its delivery contract on top of it, and promises in-memory admission only. ADR-003 goes
 the other direction — what an existing application needs before it can adopt any of this, with
 WebFront as the concrete consumer — and ADR-004 holds the storage and tamper-evidence questions
-ADR-002 deferred. It is accepted as a design (milestone A, 2026-10-03) but not implemented: it keeps the claims
+ADR-002 deferred. It is accepted as a design (milestone A, 2026-10-03); its implementation (#89 to #92) and the
+evidence of #93 ([validation report](../audit-persistence-validation.md)) await a separate review: it keeps the claims
 honest, and Decision 11 lists what it defers.
 
 Further records are anticipated and deliberately not drafted: signing with key management

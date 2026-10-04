@@ -156,6 +156,7 @@ using adapter::StreamStorageHealth;
 using adapter::StreamStorageState;
 using adapter::SyncAnswer;
 using adapter::SyncPolicy;
+using adapter::TrailingRegion;
 using adapter::TrimRecord;
 using adapter::Verdict;
 using adapter::VerdictCause;

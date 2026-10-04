@@ -19,6 +19,8 @@ struct SegmentImage {
     std::uint32_t index         = 0;
     std::uint64_t firstSequence = 0;
     std::size_t   recordCount   = 0;
+    /** @brief Offset just after the last valid frame, where trailing bytes begin. */
+    std::size_t validEnd = 0;
     /** @brief Bytes after the last valid frame: unused space, or the trace of a cut. Never parsed. */
     std::size_t trailingBytes = 0;
 
@@ -101,6 +103,7 @@ public:
                                            .index         = item.header.segmentIndex,
                                            .firstSequence = item.header.firstSequence,
                                            .recordCount   = item.scan.records.size(),
+                                           .validEnd      = item.scan.validEnd,
                                            .trailingBytes = item.scan.trailingBytes});
                 for (const auto& record : item.scan.records)
                     stream.records.push_back({.bytes = record.canonical, .digest = record.digest});
