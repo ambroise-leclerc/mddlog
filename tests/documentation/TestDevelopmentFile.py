@@ -78,7 +78,7 @@ class DevelopmentFileTest(unittest.TestCase):
         self.assertTrue(any('rationale' in error for error in errors))
 
     def test_unknown_register_format(self):
-        self.data['formatVersion'] = 2
+        self.data['formatVersion'] = 3
         self.assertRejected('unsupported formatVersion')
 
     def test_malformed_list_and_status_report_errors(self):
@@ -107,6 +107,104 @@ class DevelopmentFileTest(unittest.TestCase):
     def test_missing_required_document(self):
         (self.root / 'software_development_file/templates/IEC_62304/SAD.md').unlink()
         self.assertRejected('document inventory')
+
+
+    def accept_review(self):
+        self.data['review'].update(status='accepted', reviewedCommit='a' * 40,
+                                   date='2026-10-04', decision='Base reviewed with stated limitations.')
+        reservations = set(self.data['review']['reservations'])
+        for row in self.data['gaps']:
+            if row['id'] in reservations:
+                row['status'] = 'closed'
+        self.data['review']['acceptedGaps'] = {
+            ref: 'Qualification deferred to the referenced epic; no deployment claim accepted.'
+            for row in self.data['requirements'] if row['status'] == 'implemented'
+            for ref in row['gaps'] if ref not in reservations
+        }
+
+    def test_accepted_review_with_closed_reservations_and_explicit_gap_decisions(self):
+        self.accept_review()
+        self.assertEqual(self.errors(), [])
+
+    def test_open_reservation_blocks_acceptance_even_with_rationale(self):
+        self.accept_review()
+        self.data['gaps'][0]['status'] = 'open'
+        self.data['review']['acceptedGaps']['GAP-001'] = 'Deferred.'
+        self.assertRejected('reservation GAP-001 must be closed')
+
+    def test_implemented_requirement_gap_needs_explicit_decision(self):
+        self.accept_review()
+        self.data['review']['acceptedGaps'].pop('GAP-016')
+        self.assertRejected('open gap GAP-016 needs explicit acceptance rationale')
+
+    def test_empty_acceptance_rationale_rejected(self):
+        self.accept_review()
+        self.data['review']['acceptedGaps']['GAP-016'] = '  '
+        self.assertRejected('needs an explicit rationale')
+
+    def test_proposed_review_cannot_accept_gaps(self):
+        self.data['review']['acceptedGaps']['GAP-016'] = 'Deferred.'
+        self.assertRejected('acceptedGaps requires an accepted review')
+
+    def test_implemented_requirement_control_status(self):
+        self.data['controls'][0]['status'] = 'planned'
+        self.assertRejected('incompatible controls status for CTRL-001')
+
+    def test_implemented_requirement_verification_status(self):
+        self.data['verifications'][0]['status'] = 'planned'
+        self.assertRejected('incompatible verifications status for VER-001')
+
+    def test_scenario_in_comment_or_unrelated_literal_is_insufficient(self):
+        test = self.root / self.data['verifications'][1]['test']
+        for content in ('// speclab::Test("invented-test-name")',
+                        '/* speclab::Test("invented-test-name") */',
+                        'const char* id = "invented-test-name";',
+                        'auto text = R"example(speclab::Test("invented-test-name"))example";'):
+            with self.subTest(content=content):
+                test.write_text(content, encoding='utf-8')
+                self.data['verifications'][1]['scenario'] = 'invented-test-name'
+                self.assertRejected('scenario absent')
+
+    def test_template_scenario_call_is_recognized(self):
+        self.assertEqual(CHECKER.cpp_scenarios(
+            'speclab::Test<State<Nested<int>>>("scenario-id");'), {'scenario-id'})
+
+    def test_markdown_paths_with_parentheses_titles_and_angle_brackets(self):
+        dossier = self.root / 'software_development_file'
+        (dossier / 'Note (review).md').write_text('# Révision\n', encoding='utf-8')
+        (dossier / 'Note(review).md').write_text('# Révision\n', encoding='utf-8')
+        with (dossier / 'README.md').open('a', encoding='utf-8') as doc:
+            doc.write('\n[Note](Note(review).md "Title (review)")\n'
+                      "[Note](<Note (review).md> 'Title')\n"
+                      '[Note](Note(review).md (Title))\n')
+        self.assertEqual(self.errors(), [])
+
+    def test_same_document_and_cross_document_anchors(self):
+        dossier = self.root / 'software_development_file'
+        (dossier / 'Note.md').write_text('# Révision *locale*\n# Révision *locale*\n', encoding='utf-8')
+        with (dossier / 'README.md').open('a', encoding='utf-8') as doc:
+            doc.write('\n[Here](#index)\n[There](Note.md#révision-locale-1 "Title")\n')
+        self.assertEqual(self.errors(), [])
+
+    def test_missing_anchor_is_rejected(self):
+        with (self.root / 'software_development_file/README.md').open('a', encoding='utf-8') as doc:
+            doc.write('\n[Missing](#invented-section)\n')
+        self.assertRejected('missing Markdown anchor')
+
+    def test_heading_in_code_fence_is_not_an_anchor(self):
+        with (self.root / 'software_development_file/README.md').open('a', encoding='utf-8') as doc:
+            doc.write('\n~~~md\n# Invented section\n~~~\n[Missing](#invented-section)\n')
+        self.assertRejected('missing Markdown anchor')
+
+    def test_malformed_inline_link_is_rejected(self):
+        with (self.root / 'software_development_file/README.md').open('a', encoding='utf-8') as doc:
+            doc.write('\n[Note](README.md "unterminated)\n')
+        self.assertRejected('unterminated link title')
+
+    def test_reference_links_are_explicitly_unsupported(self):
+        with (self.root / 'software_development_file/README.md').open('a', encoding='utf-8') as doc:
+            doc.write('\n[Note][reference]\n[reference]: missing.md\n')
+        self.assertRejected('reference-style links are unsupported')
 
 
 if __name__ == '__main__':

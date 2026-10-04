@@ -1,5 +1,5 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "baseline": {
     "version": "0.2.0",
     "commit": "e7012f299b3c976b37b43b53add43e5e6e4636b8",
@@ -17,7 +17,8 @@
       "GAP-003",
       "GAP-004",
       "GAP-005"
-    ]
+    ],
+    "acceptedGaps": {}
   },
   "gaps": [
     {

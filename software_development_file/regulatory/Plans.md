@@ -44,7 +44,7 @@ Git identifie sources, documents et changements. CMake fait foi pour version et 
 révisions des dépendances se lisent dans les fichiers référencés par DEP. Toute mise à jour
 comporte provenance, licence, anomalies, impact sur tests et revue. Les sorties de build restent
 hors versionnement. En release, conserver les références exactes des outils, OS et dépendances ;
-les plages admises ne remplacent pas le profil construit. Le registre version 1 évolue par
+les plages admises ne remplacent pas le profil construit. Le registre version 2 évolue par
 changement relu avec migration du contrôleur et de ses tests.
 
 ## Résolution des problèmes et sécurité
@@ -59,7 +59,10 @@ ou secrets ; le canal privé et les délais de traitement restent à établir da
 ## Acceptation et publication
 
 #124 exige une revue nominative de la base : révision, date, décision et réserves sont consignées
-une fois dans `review`. Les réserves restent des GAP ouverts jusqu'à décision explicite.
+une fois dans `review`. Les réserves doivent être closes pour enregistrer une acceptation.
+Les autres GAP ouverts liés aux exigences implémentées doivent être clos ou acceptés explicitement avec justification dans
+`review.acceptedGaps` ; leur suivi et leur épique restent ouverts. Cette décision accepte une
+limite de la base documentaire, pas la qualification future du déploiement.
 Les épiques #113–#122 ne sont closes qu'avec exigences, conception, risques, dépendances et
 preuves concernés à jour. #121 fixe API, formats et matrice ; #122 accepte les preuves de
 persistance et le profil réel, les écarts résiduels et le dossier final. Publication selon

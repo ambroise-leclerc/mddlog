@@ -35,7 +35,7 @@ Les modèles sont des aides à remplir ; ils ne portent aucune décision pour un
 | [Périmètre qualité](regulatory/ISO_13485/README.md) | [Qualité](templates/ISO_13485/README.md) |
 | [Applicabilité de l'aptitude à l'utilisation](regulatory/IEC_62366/Usability_Engineering_File.md) | [Aptitude à l'utilisation](templates/IEC_62366/Usability_Engineering_File.md) |
 
-Le [registre JSON](register.json), format 1, est la **source unique** des exigences, risques,
+Le [registre JSON](register.json), format 2, est la **source unique** des exigences, risques,
 contrôles, vérifications, dépendances et lacunes. Les documents expliquent ces données par
 référence ; ils ne recopient pas leurs lignes. Une vérification lie conception et implémentation
 à un test existant et à une note de preuves. Sa présence ne constitue pas un résultat d'exécution.
@@ -85,7 +85,22 @@ python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 ```
 
 Le contrôle vérifie la structure du registre, les identifiants uniques, les relations typées,
-les fichiers cités et les liens locaux du dossier. Il ne vérifie ni l'accessibilité des liens
+la compatibilité des statuts d'une exigence implémentée avec ses contrôles et vérifications,
+les fichiers cités et les liens locaux du dossier (destinations avec parenthèses, titres et
+ancres de titres Markdown). Les liens doivent être inline ; les liens de référence sont refusés.
+Le contrôle lexical C++ exige un identifiant littéral passé à `speclab::Test`, avec ou sans
+argument de template ; commentaires et autres chaînes ne suffisent pas. Il n'évalue pas les
+macros, les branches de préprocesseur ni la sémantique C++.
+
+Pour `review.status = accepted`, toutes les réserves doivent être closes. Une lacune ouverte
+liée à une exigence implémentée doit être close ou figurer dans `review.acceptedGaps`, avec
+une justification nominativement couverte par la décision de revue. Ce champ associe chaque
+GAP à une justification non vide ; il reste vide avant acceptation. Il ne clôt pas la lacune
+et ne transforme pas une qualification future en preuve acquise. Les exigences prévues gardent
+leurs lacunes ouvertes. Ainsi la base initiale peut accepter explicitement ses limites sans
+revendiquer les capacités différées. Une acceptation sans cette décision par lacune est refusée.
+
+Le contrôle ne vérifie ni l'accessibilité des liens
 externes, ni les clauses, ni la vérité d'une preuve, ni l'acceptabilité d'un risque.
 La revue de #124 doit confirmer applicabilité, architecture, couverture, responsabilités et
 réserves avant de démarrer la conception de #113. La livraison de ce lot ne clôt pas #124.
