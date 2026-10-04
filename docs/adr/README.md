@@ -21,7 +21,7 @@ capability as delivered from an ADR's existence alone.
 | [004](ADR-004-audit-persistence-and-tamper-evidence.md) | Audit persistence and tamper evidence | Accepted |
 | [005](ADR-005-contextual-logging-api.md) | Explicit contexts and producer bindings (#113/#127) | Accepted |
 
-## How the four relate
+## How the five relate
 
 ADR-001 defines the bounded, allocation-free core and the zone boundary. ADR-002 builds the audit
 record and its delivery contract on top of it, and promises in-memory admission only. ADR-003 goes
@@ -30,6 +30,15 @@ WebFront as the concrete consumer — and ADR-004 holds the storage and tamper-e
 ADR-002 deferred. It is accepted as a design (milestone A, 2026-10-03); its implementation (#89 to #92) and the
 evidence of #93 ([validation report](../audit-persistence-validation.md)) await a separate review: it keeps the claims
 honest, and Decision 11 lists what it defers.
+
+ADR-005 is accepted as the 1.0 usage-layer design, without amending the four preceding
+contracts. Its contexts and producer bindings are implemented under `include/mddlog/`;
+the [executable study](../../examples/ContextualUsage.cpp) now uses those public modules.
+The [study report](../contextual-api-study.md) preserves the accepted prototype revision,
+while [primitive verification](../contextual-api-validation.md) and
+[integration review](../contextual-api-integration.md) document the implementation and
+its evidence. Maintainer acceptance of the integration results remains separate from
+design acceptance.
 
 Further records are anticipated and deliberately not drafted: signing with key management
 (custody, provisioning, rotation), an **export format**, and **compliance reports**, which ADR-004
@@ -46,7 +55,3 @@ serialization), they say so, state what the borrowed mechanism actually
 checks, and adapt it to a type mddlog owns rather than importing MduX's. MduX describes itself as
 experimental: its ADRs and targeted checks are an architectural precedent, not validation
 transferable to mddlog.
-
-ADR-005 proposes the 1.0 usage layer without amending the four existing contracts. Its
-[executable study](../../examples/ContextualUsage.cpp) contains local prototypes only;
-[the study report](../contextual-api-study.md) separates verification from design acceptance.

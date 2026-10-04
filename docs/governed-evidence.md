@@ -123,7 +123,7 @@ exception checks; the earlier campaigns above retain their original revisions an
 
 ## Intégration applicative locale #130
 
-Le [rapport d’intégration](contextual-api-integration.md) sur `c80790f` réexécute les cinq
+Le [rapport d’intégration](contextual-api-integration.md) actualisé sur `f64161b` réexécute les cinq
 contrôles du cœur et les consommateurs source/installés. Le composant stock installé lie
 seulement `mddlog::core` et exerce phases/refus et arrêt de producteurs/consommateurs.
 Aucun module gouverné, budget de record ou graphe d’import n’est modifié par ce lot ;

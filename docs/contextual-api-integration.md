@@ -2,9 +2,13 @@
 
 Statut : **réalisation et revue technique locale disponibles, revue mainteneur à effectuer**.
 La conception ADR-005 est acceptée ; l'acceptation du prototype n'est pas celle de ce lot.
-Campagne du 2026-10-04 sur `c80790fee0e3fda26abc32a44d30504117105046`, branche
-`130-contextual-integration`, après les liaisons vérifiées sur `8fe4fb1`.
-Les changements documentaires suivants ne changent pas la révision C++ testée.
+Campagne initiale du 2026-10-04 sur `c80790fee0e3fda26abc32a44d30504117105046`,
+après les liaisons vérifiées sur `8fe4fb1`. Vérification actualisée le même jour sur
+`f64161be3f7aac918a7bed8b63fe2e8a15b62456`, tête examinée de `130-contextual-integration` :
+construction effective réussie et **172/172 tests CTest réussis** (20,26 s).
+La révision initiale reste la référence de l'analyse locale ciblée ; elle n'est plus
+présentée comme une révision finale de la PR. Les corrections documentaires suivantes
+et le déplacement d'un commentaire CMake ne modifient pas le code C++ testé.
 
 ## Composant applicatif examiné
 
@@ -148,9 +152,19 @@ le construisent avec **seulement `mddlog::core`** et exécutent les trois scéna
 encore de la même application locale, sans indépendance organisationnelle revendiquée.
 Les consommateurs précédents et les cinq contrôles du cœur restent réussis.
 
-Formatage réussi sur 79 fichiers du périmètre du script et contrôle explicite du header
-applicatif réussi. Analyse ciblée clang-tidy 21 réussie sur **3/3 unités nouvelles/modifiées**, avec le header
+Campagne locale initiale sur `c80790f` : formatage réussi sur 79 fichiers du périmètre
+et contrôle explicite du header applicatif réussi. Analyse ciblée clang-tidy 21 réussie
+sur **3/3 unités nouvelles/modifiées**, avec le header
 analysé via ses inclusions, zéro diagnostic de projet restant. Contrôle structure/références
 du dossier réussi, **30/30 tests documentaires réussis** et `git diff --check` réussi. La campagne
 complète 70/70 unités de #128/#129 reste historique ; aucune nouvelle analyse complète des
 72 unités actuelles n'est déduite de cette analyse ciblée.
+
+La vérification actualisée de `f64161b` dispose aussi d'une [CI complète réussie](https://github.com/ambroise-leclerc/mddlog/actions/runs/37227862078),
+incluant les six lots clang-tidy, consommateurs source/installés et contrôles de frontière.
+Les [builds GCC](https://github.com/ambroise-leclerc/mddlog/actions/runs/37227862024),
+[Windows](https://github.com/ambroise-leclerc/mddlog/actions/runs/37227862047),
+[macOS](https://github.com/ambroise-leclerc/mddlog/actions/runs/37227862135) et
+[sanitizers GCC](https://github.com/ambroise-leclerc/mddlog/actions/runs/37227862066) réussissent.
+La reconstruction et le CTest local sur cette tête sont distincts de ces campagnes CI ;
+aucune acceptation mainteneur n'est déduite de leur réussite.

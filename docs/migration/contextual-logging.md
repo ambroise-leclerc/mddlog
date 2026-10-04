@@ -42,7 +42,12 @@ chaînes temporaires. Les valeurs n'ont pas de constructeur public par défaut.
 Le diagnostic refuse les identifiants trop longs dans l'ordre composant, opération, corrélation.
 Les champs d'audit suivent exactement les règles ASCII d'`AuditEvent::validateIdentifier` :
 action et cible obligatoires ; acteur, corrélation et références facultatifs. Une description
-pour producteur refuse aussi le préfixe réservé `mddlog.`. L'hôte conserve son vocabulaire,
+pour producteur refuse aussi le préfixe réservé `mddlog.`. La validation de la description
+porte sur ces identifiants : `category` est copiée sans contrôle de plage, comme dans
+`AuditEvent`/`AuditRing`. L'hôte fournit une valeur nommée d'`AuditCategory` et valide toute
+conversion depuis une entrée externe ; une valeur forcée hors plage n'est pas refusée
+par cette factory. Cette limite est héritée de l'admission existante.
+L'hôte conserve son vocabulaire,
 la minimisation des données et l'unicité des identités de flux entre producteurs/démarrages.
 
 ## Diagnostic : préparer une fois, émettre au véritable appelant
@@ -76,7 +81,9 @@ Pour le diagnostic d'adaptateur, `DiagnosticBinding(destination, context)` dédu
 logger. Les méthodes courtes prennent seulement le message et une localisation facultative.
 `log(level, message, location)` est le chemin générique. `SimpleLogger` reçoit catégorie,
 opération et corrélation dans ses champs structurés ; `TextLogger` rend le préfixe
-`[component:operation:correlation]`. Les adaptateurs gardent leur horloge et leurs coûts
+`[component:operation:correlation]`, y compris les champs vides : un contexte vide rend
+`[::]`. Ce format fixe est volontaire et ne supprime pas sélectivement les séparateurs.
+Les adaptateurs gardent leur horloge et leurs coûts
 allouants. La liaison ne change pas les politiques des sinks ni la file de `SimpleLogger`.
 
 La surcharge avancée est `SimpleLogger::log(level, context, message, location)` : le contexte
@@ -92,7 +99,12 @@ logger.logLazy(LogLevel::Info, [&] { return makeDetailedMessage(); });
 ```
 
 `is(level)` expose un instantané du filtre existant : groupes de `TextLogger`, activation et
-seuil de `SimpleLogger`. `logLazy`/`debugLazy` invoquent la fabrique synchrone au plus une fois,
+seuil de `SimpleLogger`. Rendre `SimpleLogger::is` public est un ajout d'API volontaire,
+pour consulter ce filtre avant la construction du message ; il n'ajoute aucune garantie
+transactionnelle. `debugLazy` est le seul raccourci paresseux par niveau, pour le cas usuel
+du diagnostic coûteux. Les autres niveaux utilisent `logLazy(level, factory)` : cette
+asymétrie est volontaire pour garder une seule entrée générique sans six synonymes publics.
+`logLazy`/`debugLazy` invoquent la fabrique synchrone au plus une fois,
 après cet instantané, et conservent son résultat jusqu'à la copie/rendu. Une vue retournée
 par la fabrique doit rester valide pendant cette copie ; retourner une `std::string` temporaire
 est sûr. Une désactivation concurrente peut supprimer la livraison après construction.

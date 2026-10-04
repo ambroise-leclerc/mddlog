@@ -78,7 +78,7 @@
       "status": "open",
       "issue": 113,
       "owner": "Ambroise Leclerc",
-      "closure": "Conception ADR-005 acceptée sur f3063bc ; liaisons #128/#129 vérifiées sur 8fe4fb1. Intégration #130 réalisée et revue technique locale dans docs/contextual-api-integration.md sur c80790fee0e3fda26abc32a44d30504117105046 : cinq usages publics et composant stock avant/après mesurés, producteurs/consommateurs et refus exercés, guide achevé. Reste la revue et décision mainteneur sur ce lot et sa réserve de portée locale (#122 conserve application indépendante). REQ-009/REQ-011 restent prévues jusque-là ; aucune qualification de dispositif ni clôture de #117/#120/#121/#122."
+      "closure": "Conception ADR-005 acceptée sur f3063bc ; liaisons #128/#129 vérifiées sur 8fe4fb1. Intégration #130 réalisée et revue technique locale dans docs/contextual-api-integration.md avec campagne initiale c80790f puis vérification actualisée sur f64161be3f7aac918a7bed8b63fe2e8a15b62456 (construction et 172/172 tests locaux réussis, CI verte) : cinq usages publics et composant stock avant/après mesurés, producteurs/consommateurs et refus exercés, guide achevé. Reste la revue et décision mainteneur sur ce lot et sa réserve de portée locale (#122 conserve application indépendante). REQ-009/REQ-011 restent prévues jusque-là ; aucune qualification de dispositif ni clôture de #117/#120/#121/#122."
     },
     {
       "id": "GAP-007",

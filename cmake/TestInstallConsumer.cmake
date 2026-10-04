@@ -108,13 +108,13 @@ endif()
 
 set(consumer_required_targets)
 set(consumer_target_definitions)
-# The consumer records each executable's real path per configuration, so no generator-specific
-# output layout (configuration subdirectories, .exe suffix) is guessed here.
 # The same local application runs against the installed governed-only target.
 file(COPY "${SOURCE_DIR}/examples/ContextualInventory.cpp" "${SOURCE_DIR}/examples/InventoryWorker.hpp"
     DESTINATION "${consumer_src}")
 list(APPEND consumer_executables "consumer_inventory|ContextualInventory.cpp|mddlog::core")
 
+# The consumer records each executable's real path per configuration, so no generator-specific
+# output layout (configuration subdirectories, .exe suffix) is guessed here.
 set(consumer_path_content)
 foreach(consumer_executable_spec IN LISTS consumer_executables)
     string(REPLACE "|" ";" consumer_fields "${consumer_executable_spec}")
