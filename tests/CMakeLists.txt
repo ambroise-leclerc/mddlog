@@ -118,6 +118,7 @@ add_executable(mddlog_specs
     spec/DiagnosticContextSpec.cpp
     spec/DiagnosticBindingSpec.cpp
     spec/AuditContextSpec.cpp
+    spec/ContextIntegrationSpec.cpp
     spec/VersionSpec.cpp
 )
 
@@ -146,4 +147,11 @@ mddlog_discover_tests(mddlog_specs)
 if(TARGET mddlog_contextual_usage)
     add_test(NAME examples.contextualUsage COMMAND mddlog_contextual_usage)
     set_tests_properties(examples.contextualUsage PROPERTIES LABELS "examples;api")
+endif()
+
+if(TARGET mddlog_contextual_inventory)
+    foreach(scenario equivalence refusals lifecycle)
+        add_test(NAME examples.contextualInventory.${scenario} COMMAND mddlog_contextual_inventory ${scenario})
+        set_tests_properties(examples.contextualInventory.${scenario} PROPERTIES LABELS "examples;api;integration" TIMEOUT 20)
+    endforeach()
 endif()

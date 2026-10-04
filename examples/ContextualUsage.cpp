@@ -47,6 +47,26 @@ void operationAfter(TextBinding& logger) {
     return logger.info(time, "Ready");
 }
 
+void producersBefore(RingLog<4>& first, RingLog<4>& second, RawTime time) {
+    require(first.tryWrite({.time = time, .location = std::source_location::current(), .message = "Ready", .component = "pump"}).admission()
+                == Admission::Written,
+            "first producer admitted");
+    require(second.tryWrite({.time          = time,
+                             .location      = std::source_location::current(),
+                             .message       = "Ready",
+                             .component     = "pump",
+                             .operationId   = "prime",
+                             .correlationId = "call-7"})
+                    .admission()
+                == Admission::Written,
+            "second producer admitted");
+}
+
+void producersAfter(GovernedBinding<4>& first, GovernedBinding<4>& second, RawTime time) {
+    require(first.info(time, "Ready").admission() == Admission::Written, "first producer admitted");
+    require(second.info(time, "Ready").admission() == Admission::Written, "second producer admitted");
+}
+
 [[nodiscard]] AuditWriteResult auditWriteBefore(AuditRing<8>& ring, AuditPhase phase, RawTime time) {
     return ring.tryRecord({.category      = AuditCategory::Operator,
                            .phase         = phase,
@@ -143,6 +163,19 @@ int main() {
     require(governedAfter(secondLog, time).admission() == Admission::Written, "independent producer");
     require(secondRing.drain().first()[0].correlationId() == "call-7" && afterRing.drain().first()[0].correlationId().empty(), "independent contexts");
 
+    RingLog<4>      firstProducerBefore;
+    RingLog<4>      secondProducerBefore;
+    RingLog<4>      firstProducerAfter;
+    RingLog<4>      secondProducerAfter;
+    GovernedBinding firstProducerLog(firstProducerAfter, *component);
+    GovernedBinding secondProducerLog(secondProducerAfter, *operation);
+    producersBefore(firstProducerBefore, secondProducerBefore, time);
+    producersAfter(firstProducerLog, secondProducerLog, time);
+    require(firstProducerBefore.drain().first()[0].component() == firstProducerAfter.drain().first()[0].component()
+                && secondProducerBefore.drain().first()[0].operationId() == secondProducerAfter.drain().first()[0].operationId()
+                && secondProducerBefore.drain().first()[0].correlationId() == secondProducerAfter.drain().first()[0].correlationId(),
+            "equivalent independent producers");
+
     AuditRing<8> beforeAudit("before:boot-1");
     require(auditBefore(beforeAudit,
                         time,
@@ -198,5 +231,5 @@ int main() {
             "refused request blocks the action and preserves refusal reason");
     const auto invalid = AuditDescription::create({.action = "mddlog.reserved"});
     require(!invalid && invalid.error().reason == AuditRefusalReason::ReservedAction, "reserved vocabulary refused");
-    std::println("ADR-005: five usage comparisons and prototype checks passed");
+    std::println("ADR-005: five public API usage comparisons passed");
 }
