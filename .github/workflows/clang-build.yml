@@ -53,6 +53,38 @@ jobs:
     - name: Run tests
       run: ctest --preset ninja-clang -LE governed --parallel --output-on-failure --no-tests=error --timeout 120
 
+    - name: Repeat observed storage interruptions
+      run: |
+        python3 scripts/run-file-storage-campaign.py \
+          --worker build-clang/tests/mddlog_file_storage_campaign \
+          --output build-clang/storage-interruptions --iterations 10
+
+    # Real ENOSPC on a bounded tmpfs in a private mount namespace. Containers may
+    # skip the optional volume test in CTest; this host job requires it to execute.
+    - name: Test storage on a real full private volume
+      run: |
+        sudo python3 scripts/run-file-storage-campaign.py \
+          --worker "$PWD/build-clang/tests/mddlog_file_storage_campaign" \
+          --output "$PWD/build-clang/storage-full-volume" --volume-only --require-volume
+
+    - name: Make privileged campaign evidence readable
+      if: always()
+      run: |
+        if [ -d build-clang/storage-full-volume ]; then
+          sudo chown -R "$(id -u):$(id -g)" build-clang/storage-full-volume
+        fi
+
+    - name: Archive storage campaign evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: file-storage-campaign-${{ github.sha }}
+        path: |
+          build-clang/tests/file-storage-campaign/
+          build-clang/storage-interruptions/
+          build-clang/storage-full-volume/
+        if-no-files-found: error
+
     # #280-style negative case: only the provider changes, and the second rebuild still has to be
     # a cache hit for the unchanged consumer. Kept as a named step with --no-tests=error so losing
     # the registration cannot masquerade as a green run.

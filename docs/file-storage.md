@@ -176,9 +176,11 @@ L'exemple reste utilisable sans SpecLab.
 
 La campagne locale est décrite dans [le rapport](file-storage-validation.md). Les injections
 ne constituent ni un disque physiquement plein ni une permission refusée par le noyau sur
-chaque primitive. Campagnes sur volume contraint, arrêt brutal du processus avec points
-observés, et coupures électriques sur matériel choisi restent distinctes et ouvertes en
-#114/#120. Position durable, ancrage et position retenue indépendants restent à éprouver
+chaque primitive. Le [protocole de campagne](file-storage-test-plan.md) et son banc automatisent
+les refus de droits, le volume tmpfs contraint et les arrêts SIGKILL à points observés.
+[Les résultats](file-storage-campaign-results.md) distinguent exécutions et prérequis manquants.
+Qualification du profil physique, coupures électriques sur matériel choisi et intégration
+applicative restent ouvertes en #114/#120. Position durable, ancrage et position retenue indépendants restent à éprouver
 avec #115/#116/#122. GAP-007 reste ouvert ; aucune acceptation de preuves matérielles,
 certification ou validation de dispositif ne découle de ce lot.
 

@@ -86,7 +86,7 @@
       "status": "open",
       "issue": 114,
       "owner": "Ambroise Leclerc",
-      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Premier backend Linux et suite locale implémentés en #114, contrat docs/file-storage.md ; qualification système de fichiers/matériel/caches et campagnes physiques toujours ouvertes."
+      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Premier backend Linux et suite locale implémentés en #114, contrat docs/file-storage.md ; qualification système de fichiers/matériel/caches et campagnes physiques toujours ouvertes. Protocole docs/file-storage-test-plan.md et banc SIGKILL/permissions/ENOSPC réels livrés ; campagne physique et intégration #115/#116/#122 non acceptées."
     },
     {
       "id": "GAP-008",
@@ -268,7 +268,8 @@
       "status": "implemented",
       "design": [
         "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
-        "docs/file-storage.md"
+        "docs/file-storage.md",
+        "docs/file-storage-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditStore.cppm",
@@ -676,6 +677,42 @@
       "scenario": "file-storage-inventory-diagnostics",
       "evidence": "docs/file-storage-validation.md",
       "limits": "Rejets sémantiques sans errno et erreur de lecture injectée ; conditions physiques des appels système non exhaustives."
+    },
+    {
+      "id": "VER-027",
+      "title": "Arrêts réels observés et reprise du support fichiers",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "scripts/run-file-storage-campaign.py",
+      "scenario": null,
+      "evidence": "docs/file-storage-campaign-results.md",
+      "limits": "26 checkpoints SIGKILL ; préfixes et identités comparés à un oracle de fichiers indépendant. Noyau/caches restent actifs ; pas une coupure électrique."
+    },
+    {
+      "id": "VER-028",
+      "title": "Erreurs réelles de permissions et volume borné plein",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "scripts/run-file-storage-campaign.py",
+      "scenario": null,
+      "evidence": "docs/file-storage-campaign-results.md",
+      "limits": "EACCES sans privilèges et trois ENOSPC sur tmpfs privé ; volume obligatoire en CI hôte, SKIP explicite ailleurs. Ni quota réel, ni durabilité matérielle."
+    },
+    {
+      "id": "VER-029",
+      "title": "Corruption du compteur et ressources après cycles/refus",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "scripts/run-file-storage-campaign.py",
+      "scenario": null,
+      "evidence": "docs/file-storage-campaign-results.md",
+      "limits": "Quatre compteurs invalides et 64 cycles/refus dans le même worker ; budgets locaux et contrôles négatifs du superviseur. Pas un budget global ou une preuve exhaustive."
     }
   ],
   "risks": [
@@ -998,7 +1035,10 @@
         "VER-023",
         "VER-024",
         "VER-025",
-        "VER-026"
+        "VER-026",
+        "VER-027",
+        "VER-028",
+        "VER-029"
       ],
       "gaps": [
         "GAP-007",

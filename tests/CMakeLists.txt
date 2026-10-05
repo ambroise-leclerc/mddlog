@@ -123,6 +123,14 @@ add_executable(mddlog_specs
 )
 
 if(MDDLOG_BUILD_FILE_STORAGE)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(mddlog_file_storage_campaign spec/FileStorageCampaign.cpp)
+    target_link_libraries(mddlog_file_storage_campaign PRIVATE mddlog::mddlog)
+    add_test(NAME file-storage.campaign
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/run-file-storage-campaign.py
+            --worker $<TARGET_FILE:mddlog_file_storage_campaign>
+            --output ${CMAKE_CURRENT_BINARY_DIR}/file-storage-campaign)
+    set_tests_properties(file-storage.campaign PROPERTIES LABELS "integration;storage" TIMEOUT 120)
     add_executable(mddlog_file_storage_consumer consumer/FileStorageConsumer.cpp)
     target_link_libraries(mddlog_file_storage_consumer PRIVATE mddlog::mddlog)
     add_test(NAME SourceTreeFileStorageConsumer COMMAND mddlog_file_storage_consumer)
