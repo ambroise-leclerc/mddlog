@@ -1,6 +1,8 @@
 import std;
 import mddlog.core.record;
 import mddlog.core.ring;
+import mddlog.core.governedbinding;
+import mddlog.core.auditbinding;
 
 int main() {
     using namespace mddlog::core;
@@ -37,5 +39,29 @@ int main() {
         || !ring.acknowledge(nextView, 1)) {
         return 4;
     }
-    return ring.drain().empty() ? 0 : 5;
+    if (!ring.drain().empty())
+        return 5;
+    const auto context      = DiagnosticContext::create({.component = "consumer", .operationId = "operation-2", .correlationId = "call-2"});
+    const auto description  = AuditDescription::create({.category = AuditCategory::Operator, .action = "consumer.action"});
+    const auto auditContext = AuditContext::create({.actor = "host", .target = "consumer", .correlationId = "call-2"});
+    if (!context || !description || !auditContext)
+        return 6;
+    GovernedBinding diagnostic(ring, *context);
+    if (diagnostic.info(RawTime::unavailable(), "bound diagnostic").admission() != Admission::Written)
+        return 7;
+    const auto diagnosticView = ring.drain();
+    if (diagnosticView.size() != 1 || diagnosticView.first()[0].operationId() != "operation-2")
+        return 8;
+    AuditRing<2> auditRing("consumer:boot-1");
+    AuditBinding audit(auditRing, *description, *auditContext);
+    if (!audit.record(AuditPhase::Requested, RawTime::unavailable()).wasAdmitted()
+        || !audit.record(AuditPhase::Executed, RawTime::available(hostTime), {.detail = "explicit outcome"}).wasAdmitted())
+        return 9;
+    const auto auditView = auditRing.drain();
+    if (auditView.size() != 2 || auditView.first()[1].phase() != AuditPhase::Executed || auditView.first()[1].correlationId() != "call-2")
+        return 10;
+    std::cout << "context bytes: diagnostic=" << sizeof(DiagnosticContext) << ", governed=" << sizeof(GovernedBinding<2>)
+              << ", description=" << sizeof(AuditDescription) << ", auditContext=" << sizeof(AuditContext) << ", auditBinding=" << sizeof(AuditBinding<2>)
+              << '\n';
+    return 0;
 }

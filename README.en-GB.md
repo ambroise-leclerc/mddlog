@@ -5,10 +5,24 @@
 [🇫🇷 Français](README.md) · 🇬🇧 English · [🇪🇸 Español](README.es.md)
 
 ```cpp
-import mddlog.log;
+import std;
+import mddlog;
 
-mddlog::Log::info("Pump ready");
-mddlog::Log::error("Occlusion detected on line A");
+int main() {
+    // Configure at the application composition point.
+    mddlog::SimpleLogger destination("pump", false);
+    destination.addSink(mddlog::createConsoleSink());
+    const auto context = mddlog::DiagnosticContext::create({
+        .component = "pump", .operationId = "prime", .correlationId = "call-7"
+    });
+    if (!context) return 1; // Handle construction refusal before creating the binding.
+    mddlog::DiagnosticBinding logger(destination, *context);
+
+    // In business code: no repeated context fields.
+    logger.info("Pump ready");
+    logger.error("Occlusion detected on line A");
+    logger.debugLazy([] { return std::format("state={}", 42); });
+}
 ```
 
 - **Diagnostic logs**: the usual levels, sinks and a ready-to-use `Log` facade.
@@ -19,7 +33,18 @@ mddlog::Log::error("Occlusion detected on line A");
 
 The French [README](README.md) is the reference version.
 
-## What is new in version 0.2.0
+## What is new in version 0.3.0
+
+v0.3.0 delivers the contextual API from [#113](https://github.com/ambroise-leclerc/mddlog/issues/113), designed in [ADR-005](docs/adr/ADR-005-contextual-logging-api.md). Configuration stays at the composition point; business functions receive a reusable binding.
+
+- **Diagnostics**: `DiagnosticContext` owns component, operation and correlation; `DiagnosticBinding` preserves the actual caller source with `SimpleLogger` or `TextLogger`.
+- **Expensive messages**: `debugLazy(factory)` and `logLazy(level, factory)` construct the message after the adapter filter.
+- **Governed paths**: `GovernedBinding` retains explicit time and `WriteResult`; `AuditDescription`, `AuditContext` and `AuditBinding` separate invariants from each event’s phases and facts.
+- **Evidence and migration**: five before/after usages, a local stock component and source/installed consumers. Local integration is accepted; independent application #122 and the 1.0 freeze #121 remain open.
+
+The low-level APIs and global `Log` facade remain available. See the [context guide](docs/migration/contextual-logging.md) and [integration evidence](docs/contextual-api-integration.md).
+
+## Capabilities delivered in 0.2.0
 
 v0.1.0 delivered a bounded, allocation-free logging core (ADR-001). v0.2.0 adds three complete capabilities.
 
@@ -57,6 +82,7 @@ v0.1.0 delivered a bounded, allocation-free logging core (ADR-001). v0.2.0 adds 
 | --- | --- | --- |
 | Governed diagnostic core (`mddlog::core`) | Fixed-capacity `GovernedRecord` and single-producer/single-consumer `RingLog`; host-supplied time; explicit admission and truncation results | No sink, no persistence, no system-wide timing guarantee |
 | Audit core (`mddlog::core`) | Bounded `AuditEvent` and `AuditRing`; exact identifiers, category and phase, stream identity and assigned sequence | Admitted means in memory; a full ring refuses new events |
+| Contexts and bindings (`mddlog::core`, adapters through `mddlog::mddlog`) | `DiagnosticContext`, `GovernedBinding`, `AuditDescription`, `AuditContext`, `AuditBinding` and `DiagnosticBinding` | Owned contexts, borrowed destinations; explicit governed refusal and time; one producer per ring |
 | Public audit API (`mddlog::mddlog`) | `SimpleLogger::logAudit(AuditInput)` and `Log::logAudit(AuditInput)` return the admission result after `setAuditRing()` | The bound ring must outlive its binding; `Log::shutdown()` clears the binding |
 | Audit hand-off (`mddlog::mddlog`) | `AuditSinkAdapter` hands off to an `AuditSink`, publishes its health and acknowledges what was accepted | One consumer thread; acceptance by a sink is not durable storage |
 | Audit persistence (`mddlog::mddlog`) | `PersistingAuditSink` stores, confirms durably, keeps a ledger, rotates and retains; `LogVerifier` returns a verdict per stream | Durability depends on the medium; tamper evidence depends on an independent anchor; nothing is signed |
@@ -67,32 +93,38 @@ Every ring has **one producer and one consumer**. The host supplies a distinct s
 
 ## Getting started
 
-### Admit an audit event
+### Admit an audit event with a reusable context
 
 ```cpp
-import mddlog.core.auditring;
+import mddlog.core.auditbinding;
 
 using namespace mddlog::core;
 
 AuditRing<64> audit{"device_789:boot_42:operator"};
-AuditInput input{
+const auto description = AuditDescription::create({
     .category = AuditCategory::RiskControl,
-    .phase = AuditPhase::Requested,
-    .time = RawTime::unavailable(),
     .action = "EMERGENCY_SHUTDOWN",
-    .actor = "operator_42",
-    .target = "pump_7",
     .riskRef = "RISK_17",
+});
+const auto context = AuditContext::create({
+    .actor = "operator_42", .target = "pump_7",
     .correlationId = "device_789:boot_42:input:41",
-    .sourceSequence = 41,
-    .detail = "Shutdown requested",
-};
+});
+if (!description || !context) {
+    // Handle refused identifiers before emitting any event.
+    return 1;
+}
+AuditBinding events(audit, *description, *context);
 
-auto result = audit.tryRecord(input);
+const auto result = events.record(AuditPhase::Requested, RawTime::unavailable(),
+                                 {.detail = "Shutdown requested", .sourceSequence = 41});
 if (!result.wasAdmitted()) {
-    // Apply the host's refusal policy; inspect result.refusal().
+    // Apply the host’s refusal policy; inspect result.refusal().
+    return 2;
 }
 ```
+
+The description and context are copied; the binding borrows the ring. Phase and time remain explicit at every call. `Requested` declares a request: the binding does not execute the action and its destructor emits nothing. Admission is an in-memory copy, not durable confirmation.
 
 ### Persist and verify
 
@@ -168,6 +200,7 @@ The [evidence note](docs/governed-evidence.md) states what the module graph, sou
 - **Delivered (v0.2.0):** bounded audit admission, per-stream sequence, explicit refusal and hand-off with health ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md); epic [#9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Delivered (v0.2.0):** synchronised sink registry, bounded transport consumer and text logger, with WebFront as the reference consumer ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); epic [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Delivered (v0.2.0), evidence under review:** durable confirmation on an eligible medium, tamper evidence relative to an independent anchor, restart, rotation and retention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); epic [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). Accepting that evidence is a separate review decision.
+- **Delivered (v0.3.0):** diagnostic/audit contexts and bindings, lazy filtering and verified usages ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). Local component integration is accepted; independent application #122, budgets #117, robustness #120 and the freeze #121 remain open.
 - **Deferred:** signing and key management, export format ([ADR-004, Decision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
 ## Build and verify

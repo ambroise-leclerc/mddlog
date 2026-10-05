@@ -19,7 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/PreventInSourceBuilds.cmake)
 
-project(mddlog VERSION 0.2.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
+project(mddlog VERSION 0.3.0 DESCRIPTION "Modern C++23 Modules Logger Library for Medical Devices" HOMEPAGE_URL "https://github.com/ambroise-leclerc/mddlog" LANGUAGES CXX)
 
 message(STATUS "CMAKE_EXPERIMENTAL_CXX_IMPORT_STD: ${CMAKE_EXPERIMENTAL_CXX_IMPORT_STD}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
@@ -202,9 +202,13 @@ set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/LogLevel.cppm
     include/mddlog/core/WriteResult.cppm
     include/mddlog/core/Record.cppm
+    include/mddlog/core/DiagnosticContext.cppm
     include/mddlog/core/Ring.cppm
+    include/mddlog/core/GovernedBinding.cppm
     include/mddlog/core/AuditEvent.cppm
+    include/mddlog/core/AuditContext.cppm
     include/mddlog/core/AuditRing.cppm
+    include/mddlog/core/AuditBinding.cppm
 )
 target_sources(mddlog-core
     PUBLIC
@@ -237,6 +241,7 @@ target_sources(mddlog
         include/mddlog/adapter/AuditStore.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
+        include/mddlog/adapter/DiagnosticBinding.cppm
         include/mddlog/mddlog.cppm
         include/mddlog/Log.cppm
 )

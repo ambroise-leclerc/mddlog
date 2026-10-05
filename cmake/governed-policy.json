@@ -6,7 +6,11 @@
     "mddlog.core.record": ["std", "mddlog.core.inlinestring", "mddlog.core.loglevel", "mddlog.core.writeresult"],
     "mddlog.core.ring": ["std", "mddlog.core.record"],
     "mddlog.core.auditevent": ["std", "mddlog.core.inlinestring", "mddlog.core.record"],
-    "mddlog.core.auditring": ["std", "mddlog.core.auditevent"]
+    "mddlog.core.auditring": ["std", "mddlog.core.auditevent"],
+    "mddlog.core.diagnosticcontext": ["std", "mddlog.core.record"],
+    "mddlog.core.governedbinding": ["std", "mddlog.core.diagnosticcontext", "mddlog.core.ring"],
+    "mddlog.core.auditcontext": ["std", "mddlog.core.auditevent"],
+    "mddlog.core.auditbinding": ["std", "mddlog.core.auditcontext", "mddlog.core.auditring"]
   },
   "links": {
     "mddlog-core": ["mddlog_options", "mddlog_warnings", "__CMAKE::CXX23"],

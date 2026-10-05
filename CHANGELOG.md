@@ -10,6 +10,60 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ---
 
+## 0.3.0 — 5 October 2026
+
+Closes epic #113 and its four sub-issues #127–130: owned contexts and reusable bindings
+for diagnostic and audit logging, designed in
+[ADR-005](docs/adr/ADR-005-contextual-logging-api.md). The initial software development
+file baseline (#124) is also delivered. This is an intermediate release towards 1.0;
+epic #112 and the remaining 1.0 work are open.
+
+### Contextual logging (epic #113)
+
+- `DiagnosticContext` owns component, operation and correlation identifiers, with typed
+  construction refusals and derived operation contexts. `DiagnosticBinding` reuses them
+  with `SimpleLogger` and `TextLogger`, preserving the actual caller's source.
+- `debugLazy(factory)` and `logLazy(level, factory)` defer message construction until
+  after the adapter filter. `SimpleLogger::is(level)` exposes that filter snapshot.
+- `GovernedBinding` keeps host-supplied time, bounded admission and `WriteResult` explicit.
+  `AuditDescription`, `AuditContext` and `AuditBinding` prepare invariant fields while
+  phase, time, detail and admission remain visible at every event.
+- Five compiled before/after usages and a local stock component exercise refusal,
+  temporary data, separate producers/consumers and shutdown. Source and installed
+  consumers cover both public targets. See the
+  [migration guide](docs/migration/contextual-logging.md) and
+  [accepted local integration](docs/contextual-api-integration.md).
+- The software development file records the accepted initial baseline and local API
+  integration: GAP-006 closed, REQ-009/REQ-011 implemented, qualification gaps retained.
+- The umbrella module exports the diagnostic refusal, ring and write-result types needed
+  to use its contextual API without direct core imports. Source and installed consumers
+  inspect a construction refusal and exercise governed admission and saturation.
+- All three READMEs show the contextual syntax. Existing low-level APIs and the global
+  `Log` facade remain available; no audit encoding or SPSC contract is changed.
+
+### Known limits
+
+- Local component integration is accepted; independent application validation (#122),
+  budgets (#117), extended robustness (#120), persistence orchestration (#116) and the
+  final API/package freeze (#121) remain open. This release is not a 1.0 qualification,
+  certification or validation for a medical device.
+- Bindings borrow destinations, which must outlive every binding copy. Each ring remains
+  single-producer/single-consumer; the host controls stream identities, lifetimes,
+  privacy and the response to a critical refusal.
+- Audit categories are copied without enum-range validation, as in existing admission.
+  Hosts use named values and validate external conversions. Phases are host declarations;
+  admission is in-memory, and no destructor manufactures an action outcome.
+- `debugLazy` is the only per-level lazy shortcut; other levels use `logLazy`.
+  Filtering is a snapshot, not transactional. `TextLogger` retains the fixed
+  `[component:operation:correlation]` format, including `[::]` for an empty context.
+- `SimpleLogger` still has an allocating unbounded asynchronous queue; `TextLogger`
+  renders synchronously with allocation. Neither is the governed path.
+- Real storage and independent anchor backends are not supplied (#114/#115). Durability
+  depends on the medium; tamper evidence depends on an independent anchor and retained
+  position. Nothing is signed. ADR-004 implementation evidence still awaits its separate
+  acceptance; this release does not reuse #113 acceptance for it.
+- `import std` remains experimental and tied to the documented CMake/compiler tuple.
+
 ## 0.2.0 — 4 October 2026
 
 Closes epics #9, #10 and #11: a regulatory audit-event model with bounded admission and explicit
