@@ -27,7 +27,7 @@ auto medium = FileStorageMedium::create({
 
 La factory retourne un `expected<unique_ptr<FileStorageMedium>, FileStorageError>`.
 Le support doit vivre plus longtemps que le sink. L'hôte fournit des limites compatibles
-avec `StorageConfig`, notamment taille et nombre de segments ; tous les fichiers existants
+avec `StorageConfig`, notamment taille et nombre de segments ; tous les segments existants
 comptent dans ces limites, y compris une création interrompue. Les limites ne réservent pas
 de blocs physiques. La capacité réelle peut manquer avant la limite configurée.
 
@@ -57,7 +57,7 @@ Ce choix candidat n'est pas une déclaration de qualification.
 | Système, noyau, libc, montage | Versions et options exactes à archiver pour la campagne physique |
 | Support, contrôleur, firmware | Modèles et versions à choisir et à archiver ; aucun matériel qualifié par ce lot |
 | Cache volatile | Vidage correctement honoré, ou cache désactivé/protégé ; à prouver sur le matériel choisi |
-| Primitives | `openat`, `write`, `pread`, `fstat`, `fsync` du fichier et du répertoire, `unlinkat`, `flock` |
+| Primitives | `openat`, `write`, `pread`, `fstat`, `fsync` du fichier et du répertoire, `renameat`, `unlinkat`, `flock` |
 | Limites du banc fonctionnel | 8 segments de 2048 octets ; lecture par appel limitée à 2048 octets |
 | Budget de déploiement | À fixer/mesurer avec #117 ; pas de borne temporelle des appels système |
 | Éligibilité livrée | `Unqualified` par défaut ; aucune détection automatique de durabilité |
@@ -73,14 +73,14 @@ vérifient les branches de code et les appels ; ils ne qualifient pas leur machi
 - **Création** : nom canonique de 16 chiffres hexadécimaux minuscules suivis de `.mdl`,
   identité opaque non nulle, `O_EXCL`, mode `0600`. Les identifiants de flux, indices et
   séquences du caller ne deviennent jamais des chemins ; le contenu fourni reste inchangé.
-  La référence est stable tant que le segment existe et après réouverture ; elle peut être
-  réutilisée après récupération de tout l'inventaire. Sa portée reste celle du support.
+  Le compteur persistant réserve la référence avant création ; ni retrait, ni redémarrage,
+  ni récupération de tout l'inventaire ne la réutilisent. Sa portée reste celle du support.
 - **Ajout** : `O_APPEND`, boucle sur écritures courtes, reprise de `EINTR`, échec sur zéro
   progression. Aucun succès partiel. Les limites sont contrôlées avant écriture ; `ENOSPC`
   et `EDQUOT` à la création donnent `NoSpace`, les erreurs d'ajout donnent `Failed`.
 - **Barrière** : contrôle que l'offset demandé est dans le fichier, `fsync` du fichier
   puis du répertoire, y compris pour une nouvelle existence et un préfixe vide.
-  `Unqualified` retourne `Unsupported` sans barrière ni confirmation. En mode qualifié,
+  `Unqualified` retourne `Unsupported` sans barrière d'audit ni confirmation. En mode qualifié,
   un succès couvre tous les octets avant l'offset et l'existence du segment. Au-delà,
   les octets non confirmés peuvent être absents, partiels ou présents après coupure.
 - **Échecs de mutation** : une écriture incomplète, une barrière échouée ou une suppression
@@ -104,9 +104,35 @@ vérifient les branches de code et les appels ; ils ne qualifient pas leur machi
 
 Les descripteurs des segments utilisés restent ouverts jusqu'au retrait ou à la destruction,
 notamment pour observer les erreurs de writeback sur le descripteur d'écriture. Leur nombre
-est borné par `maxSegments`, en plus du répertoire et d'un descripteur temporaire de balayage.
+est borné par `maxSegments`, en plus du répertoire, d'un descripteur temporaire de balayage
+et d'un descripteur temporaire de métadonnées.
 La lecture et l'inventaire allouent dans l'adaptateur ; leurs limites locales ne qualifient
 pas le coût global de `readStoredStream`. La destruction ne synchronise ni n'accepte d'audit.
+
+## Allocation persistante des références
+
+`.mddlog-refs` contient exactement 25 octets : `mddref1\n`, seize chiffres hexadécimaux
+minuscules représentant la dernière réservation, puis `\n`. Il est privé, régulier et
+sans lien multiple. Il ne compte pas comme segment et reste présent après tout retrait.
+Un rédacteur initialise le compteur à zéro seulement dans un répertoire sans segment.
+Une archive antérieure sans compteur reste lisible en `ReadOnly` ; la reprise en écriture
+est refusée, car les références déjà retirées ne peuvent être reconstruites.
+
+Avant chaque création, le backend écrit la prochaine réservation dans `.mddlog-refs.tmp`,
+synchronise ce fichier, remplace atomiquement le compteur par `renameat`, puis synchronise
+le répertoire. Ces deux barrières de métadonnées sont obligatoires même en `Unqualified` ;
+elles ne confirment aucun enregistrement d'audit. Une réservation peut consommer une
+référence sans créer de segment. L'épuisement du compteur retourne `NoSpace` sans bouclage.
+
+Une erreur de réservation arrête les mutations. Un compteur malformé, inférieur à une
+référence existante ou un fichier temporaire résiduel bloque la réouverture ; aucune remise
+à zéro ni réparation automatique n'est effectuée. La reprise exige une investigation qui
+préserve le compteur et les preuves. La restauration externe d'une ancienne copie de tout
+le support dépasse ce contrat ; le compteur n'est pas un témoin indépendant de rollback.
+
+Les métadonnées occupent 25 octets permanents et au plus 25 octets temporaires, hors allocation
+physique du système de fichiers et hors limites des segments. Les deux barrières par création
+ajoutent un coût à mesurer avec #117 ; aucune borne temporelle n'est revendiquée.
 
 ## Propriété et santé
 
@@ -119,9 +145,17 @@ Un rédacteur prend un verrou exclusif non bloquant sur le répertoire. `ReadOnl
 verrou partagé : lecteurs multiples hors ligne, refus pendant la vie d'un rédacteur. Le
 verrou est consultatif et tous les participants doivent le respecter. Il ne protège ni
 contre un utilisateur privilégié ni contre la réécriture/restauration par le propriétaire.
+Les réouvertures utilisent `O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC` dans les deux modes :
+les liens ne sont pas suivis, un FIFO ne bloque pas dans `openat`, et les descripteurs ne
+survivent pas à `exec`. Avant utilisation, y compris pour un descripteur conservé, le fichier
+ouvert et le nom sont vérifiés sans suivre les liens et doivent désigner le même inode privé
+régulier. Ces vérifications refusent les substitutions observées ; le verrou consultatif
+reste nécessaire contre les modifications concurrentes entre validation et suppression.
 Confidentialité, sauvegarde et effacement sécurisé restent des obligations de l'intégrateur.
 
 `lastError()` conserve la dernière cause et son `errno` éventuel ; succès sans effacement.
+Un rejet de validation (nom, type, permission ou limite) porte `nativeError = 0` ; un appel
+système échoué conserve son véritable `errno`. Une absence de progression est signalée `EIO`.
 `mutationsStopped()` expose l'arrêt du rédacteur. Ces deux accès appartiennent au consommateur.
 Les réponses de `StorageMedium` alimentent les compteurs/états existants de
 `PersistingAuditSink::health()` ; elles ne génèrent aucun événement sur le support défaillant.
@@ -135,7 +169,10 @@ ajout, plages, EOF, inventaire, identités et retrait sur mémoire et fichiers.
 [Les scénarios Linux](../tests/spec/FileStorageSpec.cpp) couvrent réouverture réelle avec
 chaînage, accès exclusif/lecture seule, permissions/noms/liens, limites et injection de
 transferts courts, `EINTR`, `ENOSPC`, `EACCES`, `EIO`, lecture défaillante et chacune des
-barrières. L'exemple reste utilisable sans SpecLab.
+barrières. Les régressions couvrent aussi les substitutions après ouverture, un FIFO sans
+écrivain avec délai de surveillance, la fermeture effective à `exec`, les références après
+retrait/redémarrage, les pannes du compteur et les diagnostics d'inventaire.
+L'exemple reste utilisable sans SpecLab.
 
 La campagne locale est décrite dans [le rapport](file-storage-validation.md). Les injections
 ne constituent ni un disque physiquement plein ni une permission refusée par le noyau sur
@@ -149,4 +186,5 @@ Références de primitives : [write(2)](https://man7.org/linux/man-pages/man2/wr
 [fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html),
 [flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html),
 [open(2)](https://man7.org/linux/man-pages/man2/open.2.html),
+[rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html),
 [close(2)](https://man7.org/linux/man-pages/man2/close.2.html).

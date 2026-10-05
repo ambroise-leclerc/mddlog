@@ -17,7 +17,11 @@ peuvent rester indétectables. Si journal et ancrage reculent ensemble, seule un
 indépendante permet de détecter le rollback ; si cette autorité est compromise, la garantie tombe.
 
 Le backend fichiers Linux vérifie propriétaire/permissions et refuse liens et inventaire ambigu,
-avec verrou consultatif. Ces contrôles locaux ne résistent pas à un propriétaire malveillant
+avec verrou consultatif. VER-024 couvre les substitutions après ouverture, le FIFO sans
+écrivain et la fermeture à exec ; la validation du nom et de l'inode reste soumise à la
+coopération des accès concurrents. VER-025 couvre le compteur persistant d'identités, qui
+ne constitue pas un témoin indépendant contre restauration d'une ancienne image.
+Ces contrôles locaux ne résistent pas à un propriétaire malveillant
 ou privilégié. Ni chiffrement ni effacement sécurisé ne sont fournis par mddlog. Le fabricant minimise les données sensibles, protège stockage, sauvegardes et accès,
 qualifie la disponibilité et l'indépendance du fournisseur, et protège sa chaîne de livraison.
 #114/#115 produisent les backends ; #119 le lecteur/export ; #120 les essais adverses ;

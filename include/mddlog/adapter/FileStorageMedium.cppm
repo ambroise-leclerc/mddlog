@@ -2,6 +2,7 @@
 module;
 
 #include <cerrno>
+#include <cstdio>
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -59,6 +60,20 @@ public:
     [[nodiscard]] virtual int sync(int descriptor) {
         return ::fsync(descriptor);
     }
+
+    /** @brief Reference reservations are independent of audit-data barriers and never confirm a record. */
+    [[nodiscard]] virtual std::ptrdiff_t writeMetadata(int descriptor, std::span<const char> bytes) {
+        return ::write(descriptor, bytes.data(), bytes.size());
+    }
+    [[nodiscard]] virtual std::ptrdiff_t readMetadata(int descriptor, std::span<char> bytes, std::uint64_t offset) {
+        return ::pread(descriptor, bytes.data(), bytes.size(), static_cast<off_t>(offset));
+    }
+    [[nodiscard]] virtual int syncMetadata(int descriptor) {
+        return ::fsync(descriptor);
+    }
+    [[nodiscard]] virtual int replaceMetadata(int directory, const char* temporary, const char* destination) {
+        return ::renameat(directory, temporary, directory, destination);
+    }
 };
 
 namespace detail {
@@ -98,7 +113,9 @@ private:
  *
  * Read-only instances take a shared directory lock; a writer takes an exclusive lock. Locks are advisory:
  * all access must cooperate. Names encode opaque SegmentRef values, never caller stream IDs. Content
- * validation and recovery remain in AuditStore. Failed writes, barriers or removal stop all mutations
+ * validation and recovery remain in AuditStore. A persistent counter reserves each reference before
+ * segment creation; references are never reused by reclamation or reopening this medium.
+ * Failed writes, barriers or removal stop all mutations
  * until the object is destroyed and recovery is performed; no damaged prefix is repaired here.
  *
  * @note QualifiedFsync requires a separately qualified local filesystem/device/cache deployment.
@@ -130,8 +147,8 @@ public:
         const auto listing = medium->segments();
         if (!listing)
             return std::unexpected(medium->lastError().value_or(FileStorageError{.issue = FileStorageIssue::Inventory}));
-        for (const auto& segment : *listing)
-            medium->lastRef = std::max(medium->lastRef, segment.segment);
+        if (!medium->loadReference(*listing))
+            return std::unexpected(medium->lastError().value_or(FileStorageError{.issue = FileStorageIssue::Inventory}));
         return medium;
     }
 
@@ -157,8 +174,13 @@ public:
             fail(FileStorageIssue::Capacity);
             return {.status = OpenStatus::NoSpace};
         }
-        const SegmentRef ref  = ++lastRef;
-        const auto       name = fileName(ref);
+        const SegmentRef ref = lastRef + 1;
+        if (!persistReference(ref)) {
+            stopped = true;
+            return {.status = noSpace(error.value_or(FileStorageError{}).nativeError) ? OpenStatus::NoSpace : OpenStatus::Failed};
+        }
+        lastRef         = ref;
+        const auto name = fileName(ref);
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): Linux open/openat require this variadic API; flags and mode are fixed and typed.
         detail::FileDescriptor descriptor(::openat(directory.get(), name.c_str(), O_RDWR | O_APPEND | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, fileMode));
         if (descriptor.get() < 0) {
@@ -268,11 +290,26 @@ public:
             const std::string_view name(std::span(entry->d_name).data());
             if (name == "." || name == "..")
                 continue;
-            const auto  ref = parseName(name);
+            const bool reference = name == referenceName;
+            const auto ref       = reference ? std::optional<SegmentRef>{0} : parseName(name);
+            if (!ref) {
+                fail(FileStorageIssue::Inventory);
+                return std::nullopt;
+            }
             struct stat metadata{};
-            if (!ref || ::fstatat(directory.get(), name.data(), &metadata, AT_SYMLINK_NOFOLLOW) != 0 || !validFile(metadata)
-                || listing.size() >= config.maxSegments) {
+            if (::fstatat(directory.get(), name.data(), &metadata, AT_SYMLINK_NOFOLLOW) != 0) {
                 fail(FileStorageIssue::Inventory, errno);
+                return std::nullopt;
+            }
+            if (reference) {
+                if (!validReferenceFile(metadata)) {
+                    fail(FileStorageIssue::Inventory);
+                    return std::nullopt;
+                }
+                continue;
+            }
+            if (!validFile(metadata) || listing.size() >= config.maxSegments) {
+                fail(FileStorageIssue::Inventory);
                 return std::nullopt;
             }
             listing.push_back({*ref, static_cast<std::uint64_t>(metadata.st_size)});
@@ -284,7 +321,7 @@ public:
     [[nodiscard]] bool reclaim(SegmentRef segment) override {
         if (!writable() || segment == 0)
             return false;
-        // Validate before unlinking; never follow or remove a foreign object.
+        // Validate the named inode without following links; directory access must honor the advisory lock.
         const int descriptor = segmentDescriptor(segment);
         if (!sizeOf(descriptor))
             return false;
@@ -303,10 +340,14 @@ public:
     }
 
 private:
-    static constexpr mode_t           privateMask = 0077;
-    static constexpr mode_t           fileMode    = 0600;
-    static constexpr std::size_t      nameDigits  = 16;
-    static constexpr std::string_view suffix      = ".mdl";
+    static constexpr mode_t           privateMask        = 0077;
+    static constexpr mode_t           fileMode           = 0600;
+    static constexpr std::size_t      nameDigits         = 16;
+    static constexpr std::string_view suffix             = ".mdl";
+    static constexpr std::string_view referenceName      = ".mddlog-refs";
+    static constexpr std::string_view referenceTemporary = ".mddlog-refs.tmp";
+    static constexpr std::string_view referencePreamble  = "mddref1\n";
+    static constexpr std::size_t      referenceBytes     = referencePreamble.size() + nameDigits + 1;
 
     FileStorageMedium(FileStorageConfig declared, detail::FileDescriptor owned, FileStorageCalls* systemCalls)
         : config(std::move(declared)), directory(std::move(owned)), calls(systemCalls != nullptr ? systemCalls : &defaultCalls) {}
@@ -351,17 +392,18 @@ private:
             fail(FileStorageIssue::Unavailable);
             return -1;
         }
+        const auto name = fileName(ref);
         if (const auto found = held.find(ref); found != held.end())
-            return found->second.get();
-        const auto name   = fileName(ref);
-        const int  access = config.access == FileAccess::ReadOnly ? O_RDONLY : O_RDWR | O_APPEND;
+            return validateNamedSegment(found->second.get(), name) ? found->second.get() : -1;
+        const int access = config.access == FileAccess::ReadOnly ? O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC
+                                                                 : O_RDWR | O_APPEND | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC;
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): Linux open/openat require this variadic API; flags and mode are fixed and typed.
         detail::FileDescriptor descriptor(::openat(directory.get(), name.c_str(), access));
         if (descriptor.get() < 0) {
             fail(FileStorageIssue::Unavailable, errno);
             return -1;
         }
-        if (!sizeOf(descriptor.get()))
+        if (!validateNamedSegment(descriptor.get(), name))
             return -1;
         if (held.size() >= config.maxSegments) {
             fail(FileStorageIssue::Capacity);
@@ -371,6 +413,107 @@ private:
         (void)inserted;
         return found->second.get();
     }
+    [[nodiscard]] bool validateNamedSegment(int descriptor, const std::string& name) {
+        struct stat opened{};
+        struct stat named{};
+        if (::fstat(descriptor, &opened) != 0 || ::fstatat(directory.get(), name.c_str(), &named, AT_SYMLINK_NOFOLLOW) != 0) {
+            fail(FileStorageIssue::Unavailable, errno);
+            return false;
+        }
+        if (!validFile(opened) || !validFile(named) || opened.st_dev != named.st_dev || opened.st_ino != named.st_ino) {
+            fail(FileStorageIssue::Inventory);
+            return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] static bool validReferenceFile(const struct stat& metadata) noexcept {
+        return S_ISREG(metadata.st_mode) && metadata.st_nlink == 1 && metadata.st_uid == ::geteuid() && (metadata.st_mode & privateMask) == 0
+               && std::cmp_equal(metadata.st_size, referenceBytes);
+    }
+
+    [[nodiscard]] bool loadReference(const std::vector<SegmentInfo>& listing) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): Linux openat requires this variadic API; flags are fixed and typed.
+        detail::FileDescriptor descriptor(::openat(directory.get(), referenceName.data(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC));
+        if (descriptor.get() < 0) {
+            const int code = errno;
+            if (code != ENOENT) {
+                fail(FileStorageIssue::Inventory, code);
+                return false;
+            }
+            // Older archives without an allocator can still be inspected, but not resumed for writing.
+            if (config.access == FileAccess::ReadOnly)
+                return true;
+            if (!listing.empty()) {
+                fail(FileStorageIssue::Inventory);
+                return false;
+            }
+            return persistReference(0);
+        }
+        struct stat metadata{};
+        if (::fstat(descriptor.get(), &metadata) != 0) {
+            fail(FileStorageIssue::Inventory, errno);
+            return false;
+        }
+        if (!validReferenceFile(metadata)) {
+            fail(FileStorageIssue::Inventory);
+            return false;
+        }
+        std::array<char, referenceBytes> bytes{};
+        std::size_t                      done = 0;
+        while (done < bytes.size()) {
+            const auto count = calls->readMetadata(descriptor.get(), std::span(bytes).subspan(done), done);
+            if (count < 0 && errno == EINTR)
+                continue;
+            if (count <= 0 || static_cast<std::size_t>(count) > bytes.size() - done) {
+                fail(FileStorageIssue::Read, count < 0 ? errno : EIO);
+                return false;
+            }
+            done += static_cast<std::size_t>(count);
+        }
+        const std::string_view text(bytes.data(), bytes.size());
+        const auto             digits = text.substr(referencePreamble.size(), nameDigits);
+        SegmentRef             ref    = 0;
+        const auto [end, code]        = std::from_chars(digits.data(), std::to_address(digits.end()), ref, 16);
+        if (code != std::errc{} || end != std::to_address(digits.end()) || text != std::format("{}{:016x}\n", referencePreamble, ref)
+            || std::ranges::any_of(listing, [ref](const SegmentInfo& segment) {
+                   return segment.segment > ref;
+               })) {
+            fail(FileStorageIssue::Inventory);
+            return false;
+        }
+        lastRef = ref;
+        return true;
+    }
+
+    [[nodiscard]] bool persistReference(SegmentRef ref) {
+        const auto text = std::format("{}{:016x}\n", referencePreamble, ref);
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): Linux openat requires this variadic API; flags and creation mode are fixed and typed.
+        detail::FileDescriptor descriptor(::openat(directory.get(), referenceTemporary.data(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, fileMode));
+        if (descriptor.get() < 0) {
+            fail(FileStorageIssue::Write, errno);
+            return false;
+        }
+        std::size_t done = 0;
+        while (done < text.size()) {
+            const auto count = calls->writeMetadata(descriptor.get(), std::span(text).subspan(done));
+            if (count < 0 && errno == EINTR)
+                continue;
+            if (count <= 0 || static_cast<std::size_t>(count) > text.size() - done) {
+                fail(FileStorageIssue::Write, count < 0 ? errno : EIO);
+                return false;
+            }
+            done += static_cast<std::size_t>(count);
+        }
+        if (!barrier(descriptor.get(), true))
+            return false;
+        if (calls->replaceMetadata(directory.get(), referenceTemporary.data(), referenceName.data()) != 0) {
+            fail(FileStorageIssue::Write, errno);
+            return false;
+        }
+        return barrier(directory.get(), true);
+    }
+
     [[nodiscard]] std::optional<std::uint64_t> sizeOf(int descriptor) {
         if (descriptor < 0)
             return std::nullopt;
@@ -400,10 +543,13 @@ private:
         }
         return true;
     }
-    [[nodiscard]] bool barrier(int descriptor) {
-        int result = calls->sync(descriptor);
+    [[nodiscard]] bool barrier(int descriptor, bool metadata = false) {
+        const auto synchronize = [&] {
+            return metadata ? calls->syncMetadata(descriptor) : calls->sync(descriptor);
+        };
+        int result = synchronize();
         while (result < 0 && errno == EINTR)
-            result = calls->sync(descriptor);
+            result = synchronize();
         if (result != 0) {
             fail(FileStorageIssue::Sync, errno);
             return false;

@@ -640,6 +640,42 @@
       "scenario": "file-storage-barriers",
       "evidence": "docs/file-storage-validation.md",
       "limits": "Transferts/erreurs injectés sur vrais fichiers et réouverture ; aucune qualification matérielle ou campagne de coupures. GAP-007 reste ouvert."
+    },
+    {
+      "id": "VER-024",
+      "title": "Réouverture sans liens, blocage FIFO ni fuite à exec",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-reopening-protection",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Substitutions observées et fork/exec réels ; accès concurrent soumis au verrou consultatif, sans protection contre un propriétaire malveillant."
+    },
+    {
+      "id": "VER-025",
+      "title": "Allocation persistante sans réutilisation des références",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-reference-allocation",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Retrait, redémarrage et erreurs de réservation injectées ; restauration externe du compteur et qualification physique hors preuve."
+    },
+    {
+      "id": "VER-026",
+      "title": "Diagnostic exact des rejets d’inventaire",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-inventory-diagnostics",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Rejets sémantiques sans errno et erreur de lecture injectée ; conditions physiques des appels système non exhaustives."
     }
   ],
   "risks": [
@@ -959,7 +995,10 @@
       "verifications": [
         "VER-007",
         "VER-008",
-        "VER-023"
+        "VER-023",
+        "VER-024",
+        "VER-025",
+        "VER-026"
       ],
       "gaps": [
         "GAP-007",
@@ -1251,7 +1290,7 @@
       "provenance": "include/mddlog/adapter/FileStorageMedium.cppm",
       "license": "Noyau Linux GPL-2.0-only avec exception syscall ; libc et pile du profil à inventorier, GAP-005.",
       "classification": "Composants déployés, classement SOUP à confirmer par le fabricant.",
-      "knownIssues": "flock consultatif ; fsync ne qualifie pas un matériel qui ignore les vidages. Éligibilité non inférée ; Unqualified par défaut.",
+      "knownIssues": "flock consultatif ; fsync ne qualifie pas un matériel qui ignore les vidages. Éligibilité non inférée ; Unqualified par défaut. Compteur persistant soumis aux barrières de la même pile ; aucune protection indépendante contre restauration externe.",
       "monitoring": "Plan : mainteneur et intégrateur examinent https://www.kernel.org/ et les avis du distributeur, de la libc et du constructeur avant qualification/mise à jour du profil ; rejouer conformité et campagnes physiques, conserver versions et anomalies.",
       "gaps": [
         "GAP-005",

@@ -80,6 +80,12 @@ CTRL-007 inclut `FileStorageMedium`, facultatif dans l'adaptateur. Le
 partagés hors ligne, identité opaque, limites, transferts complets et barrière fichier puis
 répertoire. Éligibilité non inférée : `Unqualified` répond `Unsupported`. Les erreurs de
 mutation arrêtent le rédacteur ; les octets partiels restent pour la reprise existante.
-VER-023 et [la campagne locale](../../../docs/file-storage-validation.md) distinguent
+Le compteur privé `.mddlog-refs` réserve chaque référence avant création par écriture
+complète, fsync du temporaire, remplacement atomique puis fsync du répertoire, y compris
+en mode non qualifié sans confirmation d'audit. Le retrait ne réduit jamais ce compteur ;
+un état incomplet ou régressé est refusé sans réparation. Les réouvertures empêchent suivi
+de liens, blocage FIFO et fuite à exec ; nom et inode conservé doivent correspondre.
+Les rejets de validation portent un errno nul, distinct des erreurs système.
+VER-023 à VER-026 et [la campagne locale](../../../docs/file-storage-validation.md) distinguent
 réouverture et erreurs injectées de la qualification matérielle encore ouverte en GAP-007.
 Les formats, le cœur, les appels métier et les politiques de reprise/rétention ne changent pas.

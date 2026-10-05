@@ -2,9 +2,12 @@
 #include "framework/StorageMediumConformance.hpp"
 
 #include <cerrno>
+#include <csignal>
 #include <cstdlib>
 
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 import std;
@@ -55,6 +58,7 @@ struct FaultCalls final : FileStorageCalls {
         return FileStorageCalls::write(descriptor, bytes.first(std::min(bytes.size(), writeLimit)));
     }
     std::ptrdiff_t read(int descriptor, std::span<std::uint8_t> bytes, std::uint64_t offset) override {
+        lastDescriptor = descriptor;
         if (interruptRead) {
             interruptRead = false;
             errno         = EINTR;
@@ -82,18 +86,72 @@ struct FaultCalls final : FileStorageCalls {
         }
         return FileStorageCalls::sync(descriptor);
     }
-    std::size_t       writeCount     = 0;
-    std::size_t       syncCount      = 0;
-    std::size_t       writeLimit     = 2;
-    std::size_t       readLimit      = 2;
-    std::size_t       failWrite      = 0;
-    std::size_t       failSync       = 0;
-    int               writeError     = ENOSPC;
-    bool              interruptWrite = false;
-    bool              interruptRead  = false;
-    bool              interruptSync  = false;
-    bool              zeroWrite      = false;
-    bool              failRead       = false;
+    std::ptrdiff_t writeMetadata(int descriptor, std::span<const char> data) override {
+        ++metadataWriteCount;
+        if (interruptMetadataWrite) {
+            interruptMetadataWrite = false;
+            errno                  = EINTR;
+            return -1;
+        }
+        if (zeroMetadataWrite)
+            return 0;
+        return FileStorageCalls::writeMetadata(descriptor, data.first(std::min(data.size(), metadataLimit)));
+    }
+    std::ptrdiff_t readMetadata(int descriptor, std::span<char> data, std::uint64_t offset) override {
+        if (interruptMetadataRead) {
+            interruptMetadataRead = false;
+            errno                 = EINTR;
+            return -1;
+        }
+        if (failMetadataRead) {
+            errno = EIO;
+            return -1;
+        }
+        return FileStorageCalls::readMetadata(descriptor, data.first(std::min(data.size(), metadataLimit)), offset);
+    }
+    int syncMetadata(int descriptor) override {
+        ++metadataSyncCount;
+        if (interruptMetadataSync) {
+            interruptMetadataSync = false;
+            errno                 = EINTR;
+            return -1;
+        }
+        if (metadataSyncCount == failMetadataSync) {
+            errno = EIO;
+            return -1;
+        }
+        return FileStorageCalls::syncMetadata(descriptor);
+    }
+    int replaceMetadata(int descriptor, const char* temporary, const char* destination) override {
+        if (failMetadataRename) {
+            errno = EACCES;
+            return -1;
+        }
+        return FileStorageCalls::replaceMetadata(descriptor, temporary, destination);
+    }
+    int               lastDescriptor         = -1;
+    std::size_t       metadataWriteCount     = 0;
+    std::size_t       metadataSyncCount      = 0;
+    std::size_t       failMetadataSync       = 0;
+    std::size_t       metadataLimit          = 2;
+    bool              interruptMetadataWrite = false;
+    bool              interruptMetadataRead  = false;
+    bool              interruptMetadataSync  = false;
+    bool              zeroMetadataWrite      = false;
+    bool              failMetadataRead       = false;
+    bool              failMetadataRename     = false;
+    std::size_t       writeCount             = 0;
+    std::size_t       syncCount              = 0;
+    std::size_t       writeLimit             = 2;
+    std::size_t       readLimit              = 2;
+    std::size_t       failWrite              = 0;
+    std::size_t       failSync               = 0;
+    int               writeError             = ENOSPC;
+    bool              interruptWrite         = false;
+    bool              interruptRead          = false;
+    bool              interruptSync          = false;
+    bool              zeroWrite              = false;
+    bool              failRead               = false;
     std::vector<bool> syncDirectories;
 };
 
@@ -374,4 +432,271 @@ const speclab::Register healthFailures{"File storage errors reach sink health wi
                                                      })
                                                .Execute();
                                        }};
+}  // namespace
+
+namespace {
+/** @brief A FIFO regression must fail promptly even when the implementation under test blocks. */
+[[nodiscard]] bool childCompletes(const std::function<bool()>& operation) {
+    const pid_t child = ::fork();
+    if (child < 0)
+        return false;
+    if (child == 0)
+        ::_exit(operation() ? 0 : 1);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    int        status   = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto answer = ::waitpid(child, &status, WNOHANG);
+        if (answer == child) {
+            // NOLINTNEXTLINE(hicpp-signed-bitwise): POSIX wait status macros decode the kernel's bit fields.
+            return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+        }
+        if (answer < 0 && errno != EINTR)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    (void)::kill(child, SIGKILL);
+    while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    return false;
+}
+
+[[nodiscard]] SegmentRef seed(Directory& directory) {
+    auto writer = FileStorageMedium::create(directory.config());
+    return (*writer)->open({.bytes = bytes}).segment;
+}
+
+const speclab::Register substitutions{
+    "File segment reopening rejects substitutions and closes descriptors on exec",
+    "integration",
+    [] {
+        return speclab::Test("file-storage-reopening-protection")
+            .Then("a symlink installed after startup is never read, appended through or reclaimed",
+                  [] {
+                      speclab::core::Checks checks;
+                      for (FileAccess access : {FileAccess::ReadWrite, FileAccess::ReadOnly}) {
+                          Directory  directory;
+                          Directory  foreign;
+                          const auto ref       = seed(directory);
+                          const auto targetRef = seed(foreign);
+                          const auto name      = directory.path / "0000000000000001.mdl";
+                          const auto target    = foreign.path / "0000000000000001.mdl";
+                          auto       config    = directory.config();
+                          config.access        = access;
+                          auto medium          = FileStorageMedium::create(config);
+                          std::filesystem::remove(name);
+                          std::filesystem::create_symlink(target, name);
+                          checks.expect(!(*medium)->read(ref, 0, 4) && (*medium)->lastError()->nativeError == ELOOP,
+                                        "O_NOFOLLOW rejects replacement after create");
+                          if (access == FileAccess::ReadWrite) {
+                              checks.expect((*medium)->append(ref, bytes).status == AppendStatus::Failed, "foreign bytes cannot be appended");
+                              checks.expect(!(*medium)->reclaim(ref) && std::filesystem::is_symlink(name), "link cannot be reclaimed as a segment");
+                          }
+                          auto readerConfig   = foreign.config();
+                          readerConfig.access = FileAccess::ReadOnly;
+                          auto reader         = FileStorageMedium::create(readerConfig);
+                          checks.expect((*reader)->read(targetRef, 0, 100) == std::optional(std::vector<std::uint8_t>(bytes.begin(), bytes.end())),
+                                        "foreign file remains unchanged");
+                      }
+                      checks.raise();
+                  })
+            .Then("a FIFO installed after reader startup is rejected within a deadline",
+                  [] {
+                      speclab::core::Checks checks;
+                      Directory             directory;
+                      const auto            ref    = seed(directory);
+                      auto                  config = directory.config();
+                      config.access                = FileAccess::ReadOnly;
+                      auto       medium            = FileStorageMedium::create(config);
+                      const auto name              = directory.path / "0000000000000001.mdl";
+                      std::filesystem::remove(name);
+                      checks.expect(::mkfifo(name.c_str(), 0600) == 0, "FIFO fixture created without an attached writer");
+                      checks.expect(childCompletes([&] {
+                                        return !(*medium)->read(ref, 0, 1) && (*medium)->lastError()->issue == FileStorageIssue::Inventory;
+                                    }),
+                                    "O_NONBLOCK allows type validation without waiting for a writer");
+                      checks.raise();
+                  })
+            .Then("a reopened segment descriptor is closed by exec",
+                  [] {
+                      speclab::core::Checks checks;
+                      Directory             directory;
+                      const auto            ref = seed(directory);
+                      FaultCalls            calls;
+                      auto                  config = directory.config();
+                      config.access                = FileAccess::ReadOnly;
+                      auto medium                  = FileStorageMedium::create(config, &calls);
+                      checks.expect((*medium)->read(ref, 0, 1).has_value(), "existing file opened through the lazy path");
+                      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): POSIX descriptor flags API.
+                      const int flags = ::fcntl(calls.lastDescriptor, F_GETFD);
+                      // NOLINTNEXTLINE(hicpp-signed-bitwise): FD_CLOEXEC is the POSIX descriptor flag being tested.
+                      checks.expect(flags >= 0 && (flags & FD_CLOEXEC) != 0, "close-on-exec is set on the reopened descriptor");
+                      const auto command = std::format("test ! -e /proc/self/fd/{}", calls.lastDescriptor);
+                      checks.expect(childCompletes([&] {
+                                        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg): execl requires a fixed, null-terminated list of arguments.
+                                        (void)::execl("/bin/sh", "sh", "-c", command.c_str(), static_cast<char*>(nullptr));
+                                        return false;
+                                    }),
+                                    "exec cannot inherit the segment descriptor");
+                      checks.raise();
+                  })
+            .Then("a cached descriptor cannot authorize unlink or append to a substituted inode",
+                  [] {
+                      speclab::core::Checks checks;
+                      Directory             directory;
+                      Directory             foreign;
+                      auto                  medium = FileStorageMedium::create(directory.config());
+                      const auto            ref    = (*medium)->open({.bytes = bytes}).segment;
+                      const auto            name   = directory.path / "0000000000000001.mdl";
+                      const auto            old    = foreign.path / "old-segment";
+                      std::filesystem::rename(name, old);
+                      std::filesystem::copy_file(old, name);
+                      checks.expect((*medium)->append(ref, bytes).status == AppendStatus::Failed && (*medium)->mutationsStopped(),
+                                    "cached inode is checked against its current name");
+                      checks.expect(!(*medium)->reclaim(ref) && std::filesystem::exists(name) && std::filesystem::exists(old),
+                                    "neither substituted nor original inode is removed");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+// NOLINTNEXTLINE(cppcoreguidelines-interfaces-global-init): the registry stores a lambda; file stream mode std::ios::out is used only when scenarios execute.
+const speclab::Register persistentReferences{
+    "File references are reserved persistently before segment creation",
+    "integration",
+    [] {
+        return speclab::Test("file-storage-reference-allocation")
+            .Then("reclaiming the highest reference and reopening never reuses it, even for an empty inventory",
+                  [] {
+                      speclab::core::Checks checks;
+                      Directory             directory;
+                      auto                  medium  = FileStorageMedium::create(directory.config());
+                      const auto            first   = (*medium)->open({.bytes = bytes}).segment;
+                      const auto            highest = (*medium)->open({.bytes = bytes}).segment;
+                      checks.expect((*medium)->reclaim(highest), "highest segment reclaimed");
+                      medium->reset();
+                      medium          = FileStorageMedium::create(directory.config());
+                      const auto next = (*medium)->open({.bytes = bytes}).segment;
+                      checks.expect(next > highest && !(*medium)->read(highest, 0, 1), "stale reference cannot name a new segment");
+                      checks.expect((*medium)->reclaim(first) && (*medium)->reclaim(next), "all remaining segments reclaimed");
+                      medium->reset();
+                      medium = FileStorageMedium::create(directory.config());
+                      checks.expect((*medium)->segments()->empty(), "allocator is excluded from the segment inventory");
+                      const auto last = (*medium)->open({.bytes = bytes}).segment;
+                      checks.expect(last > next && last != first && last != highest, "empty inventory retains the allocation high-water mark");
+                      checks.raise();
+                  })
+            .Then("short metadata transfers and interrupts are completed, invalid or regressed state is refused",
+                  [] {
+                      speclab::core::Checks checks;
+                      Directory             directory;
+                      FaultCalls            calls;
+                      calls.interruptMetadataWrite = true;
+                      calls.interruptMetadataSync  = true;
+                      auto medium                  = FileStorageMedium::create(directory.config(), &calls);
+                      checks.expect(medium.has_value() && calls.metadataWriteCount > 1, "initial allocator is fully persisted with retries");
+                      (void)(*medium)->open({.bytes = bytes});
+                      medium->reset();
+                      calls.interruptMetadataRead = true;
+                      medium                      = FileStorageMedium::create(directory.config(), &calls);
+                      checks.expect(medium.has_value() && !calls.interruptMetadataRead, "short interrupted allocator reads completed");
+                      medium->reset();
+                      {
+                          std::ofstream state(directory.path / ".mddlog-refs");
+                          state.write("mddref1\n0000000000000000\n", 25);
+                      }
+                      const auto regressed = FileStorageMedium::create(directory.config());
+                      checks.expect(!regressed && regressed.error().issue == FileStorageIssue::Inventory && regressed.error().nativeError == 0,
+                                    "allocator below an existing segment is a semantic rejection");
+                      std::filesystem::remove(directory.path / ".mddlog-refs");
+                      checks.expect(!FileStorageMedium::create(directory.config()), "writer cannot invent a counter for an existing archive");
+                      auto readerConfig   = directory.config();
+                      readerConfig.access = FileAccess::ReadOnly;
+                      checks.expect(FileStorageMedium::create(readerConfig).has_value(), "older archive remains inspectable read-only");
+                      checks.raise();
+                  })
+            .Then("reservation barriers, rename and zero-progress failures expose no new reference",
+                  [] {
+                      speclab::core::Checks checks;
+                      for (int fault : {0, 1, 2, 3}) {
+                          Directory  directory;
+                          FaultCalls calls;
+                          auto       medium = FileStorageMedium::create(directory.config(), &calls);
+                          if (fault < 2)
+                              calls.failMetadataSync = calls.metadataSyncCount + static_cast<std::size_t>(fault) + 1;
+                          else if (fault == 2)
+                              calls.failMetadataRename = true;
+                          else
+                              calls.zeroMetadataWrite = true;
+                          const auto opened = (*medium)->open({.bytes = bytes});
+                          checks.expect(opened.status == OpenStatus::Failed && opened.segment == 0 && (*medium)->mutationsStopped(),
+                                        "failed reservation never exposes a reference");
+                          checks.expect((*medium)->lastError()->nativeError == (fault == 2 ? EACCES : EIO), "reservation failure preserves its actual cause");
+                          checks.expect(std::ranges::none_of(std::filesystem::directory_iterator(directory.path),
+                                                             [](const auto& entry) {
+                                                                 return entry.path().extension() == ".mdl";
+                                                             }),
+                                        "no segment created before counter barriers acknowledged");
+                          medium->reset();
+                          const auto reopened = FileStorageMedium::create(directory.config());
+                          if (fault == 1)
+                              checks.expect(reopened.has_value(), "after rename an unacknowledged reservation can conservatively consume a reference");
+                          else
+                              checks.expect(!reopened && reopened.error().issue == FileStorageIssue::Inventory,
+                                            "interrupted temporary state is not silently repaired");
+                      }
+                      checks.raise();
+                  })
+            .Then("reference exhaustion never wraps to an old identity",
+                  [] {
+                      speclab::core::Checks checks;
+                      Directory             directory;
+                      { auto medium = FileStorageMedium::create(directory.config()); }
+                      {
+                          std::ofstream state(directory.path / ".mddlog-refs");
+                          state.write("mddref1\nffffffffffffffff\n", 25);
+                      }
+                      auto medium = FileStorageMedium::create(directory.config());
+                      checks.expect(medium && (*medium)->open({.bytes = bytes}).status == OpenStatus::NoSpace, "UINT64_MAX stops allocation");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register inventoryDiagnostics{
+    "Inventory validation does not manufacture a syscall errno",
+    "integration",
+    [] {
+        return speclab::Test("file-storage-inventory-diagnostics")
+            .Then("bad names, invalid files and excess segment count have nativeError zero",
+                  [] {
+                      speclab::core::Checks checks;
+                      for (int kind : {0, 1, 2}) {
+                          Directory  directory;
+                          const auto ref = seed(directory);
+                          (void)ref;
+                          if (kind == 0)
+                              std::filesystem::rename(directory.path / "0000000000000001.mdl", directory.path / "unexpected");
+                          else if (kind == 1)
+                              (void)::chmod((directory.path / "0000000000000001.mdl").c_str(), 0644);
+                          else {
+                              auto writer = FileStorageMedium::create(directory.config());
+                              (void)(*writer)->open({.bytes = bytes});
+                          }
+                          auto config = directory.config();
+                          if (kind == 2)
+                              config.maxSegments = 1;
+                          errno              = EIO;
+                          const auto refused = FileStorageMedium::create(config);
+                          checks.expect(!refused && refused.error().issue == FileStorageIssue::Inventory && refused.error().nativeError == 0,
+                                        "semantic inventory rejection does not report stale errno");
+                      }
+                      Directory  directory;
+                      FaultCalls calls;
+                      { auto medium = FileStorageMedium::create(directory.config(), &calls); }
+                      calls.failMetadataRead = true;
+                      const auto unreadable  = FileStorageMedium::create(directory.config(), &calls);
+                      checks.expect(!unreadable && unreadable.error().nativeError == EIO, "a failing system read keeps its actual errno");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 }  // namespace

@@ -1,7 +1,8 @@
 # Vérification locale du premier lot #114
 
-État : résultats locaux, sans acceptation du profil physique. Révision : diff de la branche
-`114-file-storage` fondée sur `e3635d0`, identifiable par Git lors de la revue.
+État : résultats locaux, sans acceptation du profil physique. Campagne initiale :
+`f34d50b` sur la branche `114-file-storage`, fondée sur `e3635d0`. Les corrections
+de revue de PR #134 sont vérifiées séparément ci-dessous.
 
 Campagne du 2026-10-05 : Linux 7.0.0-34-generic, glibc 2.43, Clang/libc++ 21.1.8, CMake 4.2.3, Ninja, preset
 `ninja-clang` Release, exemples/tests/backend activés. Les fichiers de tests vivent dans
@@ -59,9 +60,44 @@ cmake --build build-114-without-files --parallel 4
 | `file-storage-failures` | Écritures interrompues, octets partiels conservés, ENOSPC/EACCES/EIO injectés, zéro progression, lecture en erreur, limites, retrait non confirmé |
 | `file-storage-health` | Échec de chaque barrière publié par la santé du sink, aucune position/claim durable avancé |
 | `file-storage-ownership` | Verrous concurrents, ressources libérées, noms/liens/permissions et configuration refusés |
+| `file-storage-reopening-protection` | Substitutions par lien/FIFO après create, délai de surveillance, fork/exec réel, inode conservé remplacé |
+| `file-storage-reference-allocation` | Références retirées jamais réutilisées après redémarrage même sans segments, transferts de métadonnées courts/interrompus, chaque barrière, rename et zéro progression en échec, compteur régressé/absent/épuisé |
+| `file-storage-inventory-diagnostics` | Nom/type/permissions/capacité rejetés avec errno nul malgré errno périmé, erreur système de lecture conservée |
 
 Les journaux locaux de configuration, build, CTest et analyse sont conservés dans
 `build-clang/verification-114/` (artefacts ignorés, sans archivage pérenne présumé).
+
+## Corrections de revue de PR #134
+
+Campagne complémentaire du 2026-10-05 sur le même environnement et volume XFS,
+appliquée au diff suivant `f34d50b` :
+
+- Compilation et liens : réussis.
+- CTest complet : **182/182 réussis**, dont les neuf scénarios du backend et les consommateurs
+  de modules en source et après installation.
+- Analyse statique LLVM 21 : les deux unités modifiées (`FileStorageMedium.cppm` et
+  `FileStorageSpec.cpp`) sont conformes avec diagnostics promus en erreurs. La preuve
+  globale des 75 unités ci-dessus concerne la révision initiale `f34d50b`.
+- Format : **84 fichiers conformes**. Dossier : structure et références conformes,
+  **30 tests documentaires réussis**.
+
+```bash
+cmake --build --preset ninja-clang --parallel 4
+TMPDIR="$PWD/build-clang/file-storage-tests" ctest --test-dir build-clang --output-on-failure --parallel 4
+clang-tidy-21 -p build-clang --warnings-as-errors='*' include/mddlog/adapter/FileStorageMedium.cppm
+clang-tidy-21 -p build-clang --warnings-as-errors='*' tests/spec/FileStorageSpec.cpp
+scripts/check-format.sh
+python3 scripts/check-development-file.py
+python3 -m unittest discover -s tests/documentation -p 'Test*.py'
+```
+
+Le FIFO est testé dans un enfant surveillé pendant deux secondes pour qu'une régression
+bloquante échoue sans suspendre la suite. Le contrôle d'exec vérifie effectivement
+l'absence du descripteur dans `/proc/self/fd` après lancement de `/bin/sh`.
+Ces processus ne constituent pas une campagne d'arrêt brutal de l'écriture.
+Les pannes du compteur sont injectées séparément des barrières d'audit : aucun segment
+n'est créé avant la réservation confirmée ; un temporaire résiduel bloque le redémarrage.
+Les journaux sont conservés dans `build-clang/verification-134/` (artefacts ignorés).
 
 Réserves : les erreurs de système d'exploitation injectées passent par `FileStorageCalls`
 sur de vrais descripteurs, sans preuve de toutes les conditions physiques correspondantes.
