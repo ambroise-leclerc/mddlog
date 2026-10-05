@@ -89,3 +89,10 @@ Les rejets de validation portent un errno nul, distinct des erreurs système.
 VER-023 à VER-026 et [la campagne locale](../../../docs/file-storage-validation.md) distinguent
 réouverture et erreurs injectées de la qualification matérielle encore ouverte en GAP-007.
 Les formats, le cœur, les appels métier et les politiques de reprise/rétention ne changent pas.
+
+Le [protocole de campagne](../../../docs/file-storage-test-plan.md) couvre VER-027–029 :
+worker Linux séparé, checkpoints observés avant SIGKILL, comparaison directe aux octets
+attendus puis aux lectures du backend, refus EACCES sans privilèges et ENOSPC sur tmpfs
+privé borné. Le banc vérifie aussi descripteurs et allocation monotone pendant 64 cycles.
+Il ne modifie pas le backend ni ne qualifie les caches/alimentation. Les verdicts PARTIAL
+et SKIP sont distincts d’une campagne complète ; le job hôte exige le volume réel.

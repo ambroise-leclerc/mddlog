@@ -102,7 +102,8 @@ Les journaux sont conservés dans `build-clang/verification-134/` (artefacts ign
 Réserves : les erreurs de système d'exploitation injectées passent par `FileStorageCalls`
 sur de vrais descripteurs, sans preuve de toutes les conditions physiques correspondantes.
 Le mode `QualifiedFsync` des essais valide la décision de confirmation et l'ordre des appels,
-pas l'éligibilité de cette machine. Aucun essai de coupure électrique ni d'arrêt brutal
-n'est revendiqué. Intégration complète registre/reprise/ancrage et fournisseur indépendant
+pas l'éligibilité de cette machine. Ces campagnes initiales ne revendiquent aucun essai de coupure électrique
+ni d'arrêt brutal. Le [protocole logiciel/physique](file-storage-test-plan.md) et
+[la campagne suivante](file-storage-campaign-results.md) ajoutent les arrêts SIGKILL réels. Intégration complète registre/reprise/ancrage et fournisseur indépendant
 restent ouvertes. Le profil, les limites et les obligations sont dans
 [le contrat](file-storage.md) ; GAP-007 conserve la qualification de #114.

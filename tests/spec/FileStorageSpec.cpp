@@ -279,14 +279,15 @@ const speclab::Register failures{
             .Then("ENOSPC, access failure and zero progress never return successful writes",
                   [] {
                       speclab::core::Checks checks;
-                      for (int code : {ENOSPC, EACCES, EIO}) {
+                      for (int code : {ENOSPC, EDQUOT, EACCES, EIO}) {
                           Directory  directory;
                           FaultCalls calls;
                           calls.failWrite   = 2;
                           calls.writeError  = code;
                           auto       made   = FileStorageMedium::create(directory.config(), &calls);
                           const auto opened = (*made)->open({.bytes = bytes});
-                          checks.expect(opened.status == (code == ENOSPC ? OpenStatus::NoSpace : OpenStatus::Failed), "partial open returns failure");
+                          checks.expect(opened.status == (code == ENOSPC || code == EDQUOT ? OpenStatus::NoSpace : OpenStatus::Failed),
+                                        "partial open returns failure");
                           const auto held = (*made)->segments();
                           checks.expect(held && held->size() == 1 && held->front().size == 2, "torn creation retained for recovery inspection");
                           checks.expect((*made)->mutationsStopped() && (*made)->lastError()->nativeError == code, "writer stopped with original errno");

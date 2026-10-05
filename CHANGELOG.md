@@ -12,6 +12,11 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Add an executable file-storage test protocol and Linux campaign worker/supervisor
+  for observed SIGKILL checkpoints, real EACCES/ENOSPC, counter corruption and resource
+  cycles. CI repeats interruptions and archives evidence; physical power-loss
+  qualification remains open (#114, #120).
+
 - Add the optional Linux `FileStorageMedium` adapter, with private segment files,
   exclusive writer/shared offline reader ownership, bounded capacity and reads,
   complete short transfers, and explicit file/directory barriers (#114, part of #112).

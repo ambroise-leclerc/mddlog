@@ -38,6 +38,12 @@ cette collecte pour #120/#122. Les tests synthétiques de persistance ne qualifi
 support réel ; les essais de panne électrique, redémarrage et rollback du profil restent dus.
 Mesurer mémoire et temps sur le profil choisi, documenter les charges et critères avant campagne.
 
+Le [protocole du stockage fichiers](../../docs/file-storage-test-plan.md) fixe checkpoints,
+oracle indépendant, budgets du banc, campagnes courtes/répétées et procédure de coupures
+matérielles. Les [résultats](../../docs/file-storage-campaign-results.md) distinguent SIGKILL,
+EACCES/ENOSPC réels et qualification physique non réalisée. La CI archive les rapports ;
+leur export avant expiration et leur acceptation restent des obligations de #120/#122.
+
 ## Configuration et composants tiers
 
 Git identifie sources, documents et changements. CMake fait foi pour version et modules ; les
