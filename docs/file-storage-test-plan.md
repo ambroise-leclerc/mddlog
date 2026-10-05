@@ -78,7 +78,7 @@ n’est appliqué hors de ces répertoires d’essai.
 | FS-07 | `real-enospc` : ajout, réservation puis création de données | ENOSPC réel sur volume privé plein ; ajout échoué, réservation interrompue bloquée, création partielle conservée sans référence exposée ; `NoSpace` vérifié |
 | FS-08 | `counter-0..3` | Compteur vide, version inconnue, régressée ou hexadécimal invalide refusés à errno nul |
 | FS-09 | `resources` | 64 créations/syncs/retraits et 64 démarrages refusés dans le même processus : nombre de descripteurs stable et références strictement croissantes |
-| FS-10 | Tests Python `TestFileStorageCampaign.py` | Un worker qui sort sans checkpoint, un mauvais checkpoint, un préfixe perdu une fausse confirmation, un compteur confirmé régressé masqué par un résidu, une sortie excessive ou un volume obligatoire indisponible font échouer le banc |
+| FS-10 | Tests Python `TestFileStorageCampaign.py` | Sortie sans checkpoint, point erroné, préfixe perdu, fausse confirmation, compteur régressé masqué, sortie excessive ou volume obligatoire indisponible : le banc doit échouer |
 
 Les 26 points FS-05 sont :
 
