@@ -41,7 +41,7 @@ l'exclusion du rollback. Les règles exactes restent dans ADR-004 et les sources
 
 ## Limites de conception ouvertes
 
-Aucun backend fichier/flash ni fournisseur indépendant réel n'est livré. Aucune signature ne
+Le backend fichiers Linux optionnel est implémenté avec un contrat à revoir en #114 ; aucun support physique n'est qualifié et aucun fournisseur indépendant réel n'est livré. Aucune signature ne
 prouve l'auteur. Le lecteur matérialise des données dans des conteneurs allouants : ses budgets
 restent à établir. L'hôte appelle aujourd'hui les primitives de pilotage ; #116 doit les regrouper
 hors code métier. Les suites de tests et guides de migration liés par les VER décrivent ce qui
@@ -72,3 +72,20 @@ REQ-009/REQ-011 sont implémentées avec la réserve d'intégration locale. L'ap
 et d'admission visible ; les risques restent ouverts et l'hôte maîtrise toujours SPSC,
 durée de vie des destinations et réponse aux refus. Aucune confidentialité ou qualification
 de dispositif n'est fournie ; RISK-009 conserve sa limite.
+
+## Premier backend fichiers Linux (#114)
+
+CTRL-007 inclut `FileStorageMedium`, facultatif dans l'adaptateur. Le
+[contrat](../../../docs/file-storage.md) fixe propriété privée, verrou exclusif ou lecteurs
+partagés hors ligne, identité opaque, limites, transferts complets et barrière fichier puis
+répertoire. Éligibilité non inférée : `Unqualified` répond `Unsupported`. Les erreurs de
+mutation arrêtent le rédacteur ; les octets partiels restent pour la reprise existante.
+Le compteur privé `.mddlog-refs` réserve chaque référence avant création par écriture
+complète, fsync du temporaire, remplacement atomique puis fsync du répertoire, y compris
+en mode non qualifié sans confirmation d'audit. Le retrait ne réduit jamais ce compteur ;
+un état incomplet ou régressé est refusé sans réparation. Les réouvertures empêchent suivi
+de liens, blocage FIFO et fuite à exec ; nom et inode conservé doivent correspondre.
+Les rejets de validation portent un errno nul, distinct des erreurs système.
+VER-023 à VER-026 et [la campagne locale](../../../docs/file-storage-validation.md) distinguent
+réouverture et erreurs injectées de la qualification matérielle encore ouverte en GAP-007.
+Les formats, le cœur, les appels métier et les politiques de reprise/rétention ne changent pas.

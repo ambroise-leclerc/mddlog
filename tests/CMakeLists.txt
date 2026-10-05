@@ -122,6 +122,14 @@ add_executable(mddlog_specs
     spec/VersionSpec.cpp
 )
 
+if(MDDLOG_BUILD_FILE_STORAGE)
+    add_executable(mddlog_file_storage_consumer consumer/FileStorageConsumer.cpp)
+    target_link_libraries(mddlog_file_storage_consumer PRIVATE mddlog::mddlog)
+    add_test(NAME SourceTreeFileStorageConsumer COMMAND mddlog_file_storage_consumer)
+    set_tests_properties(SourceTreeFileStorageConsumer PROPERTIES LABELS "build;storage")
+    target_sources(mddlog_specs PRIVATE spec/FileStorageSpec.cpp)
+endif()
+
 target_link_libraries(mddlog_specs PRIVATE mddlog::mddlog speclab::speclab)
 target_include_directories(mddlog_specs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

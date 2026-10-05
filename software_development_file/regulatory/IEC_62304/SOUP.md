@@ -12,7 +12,7 @@ classification système du fabricant (GAP-005), pas une conséquence automatique
 
 SpecLab est réservé aux tests ; CPM est un outil de construction dont une copie est intégrée au dépôt. CMake, Ninja,
 compilateurs, analyseurs, Python, Git et runners CI influencent la construction ou les preuves
-sans être liés au composant. Les backends réels et leur pile système seront ajoutés par #114/#115.
+sans être liés au composant. Le premier backend Linux de #114 ajoute la pile système DEP-009 (appels Linux et libc) ; matériel, système de fichiers et caches restent à qualifier. Le fournisseur réel #115 reste prévu.
 Les versions supportées et exclusions restent gouvernées par CMake ; en particulier GCC 16.2
 est exclu pour corruption des BMI, sans généraliser une garantie aux versions ultérieures.
 

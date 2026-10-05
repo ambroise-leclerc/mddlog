@@ -86,7 +86,7 @@
       "status": "open",
       "issue": 114,
       "owner": "Ambroise Leclerc",
-      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi."
+      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Premier backend Linux et suite locale implémentés en #114, contrat docs/file-storage.md ; qualification système de fichiers/matériel/caches et campagnes physiques toujours ouvertes."
     },
     {
       "id": "GAP-008",
@@ -267,11 +267,13 @@
       "title": "Confirmation après sync et santé du stockage",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
+        "docs/file-storage.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditStore.cppm",
-        "include/mddlog/adapter/AuditMedium.cppm"
+        "include/mddlog/adapter/AuditMedium.cppm",
+        "include/mddlog/adapter/FileStorageMedium.cppm"
       ]
     },
     {
@@ -626,6 +628,54 @@
       "scenario": "context-integration-interrupted-scope",
       "evidence": "docs/contextual-api-integration.md",
       "limits": "Composant applicatif local ; revue mainteneur acceptée pour #113/#130, décision enregistrée dans docs/contextual-api-integration.md ; application indépendante encore à valider en #122, sans qualification exhaustive de concurrence."
+    },
+    {
+      "id": "VER-023",
+      "title": "Support fichiers Linux, conformité et erreurs de barrières",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-barriers",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Transferts/erreurs injectés sur vrais fichiers et réouverture ; aucune qualification matérielle ou campagne de coupures. GAP-007 reste ouvert."
+    },
+    {
+      "id": "VER-024",
+      "title": "Réouverture sans liens, blocage FIFO ni fuite à exec",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-reopening-protection",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Substitutions observées et fork/exec réels ; accès concurrent soumis au verrou consultatif, sans protection contre un propriétaire malveillant."
+    },
+    {
+      "id": "VER-025",
+      "title": "Allocation persistante sans réutilisation des références",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-reference-allocation",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Retrait, redémarrage et erreurs de réservation injectées ; restauration externe du compteur et qualification physique hors preuve."
+    },
+    {
+      "id": "VER-026",
+      "title": "Diagnostic exact des rejets d’inventaire",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/FileStorageSpec.cpp",
+      "scenario": "file-storage-inventory-diagnostics",
+      "evidence": "docs/file-storage-validation.md",
+      "limits": "Rejets sémantiques sans errno et erreur de lecture injectée ; conditions physiques des appels système non exhaustives."
     }
   ],
   "risks": [
@@ -944,7 +994,11 @@
       ],
       "verifications": [
         "VER-007",
-        "VER-008"
+        "VER-008",
+        "VER-023",
+        "VER-024",
+        "VER-025",
+        "VER-026"
       ],
       "gaps": [
         "GAP-007",
@@ -1226,6 +1280,21 @@
       "monitoring": "Plan : mainteneur examine, si utilisés, https://ccache.dev/releasenotes.html pour le cache BMI, https://www.doxygen.nl/manual/changelog.html pour la génération documentaire et https://github.com/cppcheck-opensource/cppcheck/releases pour l’analyse, avant mise à jour et release ; rejouer les contrôles concernés et noter versions/options et anomalies.",
       "gaps": [
         "GAP-005"
+      ]
+    },
+    {
+      "id": "DEP-009",
+      "name": "Pile système du backend fichiers Linux",
+      "scope": "deployed",
+      "version": "Linux et libc du déploiement ; versions exactes, système de fichiers, montage, matériel/firmware et caches à archiver en #114",
+      "provenance": "include/mddlog/adapter/FileStorageMedium.cppm",
+      "license": "Noyau Linux GPL-2.0-only avec exception syscall ; libc et pile du profil à inventorier, GAP-005.",
+      "classification": "Composants déployés, classement SOUP à confirmer par le fabricant.",
+      "knownIssues": "flock consultatif ; fsync ne qualifie pas un matériel qui ignore les vidages. Éligibilité non inférée ; Unqualified par défaut. Compteur persistant soumis aux barrières de la même pile ; aucune protection indépendante contre restauration externe.",
+      "monitoring": "Plan : mainteneur et intégrateur examinent https://www.kernel.org/ et les avis du distributeur, de la libc et du constructeur avant qualification/mise à jour du profil ; rejouer conformité et campagnes physiques, conserver versions et anomalies.",
+      "gaps": [
+        "GAP-005",
+        "GAP-007"
       ]
     }
   ]

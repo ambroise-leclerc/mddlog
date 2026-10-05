@@ -8,7 +8,8 @@
 #
 # Run via: cmake -D BUILD_DIR=... -D CXX_COMPILER=... -D GENERATOR=...
 #              -D EXPECTED_VERSION=... -D SOURCE_DIR=... -D CONSUMER_KIND=full|core
-#              [-D CONFIG=<configuration under test>] -P TestInstallConsumer.cmake
+#              [-D CONFIG=<configuration under test>] [-D FILE_STORAGE=ON|OFF]
+#              -P TestInstallConsumer.cmake
 # (see the two install-consumer add_test() calls in the top-level CMakeLists.txt)
 
 foreach(required_var BUILD_DIR CXX_COMPILER GENERATOR EXPECTED_VERSION SOURCE_DIR CONSUMER_KIND)
@@ -99,6 +100,10 @@ int main() {\n\
 set(consumer_executables "consumer|main.cpp|mddlog::mddlog" "consumer_ring|main_ring.cpp|mddlog::mddlog,mddlog::core")
 file(COPY_FILE "${SOURCE_DIR}/tests/consumer/ContextAdapterConsumer.cpp" "${consumer_src}/main_context.cpp")
 list(APPEND consumer_executables "consumer_context|main_context.cpp|mddlog::mddlog")
+    if(FILE_STORAGE)
+        file(COPY_FILE "${SOURCE_DIR}/tests/consumer/FileStorageConsumer.cpp" "${consumer_src}/main_file_storage.cpp")
+        list(APPEND consumer_executables "consumer_file_storage|main_file_storage.cpp|mddlog::mddlog")
+    endif()
 else()
     # Reuse the exact program exercised in-tree. Only mddlog::core may be linked here.
     file(MAKE_DIRECTORY "${consumer_src}")

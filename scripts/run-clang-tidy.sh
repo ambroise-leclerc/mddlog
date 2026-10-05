@@ -77,6 +77,19 @@ collect_scope tests/spec '*.cpp'
 collect_scope examples '*.cpp'
 [ "${#scope[@]}" -gt 0 ] || fail "the analysis scope resolved to no files; refusing to pass vacuously."
 
+# Explicitly exclude only the known optional Linux backend when disabled in this build.
+if grep -q '^MDDLOG_BUILD_FILE_STORAGE:BOOL=OFF$' "$build_dir/CMakeCache.txt"; then
+    enabled_scope=()
+    for f in "${scope[@]}"; do
+        case "$f" in
+            include/mddlog/adapter/FileStorageMedium.cppm|tests/spec/FileStorageSpec.cpp|examples/FileAudit.cpp)
+                echo "run-clang-tidy: excluded disabled file backend: $f" ;;
+            *) enabled_scope+=("$f") ;;
+        esac
+    done
+    scope=("${enabled_scope[@]}")
+fi
+
 missing=()
 for f in "${scope[@]}"; do
     grep -Fq "\"file\": \"$root/$f\"" "$db" || missing+=("$f")
