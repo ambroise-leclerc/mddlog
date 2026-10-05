@@ -58,14 +58,20 @@ class CampaignNegativeControls(unittest.TestCase):
 directory = pathlib.Path(sys.argv[1])
 if sys.argv[2] == 'seed':
     (directory / '0000000000000001.mdl').write_bytes({CAMPAIGN.BASELINE!r})
+    (directory / '0000000000000002.mdl').write_bytes({CAMPAIGN.INITIAL!r})
+    (directory / '.mddlog-refs').write_bytes(b'mddref1\\n0000000000000002\\n')
+    for path in directory.iterdir():
+        path.chmod(0o600)
     print(json.dumps({{'event':'operation', 'ok':True, 'durable':True}}))
 else:
     (directory / '0000000000000001.mdl').write_bytes(b'damaged')
     print(json.dumps({{'event':'checkpoint', 'point':sys.argv[3]}}), flush=True)
     os.kill(os.getpid(), signal.SIGSTOP)
 """)
+        medium = self.directory / "medium"
+        medium.mkdir(mode=0o700)
         with self.assertRaisesRegex(AssertionError, "confirmed baseline changed"):
-            CAMPAIGN.crash_case(binary, self.directory, "open", "metadata.file.after")
+            CAMPAIGN.crash_case(binary, medium, "open", "open.before")
 
     @unittest.skipUnless(sys.platform == "linux", "pipe collector is a Linux campaign")
     def test_worker_output_is_bounded(self):
@@ -78,3 +84,18 @@ else:
              mock.patch.object(CAMPAIGN, "observed_kill", return_value=[{"event": "operation", "ok": True, "durable": False}]):
             with self.assertRaisesRegex(AssertionError, "did not acknowledge Durable"):
                 CAMPAIGN.crash_case(self.directory / "worker", self.directory, "sync", "sync.acknowledged")
+
+    @unittest.skipUnless(sys.platform == "linux", "private inode oracle is a Linux campaign")
+    def test_residue_cannot_hide_a_regressed_confirmed_counter(self):
+        files = {"0000000000000001.mdl": CAMPAIGN.BASELINE,
+                 "0000000000000002.mdl": CAMPAIGN.INITIAL,
+                 ".mddlog-refs": b"mddref1\n0000000000000001\n",
+                 ".mddlog-refs.tmp": b"mddref1"}
+        for name, data in files.items():
+            path = self.directory / name
+            path.write_bytes(data)
+            path.chmod(0o600)
+        with mock.patch.object(CAMPAIGN, "worker", return_value=[{"event": "operation", "durable": True}]), \
+             mock.patch.object(CAMPAIGN, "observed_kill", return_value=[{"event": "checkpoint", "point": "metadata.partial"}]):
+            with self.assertRaisesRegex(AssertionError, "confirmed counter changed"):
+                CAMPAIGN.crash_case(self.directory / "worker", self.directory, "open", "metadata.partial")

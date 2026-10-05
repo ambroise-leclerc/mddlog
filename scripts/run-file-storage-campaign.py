@@ -15,6 +15,7 @@ from pathlib import Path
 import platform
 import selectors
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -146,6 +147,23 @@ def crash_case(binary, directory, operation, point):
             require(acknowledged["durable"], "sync checkpoint did not acknowledge Durable")
         if operation == "open":
             require(acknowledged["ref"] == 3, "opening checkpoint did not expose the expected reference")
+    expected_names = {".mddlog-refs", segment_name(1)}
+    if operation != "reclaim" or point == "reclaim.before":
+        expected_names.add(segment_name(2))
+    if point in {"segment.partial", "segment.written", "open.acknowledged"}:
+        expected_names.add(segment_name(3))
+    if point in RESIDUAL:
+        expected_names.add(".mddlog-refs.tmp")
+    require({p.name for p in directory.iterdir()} == expected_names, "unexpected inventory objects after interruption")
+    for path in directory.iterdir():
+        metadata = path.lstat()
+        require(stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1 and metadata.st_uid == os.geteuid()
+                and metadata.st_mode & 0o077 == 0, "interruption left a foreign or non-private object")
+    counter = 3 if operation == "open" and point not in RESIDUAL and point != "open.before" else 2
+    require((directory / ".mddlog-refs").read_bytes() == f"mddref1\n{counter:016x}\n".encode(), "confirmed counter changed outside atomic replacement")
+    if point in RESIDUAL:
+        temporary = b"mddref1\n0000000000000003\n"
+        require((directory / ".mddlog-refs.tmp").read_bytes() == (temporary[:7] if point == "metadata.partial" else temporary), "unexpected reservation residue")
     require((directory / segment_name(1)).read_bytes() == BASELINE, "confirmed baseline changed")
     target = directory / segment_name(2)
     if operation == "reclaim" and point != "reclaim.before":
@@ -164,7 +182,9 @@ def crash_case(binary, directory, operation, point):
     if point in {"segment.partial", "segment.written", "open.acknowledged"}:
         content = new_segment.read_bytes()
         require(content and PENDING.startswith(content), "new segment is not the intended prefix")
-        if point != "segment.partial":
+        if point == "segment.partial":
+            require(len(content) < len(PENDING), "partial checkpoint did not preserve a proper prefix")
+        else:
             require(content == PENDING, "observed complete opening is missing")
     else:
         require(not new_segment.exists(), "segment created before reservation completed")
