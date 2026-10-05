@@ -1,6 +1,4 @@
 /** @brief Linux file backend conformity, real restart and deterministic system-call failures (#114). */
-#include "framework/StorageMediumConformance.hpp"
-
 #include <cerrno>
 #include <csignal>
 #include <cstdlib>
@@ -15,6 +13,9 @@ import mddlog.adapter.filestoragemedium;
 import mddlog.adapter.auditstore;
 import mddlog.core.auditevent;
 import speclab;
+
+// POSIX headers above must precede the std import, including imports in this helper.
+#include "framework/StorageMediumConformance.hpp"
 
 namespace {
 using namespace mddlog::adapter;
