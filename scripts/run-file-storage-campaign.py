@@ -139,6 +139,13 @@ def crash_case(binary, directory, operation, point):
     require(result(worker(binary, directory, "seed"))["durable"], "seed barriers were not acknowledged")
     evidence = {"operation": operation, "point": point,
                 "events": observed_kill(binary, directory, operation, point)}
+    if point.endswith(".acknowledged"):
+        acknowledged = result(evidence["events"])
+        require(acknowledged["ok"], "checkpoint did not acknowledge a successful operation")
+        if operation == "sync":
+            require(acknowledged["durable"], "sync checkpoint did not acknowledge Durable")
+        if operation == "open":
+            require(acknowledged["ref"] == 3, "opening checkpoint did not expose the expected reference")
     require((directory / segment_name(1)).read_bytes() == BASELINE, "confirmed baseline changed")
     target = directory / segment_name(2)
     if operation == "reclaim" and point != "reclaim.before":
@@ -258,6 +265,8 @@ def volume_child(binary, mountpoint):
         try:
             failure = result(worker(binary, directory, operation))
             require(not failure["ok"] and failure["errno"] == errno.ENOSPC and failure["stopped"], "backend did not report the real ENOSPC")
+            if operation == "open-big":
+                require(failure["no_space"], "ENOSPC opening did not return NoSpace")
             require(not failure["durable"], "failed mutation confirmed data")
             require((directory / segment_name(1)).read_bytes() == b"B" * 4096, "confirmed baseline changed on full volume")
             target = (directory / segment_name(2)).read_bytes()

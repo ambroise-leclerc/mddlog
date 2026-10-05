@@ -44,6 +44,7 @@ class CampaignNegativeControls(unittest.TestCase):
         self.assertEqual(CAMPAIGN.observed_kill(binary, self.directory, "read", "read.partial"),
                          [{"event": "checkpoint", "point": "read.partial"}])
 
+    @unittest.skipUnless(sys.platform == "linux", "mount namespace is a Linux campaign")
     def test_required_volume_cannot_be_skipped(self):
         denied = subprocess.CompletedProcess([], 1, "", "namespace unavailable")
         with mock.patch.object(CAMPAIGN.subprocess, "run", return_value=denied):
@@ -71,3 +72,9 @@ else:
         binary = self.fake_worker("import sys\nsys.stdout.write('x' * (3 * 1024 * 1024))\n")
         with self.assertRaisesRegex(AssertionError, "output exceeds campaign budget"):
             CAMPAIGN.execute([str(binary)])
+
+    def test_a_checkpoint_cannot_promote_failed_sync_to_confirmation(self):
+        with mock.patch.object(CAMPAIGN, "worker", return_value=[{"event": "operation", "durable": True}]), \
+             mock.patch.object(CAMPAIGN, "observed_kill", return_value=[{"event": "operation", "ok": True, "durable": False}]):
+            with self.assertRaisesRegex(AssertionError, "did not acknowledge Durable"):
+                CAMPAIGN.crash_case(self.directory / "worker", self.directory, "sync", "sync.acknowledged")

@@ -75,10 +75,10 @@ n’est appliqué hors de ces répertoires d’essai.
 | FS-04 | `file-storage-ownership`, `file-storage-reopening-protection`, `file-storage-inventory-diagnostics` | Propriété, verrou, liens/FIFO/inodes substitués, exec et diagnostics exacts |
 | FS-05 | `kill-<répétition>-<point>` dans le rapport du superviseur | Point demandé observé, retour du worker égal à −SIGKILL, préfixes inchangés, reprise/identité selon oracle ci-dessus |
 | FS-06 | `permission-open/append/read/reclaim` | EACCES réellement renvoyé par le noyau ; octets inchangés, refus explicite, arrêt sur mutation échouée |
-| FS-07 | `real-enospc` : ajout, réservation puis création de données | ENOSPC réel sur volume privé plein ; ajout échoué, réservation interrompue bloquée, création partielle conservée sans référence exposée |
+| FS-07 | `real-enospc` : ajout, réservation puis création de données | ENOSPC réel sur volume privé plein ; ajout échoué, réservation interrompue bloquée, création partielle conservée sans référence exposée ; `NoSpace` vérifié |
 | FS-08 | `counter-0..3` | Compteur vide, version inconnue, régressée ou hexadécimal invalide refusés à errno nul |
 | FS-09 | `resources` | 64 créations/syncs/retraits et 64 démarrages refusés dans le même processus : nombre de descripteurs stable et références strictement croissantes |
-| FS-10 | Tests Python `TestFileStorageCampaign.py` | Un worker qui sort sans checkpoint, un mauvais checkpoint, un préfixe perdu une sortie excessive ou un volume obligatoire indisponible font échouer le banc |
+| FS-10 | Tests Python `TestFileStorageCampaign.py` | Un worker qui sort sans checkpoint, un mauvais checkpoint, un préfixe perdu une fausse confirmation, une sortie excessive ou un volume obligatoire indisponible font échouer le banc |
 
 Les 26 points FS-05 sont :
 
@@ -93,7 +93,8 @@ Les 26 points FS-05 sont :
 Un checkpoint est émis et vidé sur stdout **après** le syscall lorsqu’il porte `.after`,
 `.written`, `.partial` ou `.unlinked`. Le worker s’arrête par SIGSTOP ; le superviseur lui
 envoie SIGKILL seulement après réception du point demandé. Les accusés d’opération sont
-recueillis avant les checkpoints `.acknowledged`. Un timeout ou une sortie prématurée échoue,
+recueillis avant les checkpoints `.acknowledged` et doivent annoncer un succès effectif
+(`Durable` pour sync, référence attendue pour open). Un timeout ou une sortie prématurée échoue,
 il ne devient jamais une interruption réussie. Le seam limite les transferts aux checkpoints
 partiels ; le syscall écrit/lit réellement les octets. Les erreurs de FS-06/07 ne sont pas injectées.
 

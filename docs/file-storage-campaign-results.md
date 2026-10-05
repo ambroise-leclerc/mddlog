@@ -42,7 +42,7 @@ python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 | Refus EACCES réels | Ouverture, ajout, lecture et retrait refusés ; préfixes inchangés et erreur native conservée |
 | Ressources | 64 créations/barrières/retraits et 64 factories refusées sans croissance des descripteurs du worker ; références finales à 66 |
 | Superviseur | Cinq descripteurs avant/après chaque invocation locale ; enfants tués et récoltés |
-| Contrôles négatifs Python et dossier | 36 tests réussis ; structure et références conformes |
+| Contrôles négatifs Python et dossier | 37 tests réussis ; structure et références conformes |
 | Format et analyse statique | 85 fichiers au format LLVM 21 ; les deux unités C++ modifiées conformes sous clang-tidy 21 |
 
 La comparaison à l’oracle inclut préfixes confirmés, suffixes partiels, fichiers nouveaux,

@@ -90,12 +90,13 @@ struct CampaignCalls final : FileStorageCalls {
     std::string_view stopAt;
 };
 
-void outcome(FileStorageMedium& medium, bool success, SegmentRef ref = 0, bool durable = false) {
+void outcome(FileStorageMedium& medium, bool success, SegmentRef ref = 0, bool durable = false, bool noSpace = false) {
     const auto error = medium.lastError().value_or(FileStorageError{});
-    std::println(R"({{"event":"operation","ok":{},"ref":{},"durable":{},"errno":{},"issue":{},"stopped":{}}})",
+    std::println(R"({{"event":"operation","ok":{},"ref":{},"durable":{},"no_space":{},"errno":{},"issue":{},"stopped":{}}})",
                  success,
                  ref,
                  durable,
+                 noSpace,
                  error.nativeError,
                  std::to_underlying(error.issue),
                  medium.mutationsStopped());
@@ -174,7 +175,7 @@ void outcome(FileStorageMedium& medium, bool success, SegmentRef ref = 0, bool d
         checkpoint(point, "open.before");
         const std::vector<std::uint8_t> large(131072, 'N');
         const auto                      opened = medium.open({.bytes = operation == "open-big" ? std::span<const std::uint8_t>(large) : bytes(pending)});
-        outcome(medium, opened.status == OpenStatus::Opened, opened.segment);
+        outcome(medium, opened.status == OpenStatus::Opened, opened.segment, false, opened.status == OpenStatus::NoSpace);
         checkpoint(point, "open.acknowledged");
     } else if (operation == "append" || operation == "sync" || operation == "append-big") {
         checkpoint(point, "append.before");
