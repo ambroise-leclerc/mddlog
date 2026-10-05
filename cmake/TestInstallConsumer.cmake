@@ -8,7 +8,8 @@
 #
 # Run via: cmake -D BUILD_DIR=... -D CXX_COMPILER=... -D GENERATOR=...
 #              -D EXPECTED_VERSION=... -D SOURCE_DIR=... -D CONSUMER_KIND=full|core
-#              [-D CONFIG=<configuration under test>] -P TestInstallConsumer.cmake
+#              [-D CONFIG=<configuration under test>] [-D FILE_STORAGE=ON|OFF]
+#              -P TestInstallConsumer.cmake
 # (see the two install-consumer add_test() calls in the top-level CMakeLists.txt)
 
 foreach(required_var BUILD_DIR CXX_COMPILER GENERATOR EXPECTED_VERSION SOURCE_DIR CONSUMER_KIND)

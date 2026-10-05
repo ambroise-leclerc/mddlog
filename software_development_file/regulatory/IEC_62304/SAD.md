@@ -30,8 +30,9 @@ protéger et persister sa position hors de l'autorité du rédacteur pour exclur
 
 L'hôte compose objets et durées de vie, fournit identités uniques par producteur/démarrage,
 pilote le consommateur unique et définit sa politique d'échec. Les primitives de persistance
-sont implémentées ; le support et le fournisseur livrés sont des doubles en mémoire. La chaîne
-réelle, l'orchestration centralisée et les budgets du lecteur restent les lacunes des #114–#117.
+sont implémentées avec un support fichiers Linux optionnel et des doubles en mémoire. Le
+fournisseur indépendant reste à livrer ; qualification physique, orchestration centralisée
+et budgets du lecteur restent les lacunes des #114–#117.
 
 ## Budget et ségrégation
 

@@ -268,7 +268,12 @@ public:
             fail(FileStorageIssue::Inventory, errno);
             return std::nullopt;
         }
-        std::unique_ptr<DIR, decltype(&::closedir)> entries(::fdopendir(scan), &::closedir);
+        struct DirectoryCloser {
+            void operator()(DIR* handle) const noexcept {
+                (void)::closedir(handle);
+            }
+        };
+        std::unique_ptr<DIR, DirectoryCloser> entries(::fdopendir(scan));
         if (!entries) {
             const int code = errno;
             (void)::close(scan);

@@ -51,8 +51,10 @@ int main(int argc, char** argv) {
         if (consumer.addRing(ring) != AuditRingRegistration::Registered)
             return 1;
         consumer.setSink(*sink);
-        const auto                 description = mddlog::core::AuditDescription::create({.action = "inventory.inspect"});
-        const auto                 context     = mddlog::core::AuditContext::create({.target = "warehouse"});
+        const auto description = mddlog::core::AuditDescription::create({.action = "inventory.inspect"});
+        const auto context     = mddlog::core::AuditContext::create({.target = "warehouse"});
+        if (!description || !context)
+            return 1;
         mddlog::core::AuditBinding audit(ring, *description, *context);
         if (!emit(audit))
             return 1;
