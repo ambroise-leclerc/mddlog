@@ -10,7 +10,7 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ---
 
-## 0.3.0 — 4 October 2026
+## 0.3.0 — 5 October 2026
 
 Closes epic #113 and its four sub-issues #127–130: owned contexts and reusable bindings
 for diagnostic and audit logging, designed in
