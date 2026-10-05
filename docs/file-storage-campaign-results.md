@@ -4,6 +4,9 @@ Campagne du 2026-10-05, diff de `114-storage-campaign` fondé sur `3da48c0`.
 Le [protocole](file-storage-test-plan.md) définit les critères avant campagne.
 État : résultats locaux soumis à revue, sans qualification matérielle ni clôture de GAP-007.
 
+Le [bilan succinct](file-storage-success-report.md) consigne la réussite du lot fusionné
+par la PR #135 et les preuves CI, séparément de cette campagne locale.
+
 ## Environnement et commandes
 
 Linux 7.0.0-34-generic, glibc 2.43, Clang/libc++ 21.1.8, GCC/libstdc++ 16.1.0,

@@ -43,6 +43,9 @@ oracle indépendant, budgets du banc, campagnes courtes/répétées et procédur
 matérielles. Les [résultats](../../docs/file-storage-campaign-results.md) distinguent SIGKILL,
 EACCES/ENOSPC réels et qualification physique non réalisée. La CI archive les rapports ;
 leur export avant expiration et leur acceptation restent des obligations de #120/#122.
+Le [bilan succinct du lot fusionné](../../docs/file-storage-success-report.md) cite la
+révision intégrée, les preuves CI et les travaux restant à réaliser, sans nouvelle
+qualification ni clôture de lacune.
 
 ## Configuration et composants tiers
 
