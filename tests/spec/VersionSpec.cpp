@@ -12,7 +12,7 @@ import mddlog;
 
 namespace {
 
-constexpr std::string_view declaredVersion = "0.2.0";
+constexpr std::string_view declaredVersion = "0.3.0";
 
 const speclab::Register reportedVersionMatchesDeclaredRelease{"The library reports the version this release declares", "unit", [] {
                                                                   return speclab::Test("version-traceability")

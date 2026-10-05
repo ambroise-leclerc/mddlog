@@ -29,5 +29,20 @@ int main() {
     const auto events = ring.drain();
     if (events.size() != 1 || events.first()[0].correlationId() != "call-1")
         return 5;
+    const auto invalidContext = mddlog::DiagnosticContext::create({.component = std::string(256, 'x')});
+    if (invalidContext)
+        return 6;
+    const mddlog::Refusal refusal = invalidContext.error();
+    if (refusal.reason != mddlog::RefusalReason::IdentifierTooLong || refusal.field != mddlog::IdentifierField::Component)
+        return 7;
+    mddlog::RingLog<1>            diagnosticRing;
+    mddlog::GovernedBinding       governed(diagnosticRing, *context);
+    const mddlog::WriteResult     admitted  = governed.info(mddlog::RawTime::unavailable(), "governed message");
+    const mddlog::TruncatedFields shortened = admitted.truncated();
+    if (admitted.admission() != mddlog::Admission::Written || shortened.message)
+        return 8;
+    const mddlog::WriteResult full = governed.info(mddlog::RawTime::unavailable(), "full ring");
+    if (full.admission() != mddlog::Admission::Refused || !full.refusal() || full.refusal()->reason != mddlog::RefusalReason::RingFull)
+        return 9;
     return 0;
 }
