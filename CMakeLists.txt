@@ -330,6 +330,19 @@ unset(_mddlog_forbidden_name)
 # Build options
 option(MDDLOG_BUILD_EXAMPLES "Build MddLog examples" ON)
 option(MDDLOG_BUILD_TESTS "Build MddLog tests" ON)
+option(MDDLOG_BUILD_FUZZERS "Build bounded libFuzzer audit-reader harness (Clang only)" OFF)
+if(MDDLOG_BUILD_FUZZERS)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR NOT MDDLOG_BUILD_TESTS)
+        message(FATAL_ERROR "MDDLOG_BUILD_FUZZERS requires Clang and MDDLOG_BUILD_TESTS=ON.")
+    endif()
+    if(NOT ENABLE_SANITIZER_ADDRESS OR NOT ENABLE_SANITIZER_UNDEFINED_BEHAVIOR)
+        message(FATAL_ERROR "Audit fuzzing requires ENABLE_SANITIZER_ADDRESS and ENABLE_SANITIZER_UNDEFINED_BEHAVIOR.")
+    endif()
+    target_compile_options(mddlog PRIVATE -fsanitize=fuzzer-no-link
+        "-fprofile-instr-generate=${CMAKE_BINARY_DIR}/coverage-%p.profraw" -fcoverage-mapping)
+    target_link_options(mddlog INTERFACE -fsanitize=fuzzer-no-link
+        "-fprofile-instr-generate=${CMAKE_BINARY_DIR}/coverage-%p.profraw")
+endif()
 
 # Add subdirectories
 if(MDDLOG_BUILD_EXAMPLES)

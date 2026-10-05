@@ -83,7 +83,7 @@ jobs:
       run: ctest --test-dir build-asan -E 'InstallTree(Consumer|CoreConsumer)' --parallel --output-on-failure --no-tests=error --timeout 120
 
   thread-sanitize:
-    name: TSan RingLog (GCC 16.1, Debug)
+    name: TSan rings and audit observers (GCC 16.1, Debug)
     runs-on: ubuntu-latest
     container: gcc:16.1.0
 
@@ -121,10 +121,10 @@ jobs:
     - name: Build and link TSan tests
       run: cmake --build build-tsan
 
-    - name: Run RingLog and SinkRegistry tests under TSan
+    - name: Run RingLog, AuditRing, audit observers and SinkRegistry tests under TSan
       env:
         TSAN_OPTIONS: halt_on_error=1
-      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*(RingLog|SinkRegistry:)' --output-on-failure --no-tests=error --timeout 60
+      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*(RingLog|AuditRing|SinkRegistry:)' --output-on-failure --no-tests=error --timeout 60
 
     - name: Verify governed boundary and negative controls
       run: ctest --test-dir build-tsan -L governed --verbose --no-tests=error --timeout 120

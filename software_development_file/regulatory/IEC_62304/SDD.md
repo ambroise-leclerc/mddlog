@@ -96,3 +96,13 @@ attendus puis aux lectures du backend, refus EACCES sans privilèges et ENOSPC s
 privé borné. Le banc vérifie aussi descripteurs et allocation monotone pendant 64 cycles.
 Il ne modifie pas le backend ni ne qualifie les caches/alimentation. Les verdicts PARTIAL
 et SKIP sont distincts d’une campagne complète ; le job hôte exige le volume réel.
+
+VER-030–035 complètent cette preuve par un modèle abstrait d’admission, trois producteurs
+SPSC et les observateurs autorisés, des reprises génératives après réponse du témoin perdue,
+libFuzzer borné sur les lecteurs et une comparaison SHA-256 avec hashlib. Le build de fuzzing
+est facultatif et instrumente les adaptateurs ; ses options ne se propagent pas au cœur seul.
+Les budgets, le corpus et les limites sont dans le
+[plan de robustesse](../../../docs/audit-robustness-test-plan.md). L’arrêt de SimpleLogger
+change son prédicat sous le mutex de la condition pour ne pas perdre une notification.
+Le [résultat Orin Nano](../../../docs/orin-nano-electrical-results.md) consigne la réussite
+électrique déclarée, sans inventer le tuple ni les artefacts nécessaires à sa revue.

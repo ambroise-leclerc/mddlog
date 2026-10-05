@@ -12,6 +12,12 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Add bounded audit-reader fuzzing with a versioned corpus and LLVM coverage,
+  generated admission/recovery models, concurrent audit retries/observers and
+  independent SHA-256 checks. Extend TSan and separate short/long CI campaigns (#120).
+- Protect the asynchronous logger's shutdown predicate with its condition mutex
+  to prevent a lost wake-up; stress repeated idle shutdown (#118, #120).
+
 - Add an executable file-storage test protocol and Linux campaign worker/supervisor
   for observed SIGKILL checkpoints, real EACCES/ENOSPC, counter corruption and resource
   cycles. CI repeats interruptions and archives evidence; physical power-loss

@@ -75,6 +75,16 @@ collect_scope() {
 collect_scope include/mddlog '*.cppm'
 collect_scope tests/spec '*.cpp'
 collect_scope examples '*.cpp'
+if ! grep -q '^MDDLOG_BUILD_FUZZERS:BOOL=ON$' "$build_dir/CMakeCache.txt"; then
+    enabled_scope=()
+    for f in "${scope[@]}"; do
+        case "$f" in
+            tests/spec/AuditReadersFuzz.cpp) echo "run-clang-tidy: excluded disabled fuzz harness: $f" ;;
+            *) enabled_scope+=("$f") ;;
+        esac
+    done
+    scope=("${enabled_scope[@]}")
+fi
 [ "${#scope[@]}" -gt 0 ] || fail "the analysis scope resolved to no files; refusing to pass vacuously."
 
 # Explicitly exclude only the known optional Linux backend when disabled in this build.
