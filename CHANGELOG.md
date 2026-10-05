@@ -10,6 +10,17 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ---
 
+## Unreleased
+
+- Add the optional Linux `FileStorageMedium` adapter, with private segment files,
+  exclusive writer/shared offline reader ownership, bounded capacity and reads,
+  complete short transfers, and explicit file/directory barriers (#114, part of #112).
+  Durability remains `Unsupported` unless the integrator declares a qualified
+  deployment. Failed mutations stop the writer and leave evidence for recovery.
+- Add common `StorageMedium` conformity checks, real file reopening and deterministic
+  syscall failures, plus the standalone `FileAudit` composition example. Physical
+  qualification, abrupt-stop/power-cut campaigns and epic closure remain open.
+
 ## 0.3.0 — 5 October 2026
 
 Closes epic #113 and its four sub-issues #127–130: owned contexts and reusable bindings

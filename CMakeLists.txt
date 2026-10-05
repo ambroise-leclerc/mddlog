@@ -245,6 +245,20 @@ target_sources(mddlog
         include/mddlog/mddlog.cppm
         include/mddlog/Log.cppm
 )
+# Linux file backend is optional and never enters the governed target.
+set(_mddlog_file_storage_default OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_mddlog_file_storage_default ON)
+endif()
+option(MDDLOG_BUILD_FILE_STORAGE "Build the Linux file StorageMedium adapter" ${_mddlog_file_storage_default})
+if(MDDLOG_BUILD_FILE_STORAGE)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "MDDLOG_BUILD_FILE_STORAGE requires Linux.")
+    endif()
+    target_sources(mddlog PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+        include/mddlog/adapter/FileStorageMedium.cppm)
+endif()
+
 # Configuration application
 configure_compiler_settings(mddlog_options)
 configure_medical_compliance(mddlog_options ${PROJECT_VERSION_MAJOR} ${PROJECT_VERSION_MINOR} ${PROJECT_VERSION_PATCH})
@@ -358,6 +372,7 @@ if(MDDLOG_BUILD_TESTS)
             -D "EXPECTED_VERSION=${PROJECT_VERSION}"
             -D "SOURCE_DIR=${CMAKE_SOURCE_DIR}"
             -D "CONSUMER_KIND=${_mddlog_consumer_kind}"
+            -D "FILE_STORAGE=${MDDLOG_BUILD_FILE_STORAGE}"
             -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"
         )
         set_tests_properties(${_mddlog_consumer_test} PROPERTIES LABELS "build" RESOURCE_LOCK mddlog_install_tree)

@@ -99,6 +99,10 @@ int main() {\n\
 set(consumer_executables "consumer|main.cpp|mddlog::mddlog" "consumer_ring|main_ring.cpp|mddlog::mddlog,mddlog::core")
 file(COPY_FILE "${SOURCE_DIR}/tests/consumer/ContextAdapterConsumer.cpp" "${consumer_src}/main_context.cpp")
 list(APPEND consumer_executables "consumer_context|main_context.cpp|mddlog::mddlog")
+    if(FILE_STORAGE)
+        file(COPY_FILE "${SOURCE_DIR}/tests/consumer/FileStorageConsumer.cpp" "${consumer_src}/main_file_storage.cpp")
+        list(APPEND consumer_executables "consumer_file_storage|main_file_storage.cpp|mddlog::mddlog")
+    endif()
 else()
     # Reuse the exact program exercised in-tree. Only mddlog::core may be linked here.
     file(MAKE_DIRECTORY "${consumer_src}")

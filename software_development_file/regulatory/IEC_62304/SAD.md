@@ -41,3 +41,8 @@ Les allocations, I/O, reprises et formatages restent dans les adaptateurs. Les b
 ne bornent pas la mémoire du lecteur ni les temps du système entier. Les mesures de #117 et
 la maîtrise de surcharge #118 sont prévues. Les dépendances de construction et qualification
 sont inventoriées par [SOUP](SOUP.md).
+
+Le premier lot #114 ajoute un adaptateur fichiers Linux optionnel, sans dépendance du cœur.
+[Son contrat](../../../docs/file-storage.md) garde l'éligibilité, les E/S et les erreurs de
+synchronisation au point de composition. La pile physique et les campagnes de coupure
+restent à qualifier ; ni fournisseur ni orchestration complète ne sont présumés livrés.
