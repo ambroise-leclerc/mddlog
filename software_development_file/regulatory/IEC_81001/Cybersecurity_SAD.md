@@ -45,3 +45,21 @@ identifie des octets, sans prouver leur provenance ni authentifier l'oracle. Le 
 ne remplace ni les accès exclusifs du backend ni la responsabilité de l'hôte sur les
 identités, la quiescence et les durées de vie. Aucun chiffrement ni témoin indépendant
 n'est ajouté par ce lot.
+
+La [sauvegarde du lecteur](../../../docs/retained-position.md) complète CTRL-006/VER-041
+pour RISK-005/RISK-006 : identité du fournisseur explicite, absence/corruption refusées,
+génération concurrente et monotonie des checkpoints. Les permissions privées et le refus
+des liens finaux ne prouvent pas la séparation des autorités, ni la protection des parents,
+ACL ou privilèges root. Le checksum n'est pas une authentification. Un rollback du magasin
+du lecteur par sa propre autorité reste hors modèle ; le service authentifié et les essais
+d'accès croisés sont complétés par le lot ci-dessous, sans clore GAP-008.
+
+Le [témoin séparé](../../../docs/independent-witness.md) complète CTRL-006 et VER-042–044 :
+UID serveur épinglé avec SO_PEERCRED, identité fournisseur enrôlée, droits UID/flux
+exacts et state inaccessible au rédacteur dans le profil exécuté. Les réponses perdues
+restent incertaines jusqu'à une lecture authentifiée ; les conflits ne deviennent pas
+idempotents. Les credentials dépendent du namespace utilisateur et du noyau ; comptes,
+ACL/parents/montages et non-réaffectation des UID restent à qualifier. Root ou le témoin
+compromis restent hors résistance. Les frames sont bornées, mais saturation par clients
+autorisés et fsync lent requièrent la politique hôte. Aucune signature ou authentification
+de service réseau distant n'est fournie. GAP-008 reste ouvert pour revue/acceptation.

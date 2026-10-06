@@ -53,6 +53,14 @@ jobs:
     - name: Run tests
       run: ctest --preset ninja-clang -LE governed --parallel --output-on-failure --no-tests=error --timeout 120
 
+    # Privileged namespace setup maps five high UIDs; test actors drop all UID authority.
+    # This job requires the independent-authority proof instead of accepting a CTest SKIP.
+    - name: Verify independent witness authorities
+      run: |
+        sudo python3 scripts/run-witness-deployment.py \
+          --worker "$PWD/build-clang/tests/mddlog_witness_deployment" \
+          --service "$PWD/build-clang/examples/mddlog_witness" --require-isolation
+
     - name: Repeat observed storage interruptions
       run: |
         python3 scripts/run-file-storage-campaign.py \

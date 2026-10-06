@@ -94,7 +94,7 @@
       "status": "open",
       "issue": 115,
       "owner": "Ambroise Leclerc",
-      "closure": "Indépendance, indisponibilité, rollback combiné et redémarrage du lecteur démontrés sur stockage réel."
+      "closure": "Indépendance, indisponibilité, rollback combiné et redémarrage du lecteur démontrés sur stockage réel. Lot #115 : checkpoint versionné/atomique, autorité persistante sous UID séparé, client/service Unix authentifiés, permissions par flux, réconciliation des réponses perdues et profil à quatre UID/processus implémentés ; docs/independent-witness.md et docs/independent-witness-validation.md. GAP conservé ouvert pour revue/acceptation et qualification du déploiement physique, des comptes/ACL et du support ; aucune résistance à root ou au fournisseur de confiance compromis."
     },
     {
       "id": "GAP-009",
@@ -260,12 +260,18 @@
       "status": "implemented",
       "design": [
         "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
-        "docs/audit-robustness-test-plan.md"
+        "docs/audit-robustness-test-plan.md",
+        "docs/retained-position.md",
+        "docs/independent-witness.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditAnchor.cppm",
         "include/mddlog/adapter/AuditVerifier.cppm",
-        "include/mddlog/adapter/AuditLogVerifier.cppm"
+        "include/mddlog/adapter/AuditLogVerifier.cppm",
+        "include/mddlog/adapter/FileRetainedPosition.cppm",
+        "include/mddlog/adapter/WitnessCodec.cppm",
+        "include/mddlog/adapter/FileAnchorAuthority.cppm",
+        "include/mddlog/adapter/UnixAnchorProvider.cppm"
       ]
     },
     {
@@ -881,6 +887,56 @@
       "scenario": "audit-service-concurrent-health",
       "evidence": "docs/file-storage-closure.md",
       "limits": "Un producteur, un consommateur et un observateur sur doubles en mémoire ; sélection explicite du scénario en CI TSan, sans preuve temporelle ni qualification du profil."
+    },
+    {
+      "id": "VER-041",
+      "title": "Position retenue persistante : restauration, rollback et erreurs atomiques",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-006"
+      ],
+      "test": "tests/spec/FileRetainedPositionSpec.cpp",
+      "scenario": "audit-retained-file",
+      "evidence": "docs/retained-position-validation.md",
+      "limits": "Sauvegarde réelle Linux avec fournisseur en mémoire ; aucune qualification physique, preuve de séparation des autorités ou service authentifié."
+    },
+    {
+      "id": "VER-042",
+      "title": "Autorité durable : monotonie, retraits et restauration",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-006"
+      ],
+      "test": "tests/spec/WitnessSpec.cpp",
+      "scenario": "witness-durable-authority",
+      "evidence": "docs/independent-witness-validation.md",
+      "limits": "Fichiers réels, fautes injectées ; pas de qualification électrique."
+    },
+    {
+      "id": "VER-043",
+      "title": "Service authentifié : droits, délais et réponses perdues",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-006"
+      ],
+      "test": "tests/spec/WitnessSpec.cpp",
+      "scenario": "witness-unix-transport",
+      "evidence": "docs/independent-witness-validation.md",
+      "limits": "Transport Unix réel sous le même UID ; indépendance non établie par ce scénario."
+    },
+    {
+      "id": "VER-044",
+      "title": "Profil réel : UID séparés, cycle de vie et rollback après redémarrage du lecteur",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-006",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/WitnessDeployment.cpp",
+      "scenario": null,
+      "evidence": "docs/independent-witness-validation.md",
+      "limits": "Namespace multi-UID/processus réel et backend fichiers sur tmpfs, sans qualification physique ni acceptation finale. Le mode requis de CI refuse SKIP."
     }
   ],
   "risks": [
@@ -1187,7 +1243,11 @@
       ],
       "verifications": [
         "VER-006",
-        "VER-032"
+        "VER-032",
+        "VER-041",
+        "VER-042",
+        "VER-043",
+        "VER-044"
       ],
       "gaps": [
         "GAP-008",
@@ -1224,7 +1284,8 @@
         "VER-037",
         "VER-038",
         "VER-039",
-        "VER-040"
+        "VER-040",
+        "VER-044"
       ],
       "gaps": [
         "GAP-007",
@@ -1512,17 +1573,18 @@
     },
     {
       "id": "DEP-009",
-      "name": "Pile système du backend fichiers Linux",
+      "name": "Pile système des adaptateurs fichiers et du témoin Linux",
       "scope": "deployed",
       "version": "Linux et libc du déploiement ; versions exactes, système de fichiers, montage, matériel/firmware et caches à archiver en #114",
       "provenance": "include/mddlog/adapter/FileStorageMedium.cppm",
       "license": "Noyau Linux GPL-2.0-only avec exception syscall ; libc et pile du profil à inventorier, GAP-005.",
       "classification": "Composants déployés, classement SOUP à confirmer par le fabricant.",
-      "knownIssues": "flock consultatif ; fsync ne qualifie pas un matériel qui ignore les vidages. Éligibilité non inférée ; Unqualified par défaut. Compteur persistant soumis aux barrières de la même pile ; aucune protection indépendante contre restauration externe.",
+      "knownIssues": "flock consultatif ; fsync ne qualifie pas un matériel qui ignore les vidages. Éligibilité non inférée ; Unqualified par défaut. Compteur persistant soumis aux barrières de la même pile ; aucune protection indépendante contre restauration externe. SO_PEERCRED repose sur le noyau et les mappings du namespace partagé ; aucun témoin indépendant si le rédacteur dispose des droits du service ou de privilèges administratifs. Transport borné, pas de WCET de fsync.",
       "monitoring": "Plan : mainteneur et intégrateur examinent https://www.kernel.org/ et les avis du distributeur, de la libc et du constructeur avant qualification/mise à jour du profil ; rejouer conformité et campagnes physiques, conserver versions et anomalies.",
       "gaps": [
         "GAP-005",
-        "GAP-007"
+        "GAP-007",
+        "GAP-008"
       ]
     },
     {
@@ -1538,6 +1600,21 @@
       "gaps": [
         "GAP-005",
         "GAP-007"
+      ]
+    },
+    {
+      "id": "DEP-011",
+      "name": "util-linux unshare et helpers uidmap du banc multi-UID",
+      "scope": "verification",
+      "version": "Versions de distribution à figer dans la campagne ; mapping automatique subuid/subgid non privilégié ou explicite par administrateur en CI.",
+      "provenance": "scripts/run-witness-deployment.py",
+      "license": "Licences util-linux et shadow/uidmap de la distribution à inventorier pour le profil, GAP-005.",
+      "classification": "Outils de vérification, non liés et non requis par le composant déployé.",
+      "knownIssues": "Namespaces utilisateur et plages subuid/subgid peuvent être indisponibles ; SKIP explicite local, mode requis en CI. Aucun privilège du rédacteur sur le state du service n’est autorisé par le fixture.",
+      "monitoring": "Mainteneur et intégrateur examinent les avis du distributeur pour util-linux/shadow avant évolution du banc ; rejouer profil à quatre UID et vérifier mappings, droits et absence de SKIP.",
+      "gaps": [
+        "GAP-005",
+        "GAP-008"
       ]
     }
   ]

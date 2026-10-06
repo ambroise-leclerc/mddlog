@@ -121,3 +121,29 @@ Les refus et backlog d'arrêt sont observables sans promotion à durabilité. La
 [préparation de clôture](../../../docs/file-storage-closure.md) identifie les preuves
 externes encore dues. Aucun nouveau composant tiers n'est lié à la bibliothèque ; DEP-010 inventorie zstd
 comme outil de revue d'archives, hors dépendances du déploiement.
+
+## Position du lecteur persistante (#115, premier lot)
+
+CTRL-006 inclut `FileRetainedPosition`, module Linux facultatif dans l'adaptateur.
+Le [contrat](../../../docs/retained-position.md) lie un magasin à un fournisseur,
+valide version, checksum, tailles et invariants avant toute restauration, puis sauvegarde
+avec génération attendue, verrou non bloquant, fsync fichier, rename et fsync répertoire.
+Absence, corruption, migration implicite, conflit et régression ont des refus distincts ;
+un échec après rename requiert réconciliation sans affirmation de durabilité. VER-041
+exerce ces chemins et le rollback après redémarrage du lecteur avec témoin en mémoire.
+GAP-008 demeure ouvert pour acceptation et qualification ; le service authentifié
+et la séparation des autorités sont complétés par le lot témoin ci-dessous.
+
+## Témoin indépendant livré (#115)
+
+CTRL-006 comprend désormais l'[autorité fichiers et le service Unix](../../../docs/independent-witness.md).
+`FileAnchorAuthority` valide entièrement l'état, tient le verrou du répertoire,
+confirme fichier/rename/répertoire avant stamp et arrête toutes les opérations après
+échec. `UnixAnchorProvider` épingle UID/identité, borne le transport et garde les
+refus ADR-004 lors des retries ; une réponse perdue nécessite réconciliation.
+Le service applique les permissions UID/flux/opération. VER-042/043 vérifient persistance,
+retraits, corruption, droits, timeout et réponses perdues ; VER-044 utilise quatre
+UID et des processus distincts avec AuditService, backend réel et checkpoint du lecteur.
+Le protocole v1 borne les frames/inventaires, sans budget temporel de fsync ; le
+profil et ses réserves sont dans la campagne. GAP-008 reste ouvert pour acceptation
+et qualification physique, pas pour une implémentation du service encore absente.

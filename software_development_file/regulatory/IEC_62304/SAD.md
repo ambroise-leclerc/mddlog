@@ -47,3 +47,19 @@ Le premier lot #114 ajoute un adaptateur fichiers Linux optionnel, sans dépenda
 [Son contrat](../../../docs/file-storage.md) garde l'éligibilité, les E/S et les erreurs de
 synchronisation au point de composition. La pile physique et les campagnes de coupure
 restent à qualifier ; ni fournisseur ni orchestration complète ne sont présumés livrés.
+
+Le [premier lot de #115](../../../docs/retained-position.md) ajoute une sauvegarde du
+lecteur Linux à la zone adaptateur. Le magasin est lié à une seule identité fournisseur,
+hors droits du rédacteur selon le déploiement. Aucun appel métier ni dépendance du cœur
+n'est ajouté. Le stockage du lecteur, celui du journal et l'autorité du futur témoin sont
+trois responsabilités séparées ; un fichier sous les mêmes droits ne démontre pas cette
+architecture. Le lot témoin ci-dessous complète cette sauvegarde ; acceptation et qualification
+demeurent dans GAP-008.
+
+Le [lot complet #115](../../../docs/independent-witness.md) livre l'autorité fichiers,
+le service sous UID propre et le client Unix authentifié dans l'adaptateur. Le noyau
+atteste les UID ; le policy point de composition sépare avancement, retrait et lecture
+par flux/autorité. La propriété privée du state du service et du lecteur s'exerce dans
+VER-044 ; l'interface du producteur et la séparation du cœur ne changent pas. La garde
+persiste au-delà des redémarrages indépendants ; la qualification/acceptation du profil
+cible demeure dans GAP-008/#122.

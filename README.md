@@ -89,6 +89,12 @@ La v0.1.0 livrait un cœur de journalisation borné, sans allocation (ADR-001). 
 
 Chaque anneau a **un producteur et un consommateur**. L'hôte fournit une identité de flux distincte pour chaque producteur et chaque session de démarrage, et décide de sa réponse à un refus, à un échec de transmission ou à une coupure d'alimentation.
 
+La [position retenue du lecteur Linux](docs/retained-position.md) dispose d'une sauvegarde
+versionnée et atomique, liée à un fournisseur et avec refus des générations concurrentes
+ou régressions. Elle est disponible avec le backend fichiers. Le [témoin indépendant Linux](docs/independent-witness.md)
+fournit un service sous UID séparé, des permissions par flux et un client authentifiant
+le service. La qualification du support et l’acceptation du profil restent à établir.
+
 ## Prise en main
 
 ### Admettre un événement d’audit avec un contexte réutilisable

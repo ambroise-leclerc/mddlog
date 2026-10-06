@@ -135,6 +135,15 @@ add_executable(mddlog_specs
 )
 
 if(MDDLOG_BUILD_FILE_STORAGE)
+    add_executable(mddlog_witness_deployment spec/WitnessDeployment.cpp)
+    target_link_libraries(mddlog_witness_deployment PRIVATE mddlog::mddlog)
+    if(MDDLOG_BUILD_EXAMPLES)
+        add_test(NAME witness.deployment COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/scripts/run-witness-deployment.py
+            --worker $<TARGET_FILE:mddlog_witness_deployment>
+            --service $<TARGET_FILE:mddlog_witness>)
+        set_tests_properties(witness.deployment PROPERTIES LABELS "audit;integration" TIMEOUT 75 SKIP_RETURN_CODE 77)
+    endif()
     add_executable(mddlog_file_storage_campaign spec/FileStorageCampaign.cpp)
     target_link_libraries(mddlog_file_storage_campaign PRIVATE mddlog::mddlog)
     add_test(NAME file-storage.campaign
@@ -146,7 +155,7 @@ if(MDDLOG_BUILD_FILE_STORAGE)
     target_link_libraries(mddlog_file_storage_consumer PRIVATE mddlog::mddlog)
     add_test(NAME SourceTreeFileStorageConsumer COMMAND mddlog_file_storage_consumer)
     set_tests_properties(SourceTreeFileStorageConsumer PROPERTIES LABELS "build;storage")
-    target_sources(mddlog_specs PRIVATE spec/FileStorageSpec.cpp)
+    target_sources(mddlog_specs PRIVATE spec/FileStorageSpec.cpp spec/FileRetainedPositionSpec.cpp spec/WitnessSpec.cpp)
 endif()
 
 target_link_libraries(mddlog_specs PRIVATE mddlog::mddlog speclab::speclab)
