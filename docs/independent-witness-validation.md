@@ -31,7 +31,10 @@ subuid/subgid disponible. À défaut, le CTest retourne SKIP 77 explicitement ;
 après avoir autorisé pour root les plages subuid/subgid `100000-100004` du runner
 éphémère (`usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root`).
 `newuidmap`/`newgidmap` exigent cette autorisation même sous root. Le namespace mappe
-ces cinq UID sans créer de comptes hôte. Le même chemin privilégié est exercé localement
+ces cinq UID sans créer de comptes hôte. Les deux exécutables sont copiés dans un
+répertoire temporaire traversable sous `/tmp`, car les UID mappés ne peuvent pas
+traverser le home privé du runner ; la CI supprime ce répertoire en sortie.
+Le même chemin privilégié est exercé localement
 à partir d'un namespace parent, avec `--outer-uid-start 5` (plage disponible du parent).
 Les tests ne qualifient pas la configuration des comptes d'un déploiement physique.
 

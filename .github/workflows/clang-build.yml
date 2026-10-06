@@ -60,9 +60,15 @@ jobs:
         # newuidmap/newgidmap require subordinate ranges even when invoked by root.
         sudo apt-get install -y uidmap
         sudo usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root
+        # The mapped UIDs cannot traverse the runner's private home directory.
+        witness_bin_dir="$(mktemp -d /tmp/mddlog-witness-bin.XXXXXX)"
+        trap 'rm -rf "$witness_bin_dir"' EXIT
+        chmod 755 "$witness_bin_dir"
+        install -m 755 build-clang/tests/mddlog_witness_deployment "$witness_bin_dir/"
+        install -m 755 build-clang/examples/mddlog_witness "$witness_bin_dir/"
         sudo python3 scripts/run-witness-deployment.py \
-          --worker "$PWD/build-clang/tests/mddlog_witness_deployment" \
-          --service "$PWD/build-clang/examples/mddlog_witness" --require-isolation
+          --worker "$witness_bin_dir/mddlog_witness_deployment" \
+          --service "$witness_bin_dir/mddlog_witness" --require-isolation
 
     - name: Repeat observed storage interruptions
       run: |
