@@ -27,7 +27,8 @@ python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 
 Le wrapper utilise `unshare --user --map-auto` sans privilège hôte, avec une plage
 subuid/subgid disponible. À défaut, le CTest retourne SKIP 77 explicitement ;
-`--require-isolation` en fait un échec. La CI Clang exécute ce mode requis via sudo,
+cela inclut une sonde bloquée au-delà de 10 secondes, dont le groupe de processus
+est arrêté et récupéré. `--require-isolation` en fait un échec. La CI Clang exécute ce mode requis via sudo,
 après avoir autorisé pour root les plages subuid/subgid `100000-100004` du runner
 éphémère (`usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root`).
 `newuidmap`/`newgidmap` exigent cette autorisation même sous root. Le namespace mappe
@@ -105,6 +106,13 @@ ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
   ctest --test-dir build-clang-debug \
   -R 'Witness|Unix witness|Persistent reader' --output-on-failure
 ```
+
+## Vérifications après revue
+
+Après revue, la compilation Release GCC 16.1 et ses **198/198 tests CTest** passent
+également en local. Les trois scénarios ciblés passent sous ASan/UBSan GCC 16.1.
+Deux contrôles négatifs du wrapper couvrent l'indisponibilité/expiration de la sonde,
+la distinction SKIP/FAIL et l'arrêt de ses helpers ; les **59 tests documentaires** passent.
 
 ## Réserves
 
