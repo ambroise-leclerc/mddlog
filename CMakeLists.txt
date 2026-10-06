@@ -257,7 +257,11 @@ if(MDDLOG_BUILD_FILE_STORAGE)
         message(FATAL_ERROR "MDDLOG_BUILD_FILE_STORAGE requires Linux.")
     endif()
     target_sources(mddlog PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
-        include/mddlog/adapter/FileStorageMedium.cppm)
+        include/mddlog/adapter/FileStorageMedium.cppm
+        include/mddlog/adapter/FileRetainedPosition.cppm
+        include/mddlog/adapter/WitnessCodec.cppm
+        include/mddlog/adapter/FileAnchorAuthority.cppm
+        include/mddlog/adapter/UnixAnchorProvider.cppm)
 endif()
 
 # Configuration application

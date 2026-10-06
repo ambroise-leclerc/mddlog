@@ -64,7 +64,7 @@ struct Retirement {
     core::RawTime retiredTime = core::RawTime::unavailable();
 };
 
-/** @brief The provider could not be reached or written to. Nothing was accepted. */
+/** @brief No acceptance was confirmed. A lost response may require reconciliation with latest()/streams(). */
 struct ProviderUnavailable {
     [[nodiscard]] bool operator==(const ProviderUnavailable&) const noexcept = default;
 };
