@@ -1,0 +1,7 @@
+# Extrait type (cycle 0001) après coupure : démarrage nominal, rejeu du journal XFS
+[    4.911290] nvme nvme0: pci function 0004:01:00.0
+[    5.020134] nvme nvme0: 8/0/0 default/read/poll queues
+[    5.031902]  nvme0n1: p1 p2 p3
+[   28.402661] XFS (nvme0n1p3): Mounting V5 Filesystem
+[   28.571833] XFS (nvme0n1p3): Starting recovery (logdev: internal)
+[   28.702419] XFS (nvme0n1p3): Ending recovery (logdev: internal)

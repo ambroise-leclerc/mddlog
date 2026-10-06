@@ -1,0 +1,252 @@
+{
+  "scope": "Documentary review of a campaign confirmed as real by the maintainer; no hardware test was rerun and external images/rail traces were not inspected.",
+  "review_date": "2026-10-06",
+  "campaign": "ORIN-PWR-EX-001",
+  "files": 96,
+  "bytes": 5913413,
+  "manifest_entries": 95,
+  "manifest_mismatches": [
+    {
+      "file": "profil.json",
+      "declared": "e34a0b9d6ee8da4346cd671d99fba00335b21fea5036e021afea100a84451f70",
+      "observed": "2d57f2a8526f32f9e734aa834470e55f204042317ae7a4ae17955a84bf9fe359"
+    }
+  ],
+  "unlisted_files": [],
+  "cycle_rows": 2913,
+  "declared_verdicts": {
+    "PASS": 2910,
+    "INVALIDE": 3
+  },
+  "invalid_cycles": [
+    766,
+    1742,
+    2214
+  ],
+  "jsonl_records": 8739,
+  "cycle_reference_checks": 8739,
+  "cycle_reference_errors": [],
+  "unreferenced_jsonl_records": 0,
+  "duplicate_jsonl_references": 0,
+  "declared_pass_by_checkpoint": {
+    "alea:capacite": 80,
+    "alea:stream": 300,
+    "append.acknowledged": 100,
+    "append.before": 100,
+    "append.partial": 100,
+    "append.written": 100,
+    "metadata.dir.after": 100,
+    "metadata.dir.before": 100,
+    "metadata.file.after": 100,
+    "metadata.file.before": 100,
+    "metadata.partial": 100,
+    "metadata.rename.after": 100,
+    "metadata.rename.before": 100,
+    "metadata.written": 100,
+    "open.acknowledged": 100,
+    "open.before": 100,
+    "read.partial": 30,
+    "reclaim.acknowledged": 100,
+    "reclaim.before": 100,
+    "reclaim.dir.after": 100,
+    "reclaim.unlinked": 100,
+    "segment.partial": 100,
+    "segment.written": 100,
+    "sync.acknowledged": 100,
+    "sync.dir.after": 100,
+    "sync.dir.before": 100,
+    "sync.file.after": 100,
+    "sync.file.before": 100
+  },
+  "mutation_checkpoints": 25,
+  "mutation_checkpoints_below_100_declared_pass": [],
+  "raw_image_files_missing": 2913,
+  "valid_cycle_rail_files_missing": 2910,
+  "records_reopened_inventory": 436,
+  "records_reopened_inventory_declared_pass": 435,
+  "raw_image_dirty_records": 1655,
+  "strict_prefix_equal_length_cycle_count": 35,
+  "strict_prefix_equal_length_sample_cycles": [
+    1013,
+    1016,
+    1020,
+    1024,
+    1026,
+    1065,
+    1069,
+    1077
+  ],
+  "metadata_string_length_mismatch_records": 2533,
+  "metadata_string_declared_bytes": 25,
+  "metadata_string_actual_utf8_bytes": 27,
+  "oracle_baseline_hash_incompatible_with_declared_worker_records": 2533,
+  "declared_power_off_ms_range": [
+    4940.3,
+    29974.2
+  ],
+  "declared_rail_drop_after_command_ms_range": [
+    36.0,
+    64.4
+  ],
+  "declared_power_off_below_5000_ms": 735,
+  "illustrative_marker_lines": 2916,
+  "illustrative_marker_examples": [
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 1
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 2
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 3
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 4
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 5
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 6
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 7
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 8
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 9
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 10
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 11
+    },
+    {
+      "file": "acquisition/alea-append-stream.jsonl",
+      "line": 12
+    }
+  ],
+  "input_sha256": {
+    "SHA256SUMS": "13d8e255012f96142ecd7dd9a92d629d0c591262a67583d5af74cfbdec1afc30",
+    "acquisition/alea-append-stream.jsonl": "9583b12cd8196d5afebbaba5de2c1f2afeabdef0afee10a6bff52dddfc87d717",
+    "acquisition/alea-capacite.jsonl": "fac21bec273c84ff12103dd066cdba929ece0577d5bb332f9871215477aed3e8",
+    "acquisition/append.acknowledged.jsonl": "6b38befcb96c8dcff3b371a391dd69326b2c0c5a88e2f975dfcde41032b91acf",
+    "acquisition/append.before.jsonl": "1a2e45eddac007b7fe6242c7e4bb616897fd238eb8f36b076ead8169d0f61d8f",
+    "acquisition/append.partial.jsonl": "8a3090c8ef8d92edf045a440523c3bab2caf1ad096e4ad16a88fd99010bc1dfa",
+    "acquisition/append.written.jsonl": "ded7996a28cd3e875fbb5fa529d4cbdedfe963666d546e2ab61e07b36302fb5b",
+    "acquisition/calibration.json": "4f4394bbfffcc168b9f21f7601be488fe5a5601ce044a584f8aa0b3b93e35e6e",
+    "acquisition/clock-sync.txt": "65d021862808851a7b1743484c522694b6788b84cebb099a1b9a9286e878a8ae",
+    "acquisition/metadata.dir.after.jsonl": "2e0cb1ea4a4034d96677bb414e6ab1461fd5f0eaa2c3329f67b9d77c7dbaa3dd",
+    "acquisition/metadata.dir.before.jsonl": "b608e3d96458c711165335b7108ac334e9706eddd219c142589382adc6fd8717",
+    "acquisition/metadata.file.after.jsonl": "65c92f62ec0005c2e73169ba8aba4afce89fee8b683f76b9a4a8c8260ae65264",
+    "acquisition/metadata.file.before.jsonl": "674f8e1c2a34b5a357d6a20a85249e9e21f68d1d58ec09ae134349028f6852af",
+    "acquisition/metadata.partial.jsonl": "fea9fcebf08226bef036f82b3ecc93d04c97edbc41a42d75a15fc0534c7d78c8",
+    "acquisition/metadata.rename.after.jsonl": "5b9e0ec1720bab1e0b232416116df118a8116265346465e4a260b5997a49bf73",
+    "acquisition/metadata.rename.before.jsonl": "508a17c0223e759fe92c222339e6f4fc5c2e6131f8f2c6eb815618e99e09bcdb",
+    "acquisition/metadata.written.jsonl": "105d0d3d3f5c99aa51fcec9635ed4202b3e762dc67325b1dad40f2670d07a80f",
+    "acquisition/open.acknowledged.jsonl": "32ea305962a931be597ba7d1f400e2f23c161dd2cb0497ba08841bdd5d615e56",
+    "acquisition/open.before.jsonl": "f282cb9d17d6998b96d8b153dc6e6db44a3a6b0de5c53175b2f862334586b2fb",
+    "acquisition/rail/EXEMPLE-trace-decimee.csv": "b14e9cc43c693ba033d4e21e5acc4d29d44e9b5fcb35d236b0bd77092f5d546b",
+    "acquisition/read.partial.jsonl": "65a78eacc8901b20168c085fec0b2942b978fc45ce7b1f4a1aeb48219c1d399d",
+    "acquisition/reclaim.acknowledged.jsonl": "edd08a717d90e57eeb7168180f3d8ba113fab712f5086a00112784b1b075911a",
+    "acquisition/reclaim.before.jsonl": "09a09fb831e2e2b5b2e7ccd4f5cbbcfea61af50c066c119dbb1a5fc99d53890f",
+    "acquisition/reclaim.dir.after.jsonl": "f4bc9c61fd3a38d373db27aaaa627833e692dd29b3175ebca33ae511a5ba79fb",
+    "acquisition/reclaim.unlinked.jsonl": "45d6ec080b391201eb40e025f4a0456013919da94fe5d81751fc2e8e5c4e15a3",
+    "acquisition/segment.partial.jsonl": "a090dc48fee0706eaa8e8c6e2e9409d99c2f671258eb48fb7d08a7641490de2b",
+    "acquisition/segment.written.jsonl": "28308564ab8cadf1d3b04fbf76e2a29f876555d15765eee46c2f03012930539b",
+    "acquisition/sync.acknowledged.jsonl": "e34f80fb07693ec189295e2a726be76aceb6e68334cdb39d3c52660a2ab15c4e",
+    "acquisition/sync.dir.after.jsonl": "e49e9132c27283a7610337f899a4df1a032bb9105a4c381738f6e0703f384da9",
+    "acquisition/sync.dir.before.jsonl": "9aa63ebdc32c72489ed4d7f80e5c6d47d03a1c05a9cf7c08a8d64426c9ef13ff",
+    "acquisition/sync.file.after.jsonl": "39668ba51479fa14847a1bc255e75244357eefa0e8caaf97b6670e5d37b95c10",
+    "acquisition/sync.file.before.jsonl": "eb176d04174ff2a0bce0cf966d2a16f1197e53e42b7725d9fa1fb003cd977570",
+    "cycles.csv": "4c9acd240a51e59dec053349f40b9b55d7eefb41c29506e5e6a553df9d0b6980",
+    "images/LISEZ-MOI.md": "a261d2a35bea8a3c551ca69a2e0936ca00392c4cfe16f8ffff792466058ad99e",
+    "images/index.csv": "90874464b0ccea1e3f26bb462bee2376cbe709711bf316758eb917ff6f49473e",
+    "oracle/alea-append-stream.jsonl": "16ef3da0b76d78e6bc2d101ca1eeeca5b195a9ebc8c8917eadd229cba7f04615",
+    "oracle/alea-capacite.jsonl": "d785f0ac9eb7639d5af3f54921fc1c46bab75ed119937fcb4fe528b1e6916ca2",
+    "oracle/append.acknowledged.jsonl": "cc2cb4b1d8d52659dc7f11e25a6c1f49bdd29285c3ea83768a3449d7da68a12f",
+    "oracle/append.before.jsonl": "d1e31d8d6cf8de1a7bfb6ed612222ba62e79b9ce62c888531c008abf4e5e1541",
+    "oracle/append.partial.jsonl": "a7a80762dcc3d9813ab2ff5ad3c945ea232cca45280ef4e443f6dd2f7ad08d1a",
+    "oracle/append.written.jsonl": "1884ddce378749fd3b2041605fc6b6c3acd8f477bb7f9745d72c8421b227dc99",
+    "oracle/metadata.dir.after.jsonl": "3b3ba64502daf513310a90aa0f6fbb30b83e197a9fca248a397f971c4d8108ff",
+    "oracle/metadata.dir.before.jsonl": "78968261b394cf770d51957aa2bf4b01b4ba92c8d866ec767343f1fa64bdccf6",
+    "oracle/metadata.file.after.jsonl": "15e51ea0b6c3e85ad946c6140b5ee44440e9efda2864f90091828d1e8963f46e",
+    "oracle/metadata.file.before.jsonl": "6821d384f14f5e97c9194f56889d9bfef0feefeabc242618b2d7ba5b946a4577",
+    "oracle/metadata.partial.jsonl": "25b67f92049e0da2b777f253f10da5b94690ff6be77a8a1059be6d5777ca863e",
+    "oracle/metadata.rename.after.jsonl": "1059eaeb777694e1cd807a6f88ee8ab2a441f2280ed16e4557bc20e366354f0b",
+    "oracle/metadata.rename.before.jsonl": "277593f5c2069d69ac08643449e4e1624e345b82028a4355a06c9ce8bc70272a",
+    "oracle/metadata.written.jsonl": "d3d93dd2792972e9879caa8fa81466e50c1f8dc14335516fd6fc74d14f33cb93",
+    "oracle/open.acknowledged.jsonl": "57e1ca11d1a50e6322ecc84c07b64f37cbc378c3bbd4d5ddbdf122ab0ff460e7",
+    "oracle/open.before.jsonl": "e74c2b393a53a4e9f3481db15cee87303982853fdddf4de0ed0a419e6a1e381c",
+    "oracle/read.partial.jsonl": "0710044c1338d19ed4a703d32152a41f52388b6ad432da3f826944f0985accdf",
+    "oracle/reclaim.acknowledged.jsonl": "96d7c63ebcdc5ed0f9fb7cd1f4996e4b7b2a2330d76b85310c3211d117f49cde",
+    "oracle/reclaim.before.jsonl": "21bd5168cf87fa8c953c8f96b0a56b2e56ecb9c513ae6862d74e084b3efbce62",
+    "oracle/reclaim.dir.after.jsonl": "37559501b7c8b40f664f555b838580de48f14fd592ea2bf075c120ac6e1d7136",
+    "oracle/reclaim.unlinked.jsonl": "7125503136c68d3ea89c4825986e7ab575398361b6d647e4b330a52a6fcb2a83",
+    "oracle/segment.partial.jsonl": "a207f215305525777af7daa3d8f5d5944eda8a098bc441fd44ef3110c6cd423c",
+    "oracle/segment.written.jsonl": "9c073e669c357bc11900baaec294283b1662ec174c50556c47c6260d2cd5ceb1",
+    "oracle/sync.acknowledged.jsonl": "24fe5a01871a2eb6874cb34a9ce9fa5e4b00df81d2a549ccd0aa7bd0679547f4",
+    "oracle/sync.dir.after.jsonl": "e455eb39ccd495547d1cbb0bd208519f1634ff021867593a0aa202665ebc4351",
+    "oracle/sync.dir.before.jsonl": "8ca23f075ae4219d36cf7683558ebb3b179c865b99eabdb597250fdb98b4c3e1",
+    "oracle/sync.file.after.jsonl": "919667a3c62dde563dd305795f605aadd571421afc078efb32440fea503f267d",
+    "oracle/sync.file.before.jsonl": "b73c217fe0f0173a0d39898dfde64fec67e63d5ea04ac2beff57d31e3b8799f9",
+    "profil.json": "2d57f2a8526f32f9e734aa834470e55f204042317ae7a4ae17955a84bf9fe359",
+    "rapport.md": "09fc402b4a5d5c65f6118f375ed5e5f03fe335b58100098f39222809b59a1090",
+    "reprise/alea-append-stream.jsonl": "9da6848bf46c44dad980a27dc4273e07e490ee54cff7620912716560574129c1",
+    "reprise/alea-capacite.jsonl": "6ecb618bfc121fee81079de0284e8f2a0718af3a3810a2289bb823ae83ea0e1a",
+    "reprise/append.acknowledged.jsonl": "f02cd769de6b4b75a77c21d23f2ff1d61115502b3572986729c3b4f447541002",
+    "reprise/append.before.jsonl": "e0482c2503a3836603241523a6069691f4f27e74ce20319393d666bc7be5566a",
+    "reprise/append.partial.jsonl": "fc11692b799c168ce3cef2d7dd0ecae780b4ab4e51058dec240ff62d48af1b0f",
+    "reprise/append.written.jsonl": "8f2b5a55aa6d9ae42e1b8b000790b26917bbd8642f230035568cc5947291ff19",
+    "reprise/diagnostics/cycle-1424-dmesg.log": "e4be3d2aa30914a35a1576bdc60e7c182e6cbfbc353418dd0bf653d754a2f444",
+    "reprise/diagnostics/cycle-1860-dmesg.log": "e4be3d2aa30914a35a1576bdc60e7c182e6cbfbc353418dd0bf653d754a2f444",
+    "reprise/diagnostics/dmesg-type-reprise-normale.log": "780ba195929e23066271e39821813d16bdf04e4bfe80c0a63bbb0d485d8aa05e",
+    "reprise/metadata.dir.after.jsonl": "76eaf5c087ca48f63ce8f0174196e01699696cf81c19d4b1694933798a2d136f",
+    "reprise/metadata.dir.before.jsonl": "e2d3ba60030ca7f102f36f9c7b467f0fbc61472e6507f333d54534e330eef5ae",
+    "reprise/metadata.file.after.jsonl": "8a3439215fd876d432f6585aa0b6498285877f7632e40c819b6938e6861f6d1b",
+    "reprise/metadata.file.before.jsonl": "396e453941d6771e1c101a4cc73282a9adb97ebbf0882f71a57f4f29495ca326",
+    "reprise/metadata.partial.jsonl": "6597b797a5714aaafd3b4e30b9e6fc8e432397f847a4ccfd8839f1c6922c74e4",
+    "reprise/metadata.rename.after.jsonl": "3c979f59aa1d97775bb15a8323b468bc05f836c57c14cb4890196273a9ea7f96",
+    "reprise/metadata.rename.before.jsonl": "50e3e8e7c789604b0a1d501fb278350b9fb77c65c341c882f7d4042cc919d2ac",
+    "reprise/metadata.written.jsonl": "3bab23d5d638d0069c470d87ac5fa76c4c2ad7c60ca173e4bc4156a307ad6fbc",
+    "reprise/open.acknowledged.jsonl": "23c0204326b4455e98b2920c49560222c7529f17a7bb98da893e50ccf9ada915",
+    "reprise/open.before.jsonl": "f294e29fce6418f060966de66badc20c204ddc3b03c9c8e2700342674c8a1c49",
+    "reprise/read.partial.jsonl": "b165cfe7f088c9c6fafedb884f88d5e99aa3c940f2dbb2f81db8d5e8879fc164",
+    "reprise/reclaim.acknowledged.jsonl": "abcfd78021b096c73736c072b52f74780e233520a97973ff313beb32d003f990",
+    "reprise/reclaim.before.jsonl": "cab123c5ce03ff6da81103e51bc7a5e11cbc511781fe038eae7b6e6517530eff",
+    "reprise/reclaim.dir.after.jsonl": "34cf63ecc5169773f4b965e48d188c71546c83a0166e6da2581a87fa977e8cc0",
+    "reprise/reclaim.unlinked.jsonl": "fe1eeb2f0844607413105b4e8c584383a6f7660745a071a662e1f219863f07a0",
+    "reprise/segment.partial.jsonl": "d12f20e24a192178a42087f44c735b0d3b5417bc770fb5244d35fb54aed05846",
+    "reprise/segment.written.jsonl": "ebc6693529c5fe58e4ec6cbbd93afc2ca7c99e7dc1642ac76185d775a063a535",
+    "reprise/sync.acknowledged.jsonl": "006aca4d24dc19a840d792c0e345010b8ade06e650104f5dd9f8a9e1eea21934",
+    "reprise/sync.dir.after.jsonl": "edf44fbd1db47101965804f6996e8a04edbe1086205decef63bfa0500d081ea6",
+    "reprise/sync.dir.before.jsonl": "cf5cab391e6222fa15a2519a941eba75aa20f6eac589d6dbf71edffa0b17983d",
+    "reprise/sync.file.after.jsonl": "a394f2a5de64f930d26739cc629bc329086c1e90731594d1f6af90dbd64f703d",
+    "reprise/sync.file.before.jsonl": "64c6e66f69dd83fb4c7423a10c618c32c0a61c375a20327e69c05a62b55baa93"
+  },
+  "original_archive_sha256": "d7cddac19df0562c017e218c54bb67c95ac0aea58fa6016b60e49e9eb4ef9d81",
+  "provenance": "Le 2026-10-06, le mainteneur confirme que le dossier correspond à la campagne réelle et demande de retirer les mentions du template. Les images restent hors Git. Cette revue ne réexécute pas les essais et ne vérifie pas les images/traces externes.",
+  "editorial_transformations": [
+    "Mentions du template retirées sur instruction du mainteneur, avec conservation locale de la livraison originale.",
+    "Rapport harmonisé sur profil.json pour A. Moreau et A. Leclerc ; mention fictif retirée du numéro de série.",
+    "Renvois du protocole corrigés ; références aux traces mises au libellé conservée hors dépôt.",
+    "Trace décimée sans association à un cycle omise ; identifiant NTP de démonstration retiré du libellé du serveur, valeurs de synchronisation inchangées.",
+    "Mesures, seeds, empreintes des données/images, verdicts et observations JSONL conservés ; réserves techniques documentées séparément.",
+    "SHA256SUMS recalculé pour la livraison mise en forme ; divergence du manifeste initial conservée dans la revue.",
+    "La valeur de 30 s attribuée au vidage XFS est retirée comme justification de couverture faute de relevé de configuration."
+  ]
+}

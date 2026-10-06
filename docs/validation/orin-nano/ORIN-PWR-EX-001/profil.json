@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "identification": {
+    "campagne": "ORIN-PWR-EX-001",
+    "debut": "2026-09-14",
+    "fin": "2026-09-21",
+    "operateur": "A. Moreau",
+    "relecteur": "A. Leclerc"
+  },
+  "orin_nano": {
+    "kit": "NVIDIA Jetson Orin Nano Developer Kit 8 Go",
+    "module": "P3767-0005",
+    "carte_porteuse": "P3768-0000",
+    "revision_carte": "A02 (étiquette)",
+    "numero_serie": "1423325000000"
+  },
+  "stockage": {
+    "support": "NVMe M.2 2280, Samsung 970 EVO Plus 500 Go",
+    "controleur": "Samsung Phoenix",
+    "firmware": "2B2QEXM7",
+    "cache_ecriture_volatil": true,
+    "verification": "nvme id-ctrl /dev/nvme0 -> vwc=0x1 ; nvme get-feature -f 0x06 -> 0x00000001",
+    "protection_electrique": "aucune (pas de condensateurs de protection contre la perte de courant)",
+    "partition_essai": "/dev/nvme0n1p3, 1 Gio, XFS"
+  },
+  "systeme": {
+    "os": "Ubuntu 22.04.5 LTS (JetPack 6.2, L4T R36.4.3)",
+    "noyau": "5.15.148-tegra",
+    "libc": "glibc 2.35",
+    "systeme_de_fichiers": "XFS v5 (crc=1, reflink=1)",
+    "montage": "/dev/nvme0n1p3 /srv/mddlog-campagne xfs rw,noatime,attr2,inode64,logbufs=8,logbsize=32k,noquota"
+  },
+  "logiciel": {
+    "commit": "f3df38328e141f5b85eebd07062f72d9e3086872",
+    "modifications_locales": "aucune (git status propre, git diff vide)",
+    "compilateur": "Clang 21.1.8 + libc++ 21.1.8, compilés pour aarch64",
+    "cmake": "4.2.3",
+    "ninja": "1.12.1",
+    "options": "preset ninja-clang, CMAKE_BUILD_TYPE=Release, -O2 -DNDEBUG, backend fichiers activé",
+    "binaire": "build-clang/tests/mddlog_file_storage_campaign",
+    "sha256_binaire": "ebb642763e4033dd505fb89a74a144fa4e356c2b5c24242122b905677cc08a45",
+    "mode_sync": "QualifiedFsync (branches de confirmation exercées ; aucune éligibilité attribuée)"
+  },
+  "coupure": {
+    "dispositif": "relais bipolaire 24 V/30 A commandé par acq-01 (FT232H), sur l'entrée 19 V DC de la carte",
+    "alimentation_effectivement_coupee": "oui, prouvée à chaque cycle par la tension du rail 3V3 du connecteur M.2 < 0,3 V (DAQ 1 MS/s)",
+    "duree_hors_tension_ms_prevue": [
+      5000,
+      10000,
+      30000
+    ],
+    "delai_checkpoint_coupure_ms": {
+      "points": "tirage log-uniforme 1-1000, seed enregistrée",
+      "alea_churn": "50-45000",
+      "alea_capacite": "50-3000"
+    }
+  },
+  "acquisition": {
+    "machine": "acq-01 (mini-PC x86_64, Debian 12), indépendante de l'Orin Nano et de son alimentation",
+    "conserve": [
+      "données attendues",
+      "accusés reçus avant coupure",
+      "horodatages",
+      "commandes de relais",
+      "mesures de rail",
+      "images brutes"
+    ],
+    "stockage": "SSD local d'acq-01, copie hebdomadaire vers l'archive de qualification"
+  },
+  "protocole": {
+    "reference": "docs/file-storage-test-plan.md",
+    "cycles_minimum_par_point_de_mutation": 100
+  }
+}

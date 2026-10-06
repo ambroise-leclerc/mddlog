@@ -86,7 +86,7 @@
       "status": "open",
       "issue": 114,
       "owner": "Ambroise Leclerc",
-      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Premier backend Linux et suite locale implémentés en #114, contrat docs/file-storage.md ; qualification système de fichiers/matériel/caches et campagnes physiques toujours ouvertes. Protocole docs/file-storage-test-plan.md et banc SIGKILL/permissions/ENOSPC réels livrés ; campagne physique et intégration #115/#116/#122 non acceptées. Succès électrique sur Orin Nano déclaré par le mainteneur ; paramètres et artefacts à compléter dans docs/orin-nano-electrical-results.md avant revue du profil."
+      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Backend Linux et banc SIGKILL/permissions/ENOSPC livrés ; qualification physique et intégration #115/#116/#122 non acceptées. Le mainteneur confirme le 2026-10-06 la provenance réelle du dossier électrique Orin Nano : paramètres, cycles et observations publiés dans docs/validation/orin-nano/ORIN-PWR-EX-001, bilan docs/orin-nano-electrical-results.md. Revue docs/orin-nano-campaign-review.md : décomptes/renvois cohérents, mentions du template retirées, mais réserves RN-02–07 sur révision réellement exécutée, preuves externes/oracle, incohérences et écarts ; GAP-007 reste ouvert. Images et traces électriques conservées hors Git ; leurs empreintes ne sont pas vérifiées par cette revue documentaire."
     },
     {
       "id": "GAP-008",
@@ -275,7 +275,8 @@
         "docs/file-storage.md",
         "docs/file-storage-test-plan.md",
         "docs/audit-robustness-test-plan.md",
-        "docs/orin-nano-electrical-results.md"
+        "docs/orin-nano-electrical-results.md",
+        "docs/orin-nano-campaign-review.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditStore.cppm",
