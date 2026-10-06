@@ -1,6 +1,15 @@
 # Tests for mddlog
 
 include(${CMAKE_SOURCE_DIR}/cmake/MddlogTestDiscovery.cmake)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+add_executable(mddlog_sha256_oracle spec/Sha256Oracle.cpp)
+target_link_libraries(mddlog_sha256_oracle PRIVATE mddlog::mddlog)
+add_test(NAME audit.sha256-oracle
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/run-audit-robustness.py
+        --sha-worker $<TARGET_FILE:mddlog_sha256_oracle>
+        --output ${CMAKE_CURRENT_BINARY_DIR}/audit-sha256 --ephemeral)
+set_tests_properties(audit.sha256-oracle PROPERTIES LABELS "integration;audit" TIMEOUT 40)
 
 add_executable(mddlog_context_adapter_consumer consumer/ContextAdapterConsumer.cpp)
 target_link_libraries(mddlog_context_adapter_consumer PRIVATE mddlog::mddlog)
@@ -101,6 +110,8 @@ add_executable(mddlog_specs
     spec/GovernedRecordSpec.cpp
     spec/RingLogSpec.cpp
     spec/AuditRingSpec.cpp
+    spec/AuditRobustnessSpec.cpp
+    spec/AuditGeneratedRecoverySpec.cpp
     spec/AuditScenarioSpec.cpp
     spec/AuditDrainSpec.cpp
     spec/AuditCanonicalSpec.cpp
@@ -123,7 +134,6 @@ add_executable(mddlog_specs
 )
 
 if(MDDLOG_BUILD_FILE_STORAGE)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_executable(mddlog_file_storage_campaign spec/FileStorageCampaign.cpp)
     target_link_libraries(mddlog_file_storage_campaign PRIVATE mddlog::mddlog)
     add_test(NAME file-storage.campaign
@@ -158,6 +168,19 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 mddlog_discover_tests(mddlog_specs)
+
+if(MDDLOG_BUILD_FUZZERS)
+    add_executable(mddlog_audit_readers_fuzz spec/AuditReadersFuzz.cpp)
+    target_link_libraries(mddlog_audit_readers_fuzz PRIVATE mddlog::mddlog)
+    target_compile_options(mddlog_audit_readers_fuzz PRIVATE -fsanitize=fuzzer-no-link
+        "-fprofile-instr-generate=${_mddlog_fuzz_default_profile}" -fcoverage-mapping)
+    target_link_options(mddlog_audit_readers_fuzz PRIVATE -fsanitize=fuzzer)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # The distribution's Clang runtime uses libstdc++; only libFuzzer's C ABI crosses
+        # this boundary. mddlog and its module importers continue to use libc++.
+        target_link_libraries(mddlog_audit_readers_fuzz PRIVATE "-Wl,-lstdc++")
+    endif()
+endif()
 
 # Run the executable before/after usage study when examples are enabled.
 if(TARGET mddlog_contextual_usage)

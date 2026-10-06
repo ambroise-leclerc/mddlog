@@ -77,9 +77,13 @@ La CI ajoutée répète les points dix fois, exige un volume plein réel sur l�
 les rapports. Son exécution et ses résultats sont à citer avec le run et le SHA de la PR,
 séparément des résultats locaux ci-dessus. Aucun résultat de workflow non exécuté n’est revendiqué.
 
-Non réalisés : campagne de 100 répétitions par point, coupure électrique, qualification
+Non réalisés lors de cette campagne locale initiale : campagne de 100 répétitions par point, coupure électrique, qualification
 du matériel/contrôleur/caches, quota réel, EIO matériel et chaîne complète avec témoin et
 position retenue indépendants. Les redémarrages sont ceux des processus ; noyau et caches
 restent actifs. `QualifiedFsync` ne sert qu’à tester les branches ; tmpfs ne fournit aucune
 preuve de survie au redémarrage de la machine. Les obligations et la procédure physique
 figurent dans le protocole ; #114/#115/#116/#120/#122 restent ouverts.
+
+Le [complément de robustesse](audit-robustness-results.md) rapporte les essais logiciels
+supplémentaires. La [réussite électrique déclarée sur Orin Nano](orin-nano-electrical-results.md)
+est consignée séparément, avec les paramètres de campagne restant à renseigner.

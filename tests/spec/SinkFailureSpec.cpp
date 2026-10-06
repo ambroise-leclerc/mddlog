@@ -100,4 +100,17 @@ const speclab::Register throwingSinkDoesNotKillAsyncWorker{
             .Execute();
     }};
 
+const speclab::Register idleWorkersStop{"Idle asynchronous workers always stop while entering their condition wait", "unit", [] {
+                                            return speclab::Test("sink-idle-worker-stop-stress")
+                                                .Then("2000 startup and idle shutdown cycles complete within the CTest deadline",
+                                                      [] {
+                                                          for (int cycle = 0; cycle < 2000; ++cycle) {
+                                                              SimpleLogger logger{"idle-stop", true};
+                                                              if (cycle % 2 == 0)
+                                                                  std::this_thread::yield();
+                                                          }
+                                                      })
+                                                .Execute();
+                                        }};
+
 }  // namespace

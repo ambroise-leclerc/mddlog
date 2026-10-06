@@ -1,0 +1,111 @@
+name: Audit Robustness
+
+on:
+  pull_request:
+    branches: [develop, master]
+  push:
+    branches: [develop, master]
+  workflow_dispatch:
+    inputs:
+      campaign:
+        description: Campaign to execute
+        type: choice
+        default: long
+        options: [long, volume]
+  schedule:
+    - cron: '17 2 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  readers:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.campaign == 'volume' && 'File storage ENOSPC (Clang 21)' || 'Audit readers fuzzing and coverage (Clang 21)' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VOLUME_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.campaign == 'volume' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-clang21
+        with:
+          cache-key: audit-fuzz
+      - name: Install fuzzing runtime and coverage tools
+        run: sudo apt-get install -y libclang-rt-21-dev llvm-21
+      - name: Configure scenarios and instrumented readers separately
+        run: |
+          cmake -S . -B build-robustness -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-clang21-libcxx.cmake \
+            -DCMAKE_BUILD_TYPE=Debug -DMDDLOG_BUILD_TESTS=ON -DMDDLOG_BUILD_EXAMPLES=OFF \
+            -DENABLE_SANITIZER_ADDRESS=ON -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
+          if [ "$VOLUME_ONLY" != true ]; then
+            cmake -S . -B build-robustness-fuzz -G Ninja \
+              -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-clang21-libcxx.cmake \
+              -DCMAKE_BUILD_TYPE=Debug -DMDDLOG_BUILD_TESTS=ON -DMDDLOG_BUILD_EXAMPLES=OFF \
+              -DMDDLOG_BUILD_FUZZERS=ON -DENABLE_SANITIZER_ADDRESS=ON \
+              -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
+          fi
+      - name: Build and link
+        run: |
+          if [ "$VOLUME_ONLY" = true ]; then
+            cmake --build build-robustness --target mddlog_file_storage_campaign --parallel 4
+          else
+            cmake --build build-robustness --target mddlog_sha256_oracle mddlog_specs mddlog_file_storage_campaign --parallel 4
+            cmake --build build-robustness-fuzz --target mddlog_audit_readers_fuzz --parallel 4
+          fi
+      - name: Run concurrent and generated audit scenarios
+        if: github.event_name != 'workflow_dispatch' || inputs.campaign != 'volume'
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          ctest --test-dir build-robustness \
+            -R 'AuditRing (follows|concurrent)|Generated audit cuts|Idle asynchronous' \
+            --repeat until-fail:10 --no-tests=error --output-on-failure --timeout 60
+      - name: Run bounded readers fuzzing and independent digest oracle
+        if: github.event_name != 'workflow_dispatch' || inputs.campaign != 'volume'
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          LONG_CAMPAIGN: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          runs=10000
+          budget=600
+          if [ "$LONG_CAMPAIGN" = true ]; then runs=1000000; budget=3600; fi
+          python3 scripts/run-audit-robustness.py \
+            --sha-worker build-robustness/tests/mddlog_sha256_oracle \
+            --fuzzer build-robustness-fuzz/tests/mddlog_audit_readers_fuzz \
+            --output build-robustness/readers --runs "$runs" --timeout "$budget"
+      - name: Repeat storage interruptions for the long campaign
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          if [ "$VOLUME_ONLY" != true ]; then
+            python3 scripts/run-file-storage-campaign.py \
+              --worker build-robustness/tests/mddlog_file_storage_campaign \
+              --output build-robustness/storage-100 --iterations 100
+          fi
+          sudo --preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS python3 scripts/run-file-storage-campaign.py \
+            --worker "$PWD/build-robustness/tests/mddlog_file_storage_campaign" \
+            --output "$PWD/build-robustness/storage-full-volume" --volume-only --require-volume
+      - name: Make volume evidence readable
+        if: always()
+        run: |
+          if [ -d build-robustness/storage-full-volume ]; then
+            sudo chown -R "$(id -u):$(id -g)" build-robustness/storage-full-volume
+          fi
+      - name: Archive logs, corpus, reduced failures and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-robustness-${{ github.sha }}
+          path: |
+            build-robustness/readers/
+            build-robustness/storage-100/
+            build-robustness/storage-full-volume/
+            build-robustness/Testing/Temporary/
+          if-no-files-found: error

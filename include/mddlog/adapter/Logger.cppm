@@ -387,8 +387,13 @@ private:
      * @brief Shutdown the logger
      */
     void shutdown() {
-        if (shuttingDown.exchange(true))
-            return;
+        {
+            // Use the waiter's mutex when changing its predicate: otherwise notify_all()
+            // may happen between its false predicate check and entry into wait().
+            const std::scoped_lock lock{queueMutex};
+            if (shuttingDown.exchange(true))
+                return;
+        }
 
         if (asyncThread.joinable()) {
             queueCondition.notify_all();

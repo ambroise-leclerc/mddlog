@@ -47,6 +47,12 @@ Le [bilan succinct du lot fusionné](../../docs/file-storage-success-report.md) 
 révision intégrée, les preuves CI et les travaux restant à réaliser, sans nouvelle
 qualification ni clôture de lacune.
 
+Le [plan de robustesse](../../docs/audit-robustness-test-plan.md) ajoute modèle génératif,
+fuzzing borné, oracle SHA-256 et observateurs concurrents ; son
+[rapport](../../docs/audit-robustness-results.md) distingue exécution locale et CI configurée.
+Le [résultat électrique Orin Nano](../../docs/orin-nano-electrical-results.md) consigne
+la réussite déclarée et les données du profil nécessaires à sa revue.
+
 ## Configuration et composants tiers
 
 Git identifie sources, documents et changements. CMake fait foi pour version et modules ; les

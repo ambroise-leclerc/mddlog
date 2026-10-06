@@ -86,7 +86,7 @@
       "status": "open",
       "issue": 114,
       "owner": "Ambroise Leclerc",
-      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Premier backend Linux et suite locale implémentés en #114, contrat docs/file-storage.md ; qualification système de fichiers/matériel/caches et campagnes physiques toujours ouvertes. Protocole docs/file-storage-test-plan.md et banc SIGKILL/permissions/ENOSPC réels livrés ; campagne physique et intégration #115/#116/#122 non acceptées."
+      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Premier backend Linux et suite locale implémentés en #114, contrat docs/file-storage.md ; qualification système de fichiers/matériel/caches et campagnes physiques toujours ouvertes. Protocole docs/file-storage-test-plan.md et banc SIGKILL/permissions/ENOSPC réels livrés ; campagne physique et intégration #115/#116/#122 non acceptées. Succès électrique sur Orin Nano déclaré par le mainteneur ; paramètres et artefacts à compléter dans docs/orin-nano-electrical-results.md avant revue du profil."
     },
     {
       "id": "GAP-008",
@@ -134,7 +134,7 @@
       "status": "open",
       "issue": 120,
       "owner": "Ambroise Leclerc",
-      "closure": "Campagnes génératives, fuzz et concurrence avec critères et anomalies tracés ; limites des doubles conservées."
+      "closure": "Campagnes génératives, fuzz et concurrence avec critères et anomalies tracés ; limites des doubles conservées. Modèles génératifs, fuzzing borné, oracle hashlib, observateurs audit et TSan ajoutés ; preuves dans docs/audit-robustness-results.md, revue/CI du lot et intégration du témoin réel restent ouvertes."
     },
     {
       "id": "GAP-014",
@@ -217,7 +217,8 @@
       "title": "Admission d’audit et identité/séquence par flux",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-002-regulatory-audit-event-model.md"
+        "docs/adr/ADR-002-regulatory-audit-event-model.md",
+        "docs/audit-robustness-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/core/AuditEvent.cppm",
@@ -229,7 +230,8 @@
       "title": "Transmission et santé sans promesse de durabilité",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-002-regulatory-audit-event-model.md"
+        "docs/adr/ADR-002-regulatory-audit-event-model.md",
+        "docs/audit-robustness-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditDrain.cppm",
@@ -241,7 +243,8 @@
       "title": "Encodage canonique et chaînage",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
+        "docs/audit-robustness-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditCanonical.cppm",
@@ -254,7 +257,8 @@
       "title": "Verdicts relatifs à l’ancrage et à la position retenue",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
+        "docs/audit-robustness-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditAnchor.cppm",
@@ -269,7 +273,9 @@
       "design": [
         "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
         "docs/file-storage.md",
-        "docs/file-storage-test-plan.md"
+        "docs/file-storage-test-plan.md",
+        "docs/audit-robustness-test-plan.md",
+        "docs/orin-nano-electrical-results.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditStore.cppm",
@@ -282,7 +288,8 @@
       "title": "Ledger, reprise, rotation et rétention",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md"
+        "docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md",
+        "docs/audit-robustness-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditLedger.cppm",
@@ -295,7 +302,8 @@
       "title": "SPSC et acquittement explicite",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-001-allocation-free-governed-logging-core.md"
+        "docs/adr/ADR-001-allocation-free-governed-logging-core.md",
+        "docs/audit-robustness-test-plan.md"
       ],
       "implementation": [
         "include/mddlog/core/Ring.cppm",
@@ -361,6 +369,17 @@
       "implementation": [
         "examples/InventoryWorker.hpp",
         "examples/ContextualInventory.cpp"
+      ]
+    },
+    {
+      "id": "CTRL-015",
+      "title": "Arrêt du worker diagnostic synchronisé avec son attente",
+      "status": "implemented",
+      "design": [
+        "docs/audit-robustness-test-plan.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/Logger.cppm"
       ]
     }
   ],
@@ -713,6 +732,85 @@
       "scenario": null,
       "evidence": "docs/file-storage-campaign-results.md",
       "limits": "Quatre compteurs invalides et 64 cycles/refus dans le même worker ; budgets locaux et contrôles négatifs du superviseur. Pas un budget global ou une preuve exhaustive."
+    },
+    {
+      "id": "VER-030",
+      "title": "Modèle génératif d’admission et acquittement",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-003",
+        "CTRL-009"
+      ],
+      "test": "tests/spec/AuditRobustnessSpec.cpp",
+      "scenario": "audit-generated-admission-model",
+      "evidence": "docs/audit-robustness-results.md",
+      "limits": "32 seeds et file abstraite ; preuve bornée, aucun budget temporel universel."
+    },
+    {
+      "id": "VER-031",
+      "title": "Concurrence audit, retries et observateurs autorisés",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-003",
+        "CTRL-004",
+        "CTRL-007",
+        "CTRL-009"
+      ],
+      "test": "tests/spec/AuditRobustnessSpec.cpp",
+      "scenario": "audit-concurrent-retries-observers",
+      "evidence": "docs/audit-robustness-results.md",
+      "limits": "Trois producteurs SPSC, un consommateur, un observateur ; fournisseur en mémoire, pas de mutations concurrentes interdites."
+    },
+    {
+      "id": "VER-032",
+      "title": "Fuzzing borné des lecteurs et collecte de couverture",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-005",
+        "CTRL-006",
+        "CTRL-008"
+      ],
+      "test": "scripts/run-audit-robustness.py",
+      "scenario": null,
+      "evidence": "docs/audit-robustness-results.md",
+      "limits": "Clang libFuzzer ASan/UBSan, 64 Kio et 512 Mio ; LSan désactivé explicitement en local sous ptrace, couverture partielle documentée."
+    },
+    {
+      "id": "VER-033",
+      "title": "SHA-256 comparé à hashlib",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-005"
+      ],
+      "test": "scripts/run-audit-robustness.py",
+      "scenario": null,
+      "evidence": "docs/audit-robustness-results.md",
+      "limits": "268 entrées reproductibles ; comparaison indépendante et vecteurs existants, sans preuve exhaustive."
+    },
+    {
+      "id": "VER-034",
+      "title": "Reprise générative et réponse du témoin perdue",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007",
+        "CTRL-008"
+      ],
+      "test": "tests/spec/AuditGeneratedRecoverySpec.cpp",
+      "scenario": "audit-generated-storage-recovery",
+      "evidence": "docs/audit-robustness-results.md",
+      "limits": "64 seeds et oracle de préfixes ; medium/témoin en mémoire, pas le fournisseur indépendant de #115."
+    },
+    {
+      "id": "VER-035",
+      "title": "Arrêt répété du worker diagnostic",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-015"
+      ],
+      "test": "tests/spec/SinkFailureSpec.cpp",
+      "scenario": "sink-idle-worker-stop-stress",
+      "evidence": "docs/audit-robustness-results.md",
+      "limits": "2000 cycles par passage ; correction d’une course identifiée, pas reproduction certaine du blocage initial ni réalisation de #118."
     }
   ],
   "risks": [
@@ -953,7 +1051,9 @@
         "CTRL-003"
       ],
       "verifications": [
-        "VER-003"
+        "VER-003",
+        "VER-030",
+        "VER-031"
       ],
       "gaps": [
         "GAP-015"
@@ -971,7 +1071,8 @@
         "CTRL-004"
       ],
       "verifications": [
-        "VER-004"
+        "VER-004",
+        "VER-031"
       ],
       "gaps": [
         "GAP-009"
@@ -989,7 +1090,9 @@
         "CTRL-005"
       ],
       "verifications": [
-        "VER-005"
+        "VER-005",
+        "VER-032",
+        "VER-033"
       ],
       "gaps": [
         "GAP-014",
@@ -1009,7 +1112,8 @@
         "CTRL-006"
       ],
       "verifications": [
-        "VER-006"
+        "VER-006",
+        "VER-032"
       ],
       "gaps": [
         "GAP-008",
@@ -1038,7 +1142,10 @@
         "VER-026",
         "VER-027",
         "VER-028",
-        "VER-029"
+        "VER-029",
+        "VER-031",
+        "VER-032",
+        "VER-034"
       ],
       "gaps": [
         "GAP-007",
@@ -1057,7 +1164,9 @@
         "CTRL-009"
       ],
       "verifications": [
-        "VER-009"
+        "VER-009",
+        "VER-030",
+        "VER-031"
       ],
       "gaps": [
         "GAP-013"
