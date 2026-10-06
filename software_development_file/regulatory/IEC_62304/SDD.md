@@ -119,5 +119,5 @@ l'hôte est préservé et la capture faible évite un cycle de propriété. Le s
 ni thread au cœur ni politique de rétention ; les opérations externes restent synchrones.
 Les refus et backlog d'arrêt sont observables sans promotion à durabilité. La
 [préparation de clôture](../../../docs/file-storage-closure.md) identifie les preuves
-externes encore dues. Aucun nouveau composant tiers n'est introduit ; zstd reste un
-outil de revue d'archives, hors dépendances de la bibliothèque et du déploiement.
+externes encore dues. Aucun nouveau composant tiers n'est lié à la bibliothèque ; DEP-010 inventorie zstd
+comme outil de revue d'archives, hors dépendances du déploiement.

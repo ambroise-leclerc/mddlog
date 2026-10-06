@@ -93,6 +93,7 @@ def verify_archive(index, archive, decoder, selected=None):
     failures = sum(record["status"] == "FAIL" for record in records)
     return {"checked_at_utc": datetime.now(timezone.utc).isoformat(),
             "verifier_sha256": digest_file(Path(__file__)),
+            "decoder": {"path": str(Path(decoder).resolve()), "sha256": digest_file(Path(decoder))},
             "index_sha256": digest_file(index), "archive": str(archive.resolve()),
             "indexed_images": len(rows), "checked_images": len(records), "failed_images": failures,
             "status": "FAIL" if failures else ("PASS" if len(records) == len(rows) else "PARTIAL"),

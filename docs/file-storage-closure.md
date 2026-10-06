@@ -12,7 +12,8 @@ Le script [verify-orin-archive.py](../scripts/verify-orin-archive.py) lit l'inde
 compare taille/empreinte des fichiers compressés puis décompresse en flux pour comparer
 les tailles et SHA-256 bruts. Il n'écrit aucune image et refuse les chemins sortant de
 l'archive. Utiliser une copie stable en lecture seule. Le rapport JSON doit être écrit
-hors de l'archive, dans un nouveau fichier ; il identifie l'index par son SHA-256 et l'emplacement effectivement lu.
+hors de l'archive, dans un nouveau fichier ; il identifie l'index par son SHA-256, l'emplacement effectivement lu et le chemin/empreinte du
+décompresseur. DEP-010 inventorie cet outil de revue ; zstd 1.5.7 est utilisé localement.
 
 ```sh
 python3 scripts/verify-orin-archive.py \

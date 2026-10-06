@@ -1524,6 +1524,21 @@
         "GAP-005",
         "GAP-007"
       ]
+    },
+    {
+      "id": "DEP-010",
+      "name": "Zstandard CLI pour revue des archives",
+      "scope": "verification",
+      "version": "zstd 1.5.7 exécuté lors des contrôles locaux de ce lot ; chemin et empreinte de l’exécutable consignés par le vérificateur. Distribution/version du poste de revue à relever pour chaque campagne.",
+      "provenance": "scripts/verify-orin-archive.py",
+      "license": "Notices de l’exécutable et de sa distribution exacte à relever pour la revue, GAP-005.",
+      "classification": "Outil de vérification uniquement, non déployé et non lié aux cibles C++.",
+      "knownIssues": "Le succès de décompression et de comparaison SHA-256 ne qualifie ni provenance, ni oracle, ni persistance électrique. Un outil absent ou une décompression échouée ne produisent pas un PASS.",
+      "monitoring": "Plan : mainteneur examine https://github.com/facebook/zstd/releases avant changement de l’outil de revue ; rejouer les contrôles négatifs et conserver la version, l’empreinte et les anomalies.",
+      "gaps": [
+        "GAP-005",
+        "GAP-007"
+      ]
     }
   ]
 }
