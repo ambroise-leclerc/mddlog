@@ -102,6 +102,68 @@ class AuditRobustnessTest(unittest.TestCase):
         self.assertEqual(metadata['ninja_version'], '1.13')
         self.assertEqual(metadata['ninja_version_exit_code'], 0)
 
+    def test_sha_campaign_passes_without_git_and_writes_report(self):
+        """Git is optional even when no metadata tools are available on PATH."""
+        sha = self.executable('sha', "import sys,hashlib\nfor line in sys.stdin: print(hashlib.sha256(bytes.fromhex(line)).hexdigest())\n")
+        tools = self.root / 'empty-path'
+        tools.mkdir()
+        env = os.environ.copy()
+        env['PATH'] = str(tools)
+        result = subprocess.run([sys.executable, str(SOURCE), '--sha-worker', str(sha),
+                                 '--output', str(self.root / 'output')],
+                                capture_output=True, text=True, timeout=10, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(next((self.root / 'output').glob('run-*/report.json')).read_text())
+        self.assertEqual(report['status'], 'PASS')
+        self.assertEqual(report['sha256']['inputs'], 268)
+        for name in ('revision', 'worktree'):
+            self.assertTrue(report[name].startswith('unavailable:'))
+
+    def test_git_timeout_does_not_prevent_report(self):
+        """Timed-out Git snapshots cannot hide the result of a real digest probe."""
+        sha = self.executable('sha', "import sys,hashlib\nfor line in sys.stdin: print(hashlib.sha256(bytes.fromhex(line)).hexdigest())\n")
+        original_run = subprocess.run
+
+        def run(command, *args, **kwargs):
+            if command[0] == 'git':
+                raise subprocess.TimeoutExpired(command, 5)
+            return original_run(command, *args, **kwargs)
+
+        arguments = [str(SOURCE), '--sha-worker', str(sha), '--output', str(self.root / 'output')]
+        with patch.object(sys, 'argv', arguments), patch.object(CAMPAIGN.subprocess, 'run', side_effect=run):
+            self.assertEqual(CAMPAIGN.main(), 0)
+        report = json.loads(next((self.root / 'output').glob('run-*/report.json')).read_text())
+        self.assertEqual(report['status'], 'PASS')
+        self.assertEqual(report['sha256']['inputs'], 268)
+        for name in ('revision', 'worktree'):
+            self.assertIn('timed out', report[name])
+
+    def test_ephemeral_oracle_removes_successes_and_keeps_failure(self):
+        """Repeated CTest successes leave no runs; a failed oracle retains evidence."""
+        sha = self.executable('sha', "import sys,hashlib\nfor line in sys.stdin: print(hashlib.sha256(bytes.fromhex(line)).hexdigest())\n")
+        output = self.root / 'output'
+        command = [sys.executable, str(SOURCE), '--sha-worker', str(sha), '--output', str(output), '--ephemeral']
+        for _ in range(2):
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIsNone(json.loads(result.stdout)['report'])
+            self.assertEqual(list(output.iterdir()), [])
+        sha.write_text(f'#!{sys.executable}\nimport sys\nfor line in sys.stdin: print("0" * 64)\n')
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 1)
+        report = Path(json.loads(result.stdout)['report'])
+        self.assertTrue(report.is_file())
+        self.assertEqual(json.loads(report.read_text())['status'], 'FAIL')
+
+    def test_ephemeral_fuzzing_is_rejected(self):
+        """The cleanup option cannot discard the evidence of a fuzzing campaign."""
+        result = subprocess.run([sys.executable, str(SOURCE), '--sha-worker', str(self.root / 'sha'),
+                                 '--fuzzer', str(self.root / 'fuzzer'), '--output', str(self.root / 'output'), '--ephemeral'],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('only available for SHA-only', result.stderr)
+        self.assertFalse((self.root / 'output').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

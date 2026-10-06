@@ -1,4 +1,6 @@
 /** @brief Bounded mutation harness for canonical, frame, ledger, recovery and log readers. */
+// Include after importing std, mddlog.adapter.auditstore and mddlog.adapter.auditlogverifier.
+// Those module imports provide the types used below; this shared test header adds no imports.
 #ifndef MDDLOG_TESTS_FRAMEWORK_AUDITREADEREXERCISE_HPP
 #define MDDLOG_TESTS_FRAMEWORK_AUDITREADEREXERCISE_HPP
 

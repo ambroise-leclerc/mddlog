@@ -134,6 +134,29 @@ Le probe C++ SHA-256 concorde encore sur 268 entrées avec le superviseur corrig
 Ces corrections relancent la CI ; elles ne reprennent pas à leur compte les résultats
 de la tête initiale comme s’ils avaient déjà été exécutés sur le nouveau commit.
 
+### Suite des observations de revue — 6 octobre 2026
+
+Les métadonnées Git sont facultatives et collectées dans la portée protégée : absence
+de Git ou timeout n’empêchent plus le rapport ni la comparaison SHA-256. Les 48 tests
+Python passent, incluant ces deux cas, le nettoyage de deux essais éphémères réussis,
+la conservation d’un essai en échec et le refus du nettoyage avec un fuzzer.
+
+CTest active ce nettoyage pour l’oracle. Les inventaires avant/après trois répétitions
+des cinq scénarios ciblés ne croissent ni pour les profils à la racine, ni pour les
+dossiers SHA-256 réussis, en Release et en ASan/UBSan. Les profils sont jetés par défaut ;
+un nouveau rejeu de 10 000 entrées conserve bien les profils choisis par le superviseur
+et couvre les six lecteurs. Son rapport est
+`build-robustness-fuzz/review-campaign/run-djyd9weu/report.json` ; le hash du fuzzer est
+`a1b25d1d498d0a1b05f52ce6a000e8f3be8fd311f3460afc03f92f55128266d1`.
+Ce nouveau binaire ne reprend pas le hash de la campagne initiale de 100 000 entrées.
+
+La CI sépare désormais les scénarios ASan/UBSan du build des adaptateurs instrumentés
+pour le fuzzer et déclenche le contrôle aussi pour une PR documentaire. Le runtime
+Linux mixte et les imports préalables au header sont explicités dans les sources/docs.
+La cible manuelle `campaign=volume` permet d’exécuter le volume root obligatoire sans
+présenter comme exécutées les campagnes longues qu’elle omet. Son résultat doit encore
+être consigné après l’exécution ; un simple déclenchement ne constitue pas une réussite.
+
 | Issue | Travaux démontrés par ce lot | Éléments restant nécessaires à la clôture actuelle |
 | --- | --- | --- |
 | #114 | Conformité, erreurs réelles précédentes, reprises SIGKILL à 100 passages ; succès électrique déclaré sur Orin Nano ; revue technique de l’exemple | Paramètres et preuves du profil électrique, acceptation des revues du profil et de l’ergonomie, raccordement au pilotage de #116 |

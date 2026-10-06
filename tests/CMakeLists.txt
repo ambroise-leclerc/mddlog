@@ -8,7 +8,7 @@ target_link_libraries(mddlog_sha256_oracle PRIVATE mddlog::mddlog)
 add_test(NAME audit.sha256-oracle
     COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/run-audit-robustness.py
         --sha-worker $<TARGET_FILE:mddlog_sha256_oracle>
-        --output ${CMAKE_CURRENT_BINARY_DIR}/audit-sha256)
+        --output ${CMAKE_CURRENT_BINARY_DIR}/audit-sha256 --ephemeral)
 set_tests_properties(audit.sha256-oracle PROPERTIES LABELS "integration;audit" TIMEOUT 40)
 
 add_executable(mddlog_context_adapter_consumer consumer/ContextAdapterConsumer.cpp)
@@ -173,7 +173,7 @@ if(MDDLOG_BUILD_FUZZERS)
     add_executable(mddlog_audit_readers_fuzz spec/AuditReadersFuzz.cpp)
     target_link_libraries(mddlog_audit_readers_fuzz PRIVATE mddlog::mddlog)
     target_compile_options(mddlog_audit_readers_fuzz PRIVATE -fsanitize=fuzzer-no-link
-        "-fprofile-instr-generate=${CMAKE_BINARY_DIR}/coverage-%p.profraw" -fcoverage-mapping)
+        "-fprofile-instr-generate=${_mddlog_fuzz_default_profile}" -fcoverage-mapping)
     target_link_options(mddlog_audit_readers_fuzz PRIVATE -fsanitize=fuzzer)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # The distribution's Clang runtime uses libstdc++; only libFuzzer's C ABI crosses

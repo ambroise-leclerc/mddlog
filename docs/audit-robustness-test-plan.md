@@ -31,7 +31,7 @@ cmake -S . -B build-robustness -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug -DMDDLOG_BUILD_TESTS=ON -DMDDLOG_BUILD_EXAMPLES=OFF \
   -DMDDLOG_BUILD_FUZZERS=ON -DENABLE_SANITIZER_ADDRESS=ON \
   -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
-cmake --build build-robustness --parallel 4
+cmake --build build-robustness --target mddlog_audit_readers_fuzz mddlog_sha256_oracle --parallel 4
 python3 scripts/run-audit-robustness.py \
   --sha-worker build-robustness/tests/mddlog_sha256_oracle \
   --fuzzer build-robustness/tests/mddlog_audit_readers_fuzz \
@@ -52,11 +52,29 @@ Une sortie prématurée à code zéro ne suffit pas : le compteur d’entrées d
 le budget demandé. Un profil de couverture exécuté est exigé pour chacun des six lecteurs
 principaux ; cela ne fixe pas une couverture exhaustive ni un pourcentage global arbitraire.
 
+Le build de fuzzing conserve le coût des compteurs dans ses adaptateurs. En CI, les
+scénarios et le worker fichiers sont construits avec ASan/UBSan dans un build séparé,
+sans `MDDLOG_BUILD_FUZZERS`. Les profils sont jetés par défaut ; seul le superviseur
+choisit un `LLVM_PROFILE_FILE` à archiver dans son répertoire de campagne.
+Le [README du corpus](../tests/fuzz/README.md) décrit les limites du runtime Linux.
+
+Git et les outils de collecte de versions sont facultatifs pour l’oracle : absence,
+échec ou délai dépassé sont consignés comme métadonnées indisponibles, et le rapport
+est produit. CTest ajoute `--ephemeral` pour nettoyer les essais SHA-256 réussis ;
+les essais en échec et les campagnes explicites conservent leurs artefacts.
+
 Le workflow `Audit Robustness` exécute 10 000 entrées par PR/push ; son exécution hebdomadaire
 ou manuelle demande un million d’entrées avec un délai de 3 600 secondes, 100 répétitions
 des interruptions fichiers et un volume plein réel obligatoire. Le job est borné à 90 minutes.
 Le workflow TSan sélectionne aussi les scénarios `AuditRing`
 et les observateurs de l’audit. Un workflow configuré ne constitue pas un résultat exécuté.
+Les PR uniquement documentaires le déclenchent aussi, afin de fournir le statut attendu
+si ce contrôle devient requis.
+
+Une exécution manuelle `campaign=volume` isole les trois scénarios ENOSPC réels, sans
+demander le million d’entrées ni les 100 interruptions. Elle conserve ASan/UBSan/LSan,
+le montage root privé borné et l’obligation `--require-volume` ; ses skips de scénarios
+ne sont pas présentés comme leur réussite. `campaign=long` reste le défaut manuel.
 
 En cas de crash, conserver l’artefact libFuzzer, puis réduire avec `-minimize_crash=1`
 sur le même build, transformer le résultat en régression et rejouer sa famille. Les nouveaux

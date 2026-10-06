@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import random
 import selectors
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -119,6 +120,20 @@ def build_metadata(binary):
     return metadata
 
 
+def repository_metadata(repository):
+    """Collect optional Git snapshots without preventing a campaign report."""
+    metadata = {}
+    for name, command in [('revision', ['git', 'rev-parse', 'HEAD']),
+                          ('worktree', ['git', 'status', '--porcelain'])]:
+        try:
+            snapshot = subprocess.run(command, cwd=repository, capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError) as error:
+            metadata[name] = f'unavailable: {error}'
+            continue
+        metadata[name] = snapshot.stdout.strip() if snapshot.returncode == 0 else f'unavailable: exit {snapshot.returncode}'
+    return metadata
+
+
 def main():
     """Execute the configured campaign and write its result even after a failure."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -131,9 +146,13 @@ def main():
     parser.add_argument('--llvm-tools', type=Path, default=Path('/usr/lib/llvm-21/bin'))
     parser.add_argument('--disable-leak-detection', action='store_true',
                         help='record LSan as disabled when unavailable under ptrace; CI keeps it enabled')
+    parser.add_argument('--ephemeral', action='store_true',
+                        help='remove successful SHA-only run artifacts; preserve failing runs and all fuzzing evidence')
     args = parser.parse_args()
     if not 1 <= args.runs <= 10000000 or not 1 <= args.seed < 2147483648 or not 1 <= args.timeout <= 3600:
         parser.error('runs, seed or timeout outside campaign budget')
+    if args.ephemeral and args.fuzzer:
+        parser.error('--ephemeral is only available for SHA-only tests')
     args.output.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix='run-', dir=args.output.resolve()))
     started = time.monotonic()
@@ -142,11 +161,8 @@ def main():
               'status': 'FAIL', 'directory': str(directory), 'commands': [],
               'leak_detection': not args.disable_leak_detection}
     repository = Path(__file__).resolve().parents[1]
-    for name, command in [('revision', ['git', 'rev-parse', 'HEAD']),
-                          ('worktree', ['git', 'status', '--porcelain'])]:
-        snapshot = subprocess.run(command, cwd=repository, capture_output=True, text=True, timeout=5)
-        report[name] = snapshot.stdout.strip() if snapshot.returncode == 0 else 'unavailable'
     try:
+        report.update(repository_metadata(repository))
         report['sha256'] = compare_sha256(args.sha_worker.resolve(), directory, args.seed)
         report['build'] = build_metadata(args.fuzzer or args.sha_worker)
         if args.fuzzer:
@@ -187,7 +203,15 @@ def main():
     finally:
         report['duration_seconds'] = time.monotonic() - started
         (directory / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
-        print(json.dumps({'status': report['status'], 'report': str(directory / 'report.json')}))
+        result = {'status': report['status'], 'report': str(directory / 'report.json')}
+        if args.ephemeral and report['status'] == 'PASS':
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                result['cleanup_error'] = str(error)
+            else:
+                result.update(report=None, artifacts='successful SHA-only run removed')
+        print(json.dumps(result))
     return 0 if report['status'] == 'PASS' else 1
 
 
