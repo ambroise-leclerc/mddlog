@@ -153,9 +153,28 @@ Ce nouveau binaire ne reprend pas le hash de la campagne initiale de 100 000 ent
 La CI sépare désormais les scénarios ASan/UBSan du build des adaptateurs instrumentés
 pour le fuzzer et déclenche le contrôle aussi pour une PR documentaire. Le runtime
 Linux mixte et les imports préalables au header sont explicités dans les sources/docs.
-La cible manuelle `campaign=volume` permet d’exécuter le volume root obligatoire sans
-présenter comme exécutées les campagnes longues qu’elle omet. Son résultat doit encore
-être consigné après l’exécution ; un simple déclenchement ne constitue pas une réussite.
+La cible manuelle `campaign=volume` a été exécutée sur `20daa0f` :
+[run 37455927395](https://github.com/ambroise-leclerc/mddlog/actions/runs/37455927395),
+job distinct `File storage ENOSPC (Clang 21)` réussi. Le rapport téléchargé contient
+un cas agrégé PASS et les trois chemins ENOSPC attendus (`append-data`, `reserve`,
+`open-data`), zéro FAIL et zéro SKIP. Les erreurs portent `errno = 28`, arrêtent les
+mutations et ne confirment aucune position ; les préfixes et reprises sont vérifiés.
+
+Profil : Linux x86_64, Clang/libc++ 21.1.8, Debug ASan/UBSan, UID 0 dans un namespace
+de montage privé, tmpfs de 1 Mio avec 256 inodes. Le build du worker a le fuzzing désactivé.
+La restauration de propriété et l’archivage réussissent. L’artefact
+`audit-robustness-20daa0fb44490ecec7a9c231f0c09f4f8b0f723c` porte l’identifiant
+`11408613765` ; le SHA-256 du rapport est
+`ea3839e942824c933f3458a087761c9dcfa81c3670120874c816c1d56332a4ec` et celui du worker
+`b47b43517e0b2ba7a82fdb87adf3687b025945ed35c0e9f036f9b29f9041c3be`.
+La copie et sa vérification restent dans
+`build-clang/verification-audit-robustness/volume-ci-37455927395/`.
+
+Ce passage apporte la preuve du volume plein réel obligatoire dans le nouveau workflow.
+Les étapes de concurrence et de fuzzing y sont SKIPPED, et les 100 interruptions ne sont
+pas demandées en mode volume ; aucune campagne longue omise n’est annoncée réussie.
+Ce tmpfs teste les erreurs système ; il ne qualifie pas la persistance contre coupure
+électrique, les caches ni le stockage de l’Orin Nano.
 
 | Issue | Travaux démontrés par ce lot | Éléments restant nécessaires à la clôture actuelle |
 | --- | --- | --- |
