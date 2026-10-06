@@ -114,6 +114,14 @@ Après revue, la compilation Release GCC 16.1 et ses **198/198 tests CTest** pas
 Deux contrôles négatifs du wrapper couvrent l'indisponibilité/expiration de la sonde,
 la distinction SKIP/FAIL et l'arrêt de ses helpers ; les **59 tests documentaires** passent.
 
+Les contrôles de revue supplémentaires couvrent les refus à 4096 flux, au counter
+`UINT64_MAX` et à la taille maximale du fichier : aucun write/fsync n'est appelé,
+`lastError` reste vide et les lectures restent disponibles. Au plafond de flux,
+les mutations d'un flux existant restent possibles et le retrait ne libère pas sa place.
+Un vrai backlog Unix saturé vérifie `Connect/EAGAIN` plutôt qu'`Authentication`.
+Une écriture nulle du checkpoint, avec errno ENOSPC volontairement périmé, rend
+`Write` avec erreur native zéro et conserve l'ancienne génération.
+
 ## Réserves
 
 Résultats logiciels reproductibles, sans acceptance indépendante ni certification.

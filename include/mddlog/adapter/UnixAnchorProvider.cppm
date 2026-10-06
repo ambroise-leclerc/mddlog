@@ -139,7 +139,8 @@ inline void sendFrame(int descriptor, std::span<const std::uint8_t> bytes, Deadl
     const auto address = addressOf(config.socketPath);
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): POSIX socket address ABI.
     if (::connect(socket.get(), reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
-        if (errno != EINPROGRESS && errno != EAGAIN)
+        // AF_UNIX EAGAIN (full backlog) does not establish a pending connection.
+        if (errno != EINPROGRESS)
             fail(WitnessIssue::Connect, errno);
         ready(socket.get(), POLLOUT, deadline);
         int       error = 0;
@@ -336,6 +337,7 @@ public:
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): POSIX socket address ABI.
         if (::bind(listener.get(), reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0)
             return std::unexpected(WitnessError{.issue = WitnessIssue::Listen, .nativeError = errno});
+        // bind applies the umask first; chmod only grants connection access, with SO_PEERCRED enforcing the policy.
         constexpr mode_t socketMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
         if (::chmod(config.socketPath.c_str(), socketMode) != 0 || ::listen(listener.get(), SOMAXCONN) != 0)
             return std::unexpected(WitnessError{.issue = WitnessIssue::Listen, .nativeError = errno});

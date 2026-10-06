@@ -1026,7 +1026,7 @@
     {
       "id": "RISK-006",
       "title": "Fournisseur compromis ou indisponible",
-      "effect": "Une autorité compromise invalide les garanties ; une panne réduit la couverture vérifiable.",
+      "effect": "Une autorité compromise invalide les garanties ; une panne réduit la couverture vérifiable. Un UID enrôlé peut saturer le témoin mono-consommateur par des connexions lentes répétées malgré un délai borné par connexion.",
       "controls": [
         "CTRL-006"
       ],
@@ -1040,7 +1040,7 @@
     {
       "id": "RISK-007",
       "title": "Saturation et épuisement de ressources",
-      "effect": "Queue diagnostique non bornée, lecteur allouant ou consommateur lent : mémoire ou service épuisés.",
+      "effect": "Queue diagnostique non bornée, lecteur allouant ou consommateur lent : mémoire ou service épuisés. Connexions lentes répétées d'un UID enrôlé et réécriture de l'inventaire avec fsync synchrones peuvent épuiser la disponibilité du témoin ; aucun quota par UID ni WCET n'est garanti.",
       "controls": [
         "CTRL-003",
         "CTRL-009",

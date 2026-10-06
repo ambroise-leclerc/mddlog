@@ -64,6 +64,7 @@ public:
             return std::unexpected(store.error.value_or(WitnessStoreError{.issue = WitnessStoreIssue::Stopped}));
         return {};
     }
+    /** @brief Latched storage/restoration failure; a pre-write capacity refusal does not set this error. */
     [[nodiscard]] std::optional<WitnessStoreError> lastError() const {
         const std::scoped_lock guard(mutex);
         return error;
@@ -87,13 +88,10 @@ public:
             if (claim.position <= held.position)
                 return AdvanceRefusal::PositionNotIncreasing;
         } else if (next.entries.size() == witness::maxStreams) {
-            (void)fail(WitnessStoreIssue::Capacity);
             return ProviderUnavailable{};
         }
-        if (next.head == std::numeric_limits<std::uint64_t>::max()) {
-            (void)fail(WitnessStoreIssue::Capacity);
+        if (next.head == std::numeric_limits<std::uint64_t>::max())
             return ProviderUnavailable{};
-        }
         AnchorStamp stamp{.providerId = next.providerId, .counter = ++next.head, .acceptedTime = now()};
         Anchor      held{.anchorFormat     = claim.anchorFormat,
                          .canonicalVersion = claim.canonicalVersion,
@@ -124,10 +122,8 @@ public:
             return RetireRefusal::UnknownStream;
         if (std::holds_alternative<Retirement>(*found) || witness::anchorOf(*found).position != position)
             return RetireRefusal::Conflict;
-        if (next.head == std::numeric_limits<std::uint64_t>::max()) {
-            (void)fail(WitnessStoreIssue::Capacity);
+        if (next.head == std::numeric_limits<std::uint64_t>::max())
             return ProviderUnavailable{};
-        }
         AnchorStamp stamp{.providerId = next.providerId, .counter = ++next.head, .acceptedTime = now()};
         *found = Retirement{.finalAnchor = std::get<Anchor>(*found), .counter = stamp.counter, .retiredTime = stamp.acceptedTime};
         if (!persist(next))
@@ -260,7 +256,7 @@ private:
             const auto checksum = sha256(encoder.bytes);
             encoder.raw(checksum);
         } catch (const std::length_error&) {
-            (void)fail(WitnessStoreIssue::Capacity);
+            // No filesystem operation has begun; capacity refusal leaves the authority healthy.
             return false;
         }
         const int root = directory.get();

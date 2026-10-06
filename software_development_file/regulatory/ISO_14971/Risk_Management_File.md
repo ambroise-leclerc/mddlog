@@ -46,3 +46,13 @@ pour exercer le chemin de confirmation ; il n'accepte aucun risque de support ph
 Les risques résiduels des comptes, autorités privilégiées, disponibilité et durabilité
 cible restent soumis à qualification et revue en GAP-008/#122. Aucun critère de clôture
 n'est supprimé par la réussite de cette campagne.
+
+RISK-006/RISK-007 incluent une menace de disponibilité par un UID enrôlé : un client
+qui se connecte sans transmettre peut monopoliser le consommateur unique pendant
+chaque échéance (1 s par défaut), puis se reconnecter en boucle. Le délai borne une
+connexion, pas l'occupation cumulée ; aucun quota par UID, limitation de débit ni
+équité d'ordonnancement n'est fourni. L'hôte doit définir supervision, cadence et
+politique d'accès, et accepter ce risque résiduel dans son profil. Les refus de capacité
+avant écriture laissent l'état lisible et n'arrêtent pas le service ; les erreurs de
+stockage/barrière continuent d'arrêter l'autorité. Le coût de réécriture de l'inventaire
+et des fsync synchrones participe aussi au risque de saturation, sans WCET revendiqué.

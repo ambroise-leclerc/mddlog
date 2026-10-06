@@ -59,6 +59,9 @@ propriété du service, mode 0711 (ou accès de traversée équivalent), aucune 
 La socket est 0666 pour permettre la connexion aux UID enrôlés ; les credentials et la
 politique contrôlent les opérations. Le service refuse un parent final symbolique, mal
 possédé ou inscriptible par d'autres. Ces contrôles ne vérifient pas toutes les ACL/ascendances.
+`O_NOFOLLOW` ne porte que sur le dernier composant du parent : un lien symbolique dans
+un ancêtre n'est pas détecté. Le profil doit contrôler toute l'ascendance, ses liens,
+ACL et montages, et empêcher sa substitution pendant la vie du service.
 
 Exemple, après création des comptes et des répertoires par l'administrateur :
 
@@ -114,12 +117,16 @@ rename atomique vers `witness.bin`, puis fsync du répertoire. L'état servi et 
 positive ne changent qu'après succès de toutes les étapes. Toute erreur d'écriture/barrière
 rend les quatre opérations indisponibles jusqu'à réouverture. Le temporaire orphelin est
 ignoré à la restauration, puis éliminé sous le verrou avant la prochaine transaction.
+Un refus de capacité avant toute écriture renvoie `ProviderUnavailable` pour la mutation,
+sans positionner `lastError` ni arrêter le service. `latest` et `streams` restent disponibles.
 
 Le head global augmente à chaque avancement ou retrait accepté, sans débordement. La
 position doit croître ; même position/même digest est `PositionNotIncreasing`, même
 position/autre digest est `Conflict`. Un retrait exige la dernière position acceptée,
 garde l'anchor final et reçoit son propre counter supérieur. Les retraits ne sont ni
 oubliés ni réactivés, même après redémarrage. Un retrait répété reste un conflit.
+Un avancement à une position supérieure sur un flux retiré renvoie `Conflict` ;
+un avancement à sa position finale ou en dessous renvoie `PositionNotIncreasing`.
 
 Le format d'état v1 contient une chaîne magic `mddlog-witness`, la version uint64 1,
 un inventaire complet, puis SHA-256 de tous les octets précédents. Entiers uint64 little
@@ -128,15 +135,28 @@ providerId, head, nombre d'entrées, puis pour chaque entrée : tag de retrait u
 anchor et, si retirée, counter/time de retrait. Anchor : formats uint16 encodés en uint64,
 streamId, position, digest de 32 octets, providerId, counter, time. Time : disponibilité
 uint64 0/1, puis représentation uint64 des nanosecondes signées depuis l'époque Unix ;
-indisponible exige zéro. La clock murale du service donne l'âge, pas l'ordre : le counter
+indisponible exige zéro. La clock murale du service donne une date, pas l'ordre : le counter
 reste la valeur monotone. Les identités, positions/counters, unicité des flux/counters,
 head maximal et ordre counter d'anchor/retrait sont validés avant restitution.
+
+`acceptedTime` et `retiredTime` proviennent de `system_clock` et peuvent reculer après
+une correction d'horloge : ces heures ne prouvent ni ordre ni durée écoulée. Pour établir
+l'ordre des opérations, utiliser exclusivement le counter monotone.
 
 Limites : 4096 flux conservés, fichiers et trames de 1 Mio, identifiants de flux conformes
 aux 96 octets d'`AuditEvent`. Un inventaire volumineux peut atteindre 1 Mio avant 4096 flux,
 notamment avec une identité fournisseur longue : le magasin refuse alors la mutation et
-requiert intervention. Aucune éviction n'efface un retrait. Ces limites ne sont pas des
+conserve l'état lisible. Au plafond de flux, avancement et retrait d'un flux existant
+restent possibles dans les limites de taille et de compteur. Au head `UINT64_MAX`,
+toute nouvelle mutation est refusée ; les lectures restent possibles. Reprendre les
+mutations exige une migration administrée du profil, pas un simple redémarrage.
+Aucune éviction n'efface un retrait. Ces limites ne sont pas des
 budgets WCET. Le matériel, filesystem, caches et alimentation restent à qualifier.
+
+Chaque mutation acceptée encode et réécrit tout l'inventaire, puis synchronise le
+fichier et son répertoire. Le volume écrit est proportionnel au nombre d'entrées et
+à la taille de leurs identités, jusqu'à 1 Mio par mutation ; la latence inclut ces deux
+fsync synchrones. Aucun coût constant, débit minimal ni WCET n'est garanti.
 
 ## Transport, délais et réponses perdues
 
@@ -151,8 +171,12 @@ possible de #117, sans changement de cette version.
 Une échéance `steady_clock` unique couvre connexion, envoi et réception. Socket non bloquante,
 poll avec temps restant, pas de SIGPIPE ; les erreurs EINTR ne renouvellent pas le délai.
 Le service borne aussi l'attente d'un corps et d'un lecteur lent. Sa boucle est un consommateur
-unique : un client autorisé lent peut occuper une échéance avant les autres. Les fsync restent
-synchrones et ne sont pas interrompus par le délai réseau. Le client peut donc expirer pendant
+unique : un client autorisé lent peut occuper une échéance avant les autres.
+Un UID enrôlé qui se reconnecte sans transmettre peut répéter cette occupation
+(1 s par connexion par défaut) et saturer la disponibilité : aucun quota par UID,
+limiteur de débit ni ordonnancement équitable n'est implémenté.
+Les fsync restent synchrones et ne sont pas interrompus par le délai réseau.
+Le client peut donc expirer pendant
 une transaction qui sera ensuite appliquée. Cadence, capacité, supervision et indisponibilité
 sont des responsabilités du profil ; aucun temps maximum de persistance n'est revendiqué.
 
@@ -161,6 +185,11 @@ transport, protocole, refus d'autorité, indisponibilité et refus métier. Le m
 séparément sa dernière erreur native. Aucun secret ou chemin de configuration n'est repris
 dans ces structures de santé. Le service rend ses erreurs par résultat typé à son superviseur.
 
+Un backlog Unix plein (`connect` renvoyant `EAGAIN`) est classé `Connect`, avec l'erreur
+native conservée ; il ne déclenche pas de vérification d'authentification sur un socket
+non connecté, ni de retry silencieux.
+Voir le contrat Linux de [`connect(2)`](https://man7.org/linux/man-pages/man2/connect.2.html).
+
 `ProviderUnavailable` signifie **absence d'acceptation confirmée**, pas preuve de non-exécution.
 Après une réponse perdue, l'hôte interroge `latest`/`streams` sous la même authentification :
 si l'anchor ou le retrait attendu est présent, la réconciliation constate cette application.
@@ -168,6 +197,10 @@ Si une observation plus haute/conflictuelle apparaît, l'hôte traite son confli
 pas un stamp et ne transforme pas une nouvelle requête refusée en acceptation. Aucun retry
 silencieux de mutation ne contourne les refus d'ADR-004. `AuditService`/la reprise existante
 consomment ces opérations via la même interface `AnchorProvider`.
+
+En particulier, après perte de la réponse d'un `advance`, rejouer même position/même
+digest donne `PositionNotIncreasing`, jamais une nouvelle acceptation. Consulter
+`latest` pour réconcilier ; un stamp ne peut pas être déduit du refus seul.
 
 ## Preuves et portée
 

@@ -37,6 +37,10 @@ struct Directory {
 }
 struct FaultCalls final : FileStorageCalls {
     std::ptrdiff_t write(int descriptor, std::span<const std::uint8_t> bytes) override {
+        if (zeroWrite) {
+            errno = ENOSPC;  // Deliberately stale: a zero-byte result did not set an error.
+            return 0;
+        }
         if (interrupt) {
             interrupt = false;
             errno     = EINTR;
@@ -67,6 +71,7 @@ struct FaultCalls final : FileStorageCalls {
     bool interrupt  = true;
     bool failWrite  = false;
     bool failRename = false;
+    bool zeroWrite  = false;
     int  failSync   = 0;
     int  syncCount  = 0;
     int  writeCount = 0;
@@ -254,6 +259,23 @@ const speclab::Register registered{
                     checks.expect(store.initialize(position()).has_value() && store.load().has_value(), "EINTR and short writes retry");
                     checks.raise();
                 })
+            .Then("zero-byte writes report no stale errno and preserve the retained state",
+                  [] {
+                      Directory            directory;
+                      FileRetainedPosition initial{directory.path, "witness"};
+                      if (!initial.initialize(position()))
+                          throw std::runtime_error("initialize");
+                      FaultCalls calls;
+                      calls.zeroWrite = true;
+                      FileRetainedPosition store{directory.path, "witness", &calls};
+                      const auto           saved = store.save(position(3), 1);
+                      expectIssue(saved, RetainedFileIssue::Write, "zero write refuses save");
+                      speclab::core::Checks checks;
+                      checks.expect(saved.error().nativeError == 0, "zero write must not expose stale ENOSPC");
+                      const auto restored = initial.load();
+                      checks.expect(restored && restored->generation == 1, "old checkpoint remains readable");
+                      checks.raise();
+                  })
             .Then("an old log and old provider remain rolled back after reader restart",
                   [] {
                       Directory                directory;

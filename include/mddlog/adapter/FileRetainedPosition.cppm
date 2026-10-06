@@ -73,8 +73,8 @@ private:
         detail::FileDescriptor directory;
         detail::FileDescriptor lock;
     };
-    [[nodiscard]] static auto failure(RetainedFileIssue issue) {
-        return std::unexpected(RetainedFileError{.issue = issue, .nativeError = errno});
+    [[nodiscard]] static auto failure(RetainedFileIssue issue, int nativeError = errno) {
+        return std::unexpected(RetainedFileError{.issue = issue, .nativeError = nativeError});
     }
     [[nodiscard]] static bool privateRegular(int descriptor) {
         struct stat info{};
@@ -201,7 +201,7 @@ private:
             if (got < 0 && errno == EINTR)
                 continue;
             if (got <= 0 || static_cast<std::size_t>(got) > bytes.size() - offset)
-                return failure(RetainedFileIssue::Read);
+                return failure(RetainedFileIssue::Read, got < 0 ? errno : 0);
             offset += static_cast<std::size_t>(got);
         }
         return decode(bytes);
@@ -278,7 +278,7 @@ private:
             if (wrote < 0 && errno == EINTR)
                 continue;
             if (wrote <= 0 || static_cast<std::size_t>(wrote) > bytes.size() - offset)
-                return failure(RetainedFileIssue::Write);
+                return failure(RetainedFileIssue::Write, wrote < 0 ? errno : 0);
             offset += static_cast<std::size_t>(wrote);
         }
         if (!sync(file.get()))
