@@ -184,3 +184,12 @@ Ce tmpfs teste les erreurs système ; il ne qualifie pas la persistance contre c
 Le maintien ou le transfert explicite des critères d’intégration vers #115/#116/#121
 reste à décider. Aucun critère n’est supprimé par la réussite des tests logiciels.
 GAP-003, GAP-007 et GAP-013 restent ouverts jusqu’aux décisions et preuves correspondantes.
+
+## Dossier électrique reçu le 6 octobre 2026
+
+Après la fusion de #137, le mainteneur fournit et confirme la provenance réelle de la
+campagne Orin Nano. Le [bilan actualisé](orin-nano-electrical-results.md) et la
+[revue documentaire](orin-nano-campaign-review.md) publient le profil, 2 913 tentatives
+et leurs événements avec les mentions du template retirées. Les réserves de traçabilité,
+d’oracle et de preuves externes sont explicites ; la qualification reste ouverte.
+Cette réception n’ajoute aucun nouveau résultat aux campagnes logicielles ci-dessus.

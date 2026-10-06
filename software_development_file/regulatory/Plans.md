@@ -51,7 +51,12 @@ Le [plan de robustesse](../../docs/audit-robustness-test-plan.md) ajoute modèle
 fuzzing borné, oracle SHA-256 et observateurs concurrents ; son
 [rapport](../../docs/audit-robustness-results.md) distingue exécution locale et CI configurée.
 Le [résultat électrique Orin Nano](../../docs/orin-nano-electrical-results.md) consigne
-la réussite déclarée et les données du profil nécessaires à sa revue.
+la provenance confirmée par le mainteneur, les paramètres, les cycles et les observations
+publiés. Sa [revue documentaire](../../docs/orin-nano-campaign-review.md) distingue la
+cohérence des décomptes/renvois de la qualification : sources réellement exécutées,
+archive externe des images/traces, oracle et réserves RN-02–07 restent à examiner.
+Les empreintes des images versionnées ne sont pas une vérification des fichiers absents
+et les corrections éditoriales ne changent pas les mesures. GAP-007 reste ouvert.
 
 ## Configuration et composants tiers
 

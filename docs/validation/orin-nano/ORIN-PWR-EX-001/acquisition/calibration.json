@@ -1,0 +1,22 @@
+{
+  "relais": {
+    "type": "relais électromécanique bipolaire 24 V DC / 30 A, coupe le + et le − de l'entrée 19 V",
+    "ouverture_mecanique_mesuree_ms": {
+      "moyenne": 3.2,
+      "ecart_type": 0.3,
+      "n": 200
+    }
+  },
+  "daq": {
+    "modele": "Digilent Analog Discovery 3",
+    "echantillonnage_hz": 1000000,
+    "voies": [
+      "3V3 M.2 (riser avec points de test)",
+      "19 V entrée"
+    ],
+    "seuil_hors_tension_v": 0.3
+  },
+  "synchronisation": "chrony sur acq-01, décalage RMS 0,2 ms ; seule l'horloge d'acq-01 sert de référence",
+  "liaison": "Ethernet 1 GbE point à point Orin Nano <-> acq-01, RTT 0,18 ms ; sortie JSON du worker lue par acq-01",
+  "verifie_le": "2026-09-13"
+}

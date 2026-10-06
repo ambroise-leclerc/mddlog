@@ -1,0 +1,8 @@
+[    4.912406] nvme nvme0: pci function 0004:01:00.0
+[   34.112873] nvme nvme0: I/O 15 QID 0 timeout, disable controller
+[   34.318520] nvme nvme0: Device shutdown incomplete; abort shutdown
+[   36.401177] nvme nvme0: 8/0/0 default/read/poll queues
+[   36.455209] nvme0n1: p1 p2 p3
+[   88.730114] XFS (nvme0n1p3): Mounting V5 Filesystem
+[   88.912655] XFS (nvme0n1p3): Starting recovery (logdev: internal)
+[   89.140022] XFS (nvme0n1p3): Ending recovery (logdev: internal)

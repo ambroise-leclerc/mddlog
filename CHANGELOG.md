@@ -12,6 +12,11 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Publish the Orin Nano power-cut campaign profile, cycle records and external image
+  index, with template wording removed on maintainer confirmation. Record documentary
+  review findings and remaining qualification reservations; keep images outside Git
+  and #114 open until its outstanding criteria are satisfied. [#114]
+
 - Add bounded audit-reader fuzzing with a versioned corpus and LLVM coverage,
   generated admission/recovery models, concurrent audit retries/observers and
   independent SHA-256 checks. Extend TSan and separate short/long CI campaigns (#120).

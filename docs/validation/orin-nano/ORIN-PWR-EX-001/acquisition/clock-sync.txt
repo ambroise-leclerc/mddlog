@@ -1,0 +1,8 @@
+# chronyc tracking (acq-01, 2026-09-14T07:58:40Z)
+Reference ID    : C0A80101 (nom du serveur non documenté)
+Stratum         : 3
+System time     : 0.000000211 seconds fast of NTP time
+Last offset     : +0.000000143 seconds
+RMS offset      : 0.000000198 seconds
+Frequency       : 4.912 ppm slow
+Leap status     : Normal
