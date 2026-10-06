@@ -69,9 +69,7 @@ inline void ready(int descriptor, std::int16_t events, Deadline deadline) {
         if (remaining <= 0)
             fail(WitnessIssue::Timeout);
         pollfd    descriptorState{.fd = descriptor, .events = events, .revents = 0};
-        const int result = ::poll(&descriptorState,
-                                  1,
-                                  static_cast<int>(std::min(remaining, static_cast<decltype(remaining)>(std::numeric_limits<int>::max()))));
+        const int result = ::poll(&descriptorState, 1, static_cast<int>(std::min<std::chrono::milliseconds::rep>(remaining, std::numeric_limits<int>::max())));
         if (result < 0 && errno == EINTR)
             continue;
         if (result < 0)

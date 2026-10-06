@@ -57,6 +57,9 @@ jobs:
     # This job requires the independent-authority proof instead of accepting a CTest SKIP.
     - name: Verify independent witness authorities
       run: |
+        # newuidmap/newgidmap require subordinate ranges even when invoked by root.
+        sudo apt-get install -y uidmap
+        sudo usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root
         sudo python3 scripts/run-witness-deployment.py \
           --worker "$PWD/build-clang/tests/mddlog_witness_deployment" \
           --service "$PWD/build-clang/examples/mddlog_witness" --require-isolation

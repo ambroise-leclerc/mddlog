@@ -28,8 +28,10 @@ python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 Le wrapper utilise `unshare --user --map-auto` sans privilège hôte, avec une plage
 subuid/subgid disponible. À défaut, le CTest retourne SKIP 77 explicitement ;
 `--require-isolation` en fait un échec. La CI Clang exécute ce mode requis via sudo,
-avec un namespace mappant cinq UID à partir de l'UID hôte 100000, sans changement des
-comptes hôte. Le même chemin privilégié de mapping est également exercé localement
+après avoir autorisé pour root les plages subuid/subgid `100000-100004` du runner
+éphémère (`usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root`).
+`newuidmap`/`newgidmap` exigent cette autorisation même sous root. Le namespace mappe
+ces cinq UID sans créer de comptes hôte. Le même chemin privilégié est exercé localement
 à partir d'un namespace parent, avec `--outer-uid-start 5` (plage disponible du parent).
 Les tests ne qualifient pas la configuration des comptes d'un déploiement physique.
 
