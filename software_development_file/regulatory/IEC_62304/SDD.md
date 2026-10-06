@@ -104,5 +104,7 @@ est facultatif et instrumente les adaptateurs ; ses options ne se propagent pas 
 Les budgets, le corpus et les limites sont dans le
 [plan de robustesse](../../../docs/audit-robustness-test-plan.md). L’arrêt de SimpleLogger
 change son prédicat sous le mutex de la condition pour ne pas perdre une notification.
+Cette synchronisation est CTRL-015, vérifiée par VER-035. Elle ne vérifie ni le transport
+borné de CTRL-010/REQ-015 ni les budgets de surcharge de SimpleLogger encore ouverts.
 Le [résultat Orin Nano](../../../docs/orin-nano-electrical-results.md) consigne la réussite
 électrique déclarée, sans inventer le tuple ni les artefacts nécessaires à sa revue.

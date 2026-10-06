@@ -118,6 +118,22 @@ Le workflow `Audit Robustness` ajoute campagnes courtes/longues, collecte de cou
 et archivage ; le workflow TSan élargit sa sélection à AuditRing et aux observateurs.
 Ces modifications de CI sont configurées et doivent être exécutées à la révision soumise.
 
+### Compléments après revue de la PR #137 — 6 octobre 2026
+
+La tête initiale `352a2b3` a passé les 18 contrôles Actions et le statut de revue
+CodeRabbit. Le [workflow court de robustesse](https://github.com/ambroise-leclerc/mddlog/actions/runs/37427941939)
+et les autres builds/sanitizers sont donc exécutés ; cela ne constitue pas un passage
+de la campagne manuelle/hebdomadaire à un million d’entrées.
+
+La revue a relevé deux corrections : les probes de versions absentes ou trop longues
+sont désormais consignées comme indisponibles sans invalider l’oracle, et VER-035 est
+rattachée au contrôle d’arrêt diagnostic CTRL-015, distinct de CTRL-010/REQ-015.
+Les 44 tests Python passent après ces corrections, dont une campagne SHA-256 avec
+CMake, Ninja et compilateur absents et un probe de version dépassant son délai.
+Le probe C++ SHA-256 concorde encore sur 268 entrées avec le superviseur corrigé.
+Ces corrections relancent la CI ; elles ne reprennent pas à leur compte les résultats
+de la tête initiale comme s’ils avaient déjà été exécutés sur le nouveau commit.
+
 | Issue | Travaux démontrés par ce lot | Éléments restant nécessaires à la clôture actuelle |
 | --- | --- | --- |
 | #114 | Conformité, erreurs réelles précédentes, reprises SIGKILL à 100 passages ; succès électrique déclaré sur Orin Nano ; revue technique de l’exemple | Paramètres et preuves du profil électrique, acceptation des revues du profil et de l’ergonomie, raccordement au pilotage de #116 |

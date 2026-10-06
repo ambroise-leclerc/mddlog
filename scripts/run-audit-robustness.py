@@ -15,6 +15,7 @@ import time
 
 
 def run_logged(command, log, timeout, env=None):
+    """Save bounded child output and reap its process group on failure or timeout."""
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                start_new_session=True, env=env)
     output = bytearray()
@@ -46,6 +47,7 @@ def run_logged(command, log, timeout, env=None):
 
 
 def compare_sha256(binary, directory, seed):
+    """Require every seeded digest to match hashlib and retain the oracle inputs."""
     generator = random.Random(seed)
     lengths = [0, 1, 55, 56, 63, 64, 65, 127, 128, 129, 1024, 65536]
     lengths.extend(generator.randrange(4097) for _ in range(256))
@@ -67,6 +69,7 @@ def compare_sha256(binary, directory, seed):
 
 
 def collect_coverage(binary, directory, tools):
+    """Merge LLVM profiles and require executed coverage for each audit reader."""
     profiles = sorted(directory.glob('coverage-*.profraw'))
     if not profiles:
         raise AssertionError('missing reader coverage profiles')
@@ -91,6 +94,7 @@ def collect_coverage(binary, directory, tools):
 
 
 def build_metadata(binary):
+    """Record build options and tool versions without requiring optional tools."""
     cache = binary.resolve().parent.parent / 'CMakeCache.txt'
     metadata = {}
     if cache.is_file():
@@ -104,13 +108,19 @@ def build_metadata(binary):
     if compiler:
         commands.append(('compiler_version', [compiler] if Path(compiler).name.lower() == 'cl.exe' else [compiler, '--version']))
     for name, command in commands:
-        version = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        try:
+            version = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            metadata[name] = f'unavailable: {error}'
+            metadata[name + '_exit_code'] = None
+            continue
         metadata[name] = (version.stdout + version.stderr).strip()
         metadata[name + '_exit_code'] = version.returncode
     return metadata
 
 
 def main():
+    """Execute the configured campaign and write its result even after a failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fuzzer', type=Path)
     parser.add_argument('--sha-worker', required=True, type=Path)

@@ -315,8 +315,7 @@
       "title": "Registre synchronisé et transport borné",
       "status": "implemented",
       "design": [
-        "docs/adr/ADR-003-application-integration-and-sink-ownership.md",
-        "docs/audit-robustness-test-plan.md"
+        "docs/adr/ADR-003-application-integration-and-sink-ownership.md"
       ],
       "implementation": [
         "include/mddlog/adapter/SinkRegistry.cppm",
@@ -370,6 +369,17 @@
       "implementation": [
         "examples/InventoryWorker.hpp",
         "examples/ContextualInventory.cpp"
+      ]
+    },
+    {
+      "id": "CTRL-015",
+      "title": "Arrêt du worker diagnostic synchronisé avec son attente",
+      "status": "implemented",
+      "design": [
+        "docs/audit-robustness-test-plan.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/Logger.cppm"
       ]
     }
   ],
@@ -795,7 +805,7 @@
       "title": "Arrêt répété du worker diagnostic",
       "status": "coverage-existing",
       "controls": [
-        "CTRL-010"
+        "CTRL-015"
       ],
       "test": "tests/spec/SinkFailureSpec.cpp",
       "scenario": "sink-idle-worker-stop-stress",
@@ -1287,8 +1297,7 @@
         "CTRL-010"
       ],
       "verifications": [
-        "VER-010",
-        "VER-035"
+        "VER-010"
       ],
       "gaps": [
         "GAP-003",
