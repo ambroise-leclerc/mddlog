@@ -19,3 +19,12 @@ Revoir l'analyse à chaque changement de contrat ou profil, incident, défaut ti
 terrain. La revue du composant de #124 vérifie complétude et hypothèses ; #122 examine les
 preuves réelles et réserves de la 1.0. Le fabricant conserve la décision d'acceptabilité système
 et ses obligations de suivi après mise en service. Les procédures sont dans [les plans](../Plans.md).
+
+
+Le premier [pilotage de référence](../../../docs/audit-service.md) complète CTRL-004
+et CTRL-007 pour RISK-001/RISK-002 : un arrêt qui laisse du backlog ne ferme pas le sink,
+les pertes sont raccordées à un signal indépendant et un support non qualifié conserve
+ses positions durables nulles (VER-036–040). La cadence de l'hôte et la durée des opérations
+externes restent des obligations de l'intégrateur ; aucun WCET ni reprise automatique
+d'une instance échouée n'est établi. RISK-003/GAP-007 conservent les réserves électriques
+RN-02–07 ; les empreintes d'images externes ne remplacent pas la preuve de conservation.

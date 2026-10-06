@@ -164,9 +164,9 @@ public:
 private:
     template <std::size_t Capacity>
     void addSource(core::AuditRing<Capacity>& ring) {
-        ringList.push_back({[&ring, pendingFailure = false](sinks::AuditSink& auditSink, AuditHealth& signal) mutable {
+        ringList.push_back({[&ring, pendingFailure = false](sinks::AuditSink& auditSink, AuditHealth& signal, std::size_t recordBudget) mutable {
                                 AuditDrainResult  result;
-                                const std::size_t available = ring.drain().size();
+                                const std::size_t available = std::min(ring.drain().size(), recordBudget);
                                 for (std::size_t index = 0; index < available; ++index) {
                                     if (!auditSink.isEnabled()) {
                                         signal.recordConfigurationError(AuditDrainStatus::DisabledSink);
@@ -225,7 +225,7 @@ private:
 
 public:
     /** @brief Attempt one bounded snapshot per ring and acknowledge only accepted events. */
-    [[nodiscard]] AuditDrainResult drainOnce() {
+    [[nodiscard]] AuditDrainResult drainOnce(std::size_t maxRecordsPerRing = std::numeric_limits<std::size_t>::max()) {
         if (!sink) {
             health.recordConfigurationError(AuditDrainStatus::MissingSink);
             return {.status = AuditDrainStatus::MissingSink};
@@ -236,7 +236,7 @@ public:
         }
         AuditDrainResult total;
         for (auto& source : ringList) {
-            const auto one   = source.drain(*sink, health);
+            const auto one   = source.drain(*sink, health, maxRecordsPerRing);
             total.handedOff += one.handedOff;
             if (total.status == AuditDrainStatus::Completed)
                 total.status = one.status;
@@ -258,8 +258,8 @@ public:
 
 private:
     struct RingSource {
-        std::function<AuditDrainResult(sinks::AuditSink&, AuditHealth&)> drain;
-        std::function<std::uint64_t()>                                   pending;
+        std::function<AuditDrainResult(sinks::AuditSink&, AuditHealth&, std::size_t)> drain;
+        std::function<std::uint64_t()>                                                pending;
     };
 
     std::vector<RingSource>  ringList;

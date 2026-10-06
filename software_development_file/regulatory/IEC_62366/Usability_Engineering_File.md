@@ -14,3 +14,11 @@ de portée ne prouve pas la réussite ; une admission n'est pas une exécution o
 Cette revue développeur ne remplace pas une évaluation IEC 62366-1 avec utilisateurs, tâches,
 environnement et risques du dispositif. Aucun essai d'aptitude à l'utilisation de dispositif
 n'est revendiqué dans ce dossier.
+
+
+La [revue technique du premier pilotage](../../../docs/audit-service.md) examine
+`FileAudit` : réglages et entretien sont au point de composition, l'émission métier
+conserve `AuditBinding` et son résultat d'admission. Le rapport d'arrêt distingue fin du
+cycle de vie, backlog et confirmation ; la relecture n'est pas annoncée comme durabilité
+qualifiée. Cette revue de code reste limitée au lot #114/#116, avec acceptation du
+profil matériel et évaluation applicative toujours ouvertes.

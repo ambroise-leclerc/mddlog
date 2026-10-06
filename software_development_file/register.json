@@ -86,7 +86,7 @@
       "status": "open",
       "issue": 114,
       "owner": "Ambroise Leclerc",
-      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Backend Linux et banc SIGKILL/permissions/ENOSPC livrés ; qualification physique et intégration #115/#116/#122 non acceptées. Le mainteneur confirme le 2026-10-06 la provenance réelle du dossier électrique Orin Nano : paramètres, cycles et observations publiés dans docs/validation/orin-nano/ORIN-PWR-EX-001, bilan docs/orin-nano-electrical-results.md. Revue docs/orin-nano-campaign-review.md : décomptes/renvois cohérents, mentions du template retirées, mais réserves RN-02–07 sur révision réellement exécutée, preuves externes/oracle, incohérences et écarts ; GAP-007 reste ouvert. Images et traces électriques conservées hors Git ; leurs empreintes ne sont pas vérifiées par cette revue documentaire."
+      "closure": "Backend et suite de conformité démontrant le contrat de sync, coupures et reprise sur le profil choisi. Backend Linux et banc SIGKILL/permissions/ENOSPC livrés ; qualification physique et intégration #115/#116/#122 non acceptées. Le mainteneur confirme le 2026-10-06 la provenance réelle du dossier électrique Orin Nano : paramètres, cycles et observations publiés dans docs/validation/orin-nano/ORIN-PWR-EX-001, bilan docs/orin-nano-electrical-results.md. Revue docs/orin-nano-campaign-review.md : décomptes/renvois cohérents, mentions du template retirées, mais réserves RN-02–07 sur révision réellement exécutée, preuves externes/oracle, incohérences et écarts ; GAP-007 reste ouvert. Images et traces électriques conservées hors Git ; leurs empreintes ne sont pas vérifiées par cette revue documentaire. Ce lot raccorde FileAudit au premier AuditService de #116 et prépare la vérification des images externes par scripts/verify-orin-archive.py ; aucune image ni trace réelle supplémentaire examinée, aucune réserve RN-02–07 levée. Voir docs/file-storage-closure.md."
     },
     {
       "id": "GAP-008",
@@ -102,7 +102,7 @@
       "status": "open",
       "issue": 116,
       "owner": "Ambroise Leclerc",
-      "closure": "Composition et arrêt/reprise revus ; sync, tick, ancrage et rétention hors fonctions métier ; limites de durabilité explicites."
+      "closure": "Composition et arrêt/reprise revus ; sync, tick, ancrage et rétention hors fonctions métier ; limites de durabilité explicites. Premier service piloté par l’hôte livré pour FileAudit : drain avec budget par anneau, tick, tentatives d’ancrage, pertes et arrêt borné. La composition applicative complète, les politiques de reprise/rétention, les bornes temporelles et la qualification de #116 restent ouvertes ; docs/audit-service.md."
     },
     {
       "id": "GAP-010",
@@ -231,11 +231,13 @@
       "status": "implemented",
       "design": [
         "docs/adr/ADR-002-regulatory-audit-event-model.md",
-        "docs/audit-robustness-test-plan.md"
+        "docs/audit-robustness-test-plan.md",
+        "docs/audit-service.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditDrain.cppm",
-        "include/mddlog/sinks/AuditSink.cppm"
+        "include/mddlog/sinks/AuditSink.cppm",
+        "include/mddlog/adapter/AuditService.cppm"
       ]
     },
     {
@@ -276,12 +278,15 @@
         "docs/file-storage-test-plan.md",
         "docs/audit-robustness-test-plan.md",
         "docs/orin-nano-electrical-results.md",
-        "docs/orin-nano-campaign-review.md"
+        "docs/orin-nano-campaign-review.md",
+        "docs/audit-service.md",
+        "docs/file-storage-closure.md"
       ],
       "implementation": [
         "include/mddlog/adapter/AuditStore.cppm",
         "include/mddlog/adapter/AuditMedium.cppm",
-        "include/mddlog/adapter/FileStorageMedium.cppm"
+        "include/mddlog/adapter/FileStorageMedium.cppm",
+        "include/mddlog/adapter/AuditService.cppm"
       ]
     },
     {
@@ -812,6 +817,70 @@
       "scenario": "sink-idle-worker-stop-stress",
       "evidence": "docs/audit-robustness-results.md",
       "limits": "2000 cycles par passage ; correction d’une course identifiée, pas reproduction certaine du blocage initial ni réalisation de #118."
+    },
+    {
+      "id": "VER-036",
+      "title": "Pilotage : budget par anneau et arrêt borné",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-fair-stop",
+      "evidence": "docs/file-storage-closure.md",
+      "limits": "Orchestration sur doubles en mémoire ; pas de qualification électrique, temporelle ou d’un fournisseur indépendant. Premier lot de #116 uniquement."
+    },
+    {
+      "id": "VER-037",
+      "title": "Flux inactif : synchronisation et reprise des tentatives d’ancrage",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-idle-sync-anchor",
+      "evidence": "docs/file-storage-closure.md",
+      "limits": "Orchestration sur doubles en mémoire ; pas de qualification électrique, temporelle ou d’un fournisseur indépendant. Premier lot de #116 uniquement."
+    },
+    {
+      "id": "VER-038",
+      "title": "Pilotage non qualifié sans promotion à durabilité",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-unqualified",
+      "evidence": "docs/file-storage-closure.md",
+      "limits": "Orchestration sur doubles en mémoire ; pas de qualification électrique, temporelle ou d’un fournisseur indépendant. Premier lot de #116 uniquement."
+    },
+    {
+      "id": "VER-039",
+      "title": "Signal indépendant des pertes après échec de sync",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-loss-signal",
+      "evidence": "docs/file-storage-closure.md",
+      "limits": "Orchestration sur doubles en mémoire ; pas de qualification électrique, temporelle ou d’un fournisseur indépendant. Premier lot de #116 uniquement."
+    },
+    {
+      "id": "VER-040",
+      "title": "Observateurs concurrents du service de pilotage",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-concurrent-health",
+      "evidence": "docs/file-storage-closure.md",
+      "limits": "Un producteur, un consommateur et un observateur sur doubles en mémoire ; sélection explicite du scénario en CI TSan, sans preuve temporelle ni qualification du profil."
     }
   ],
   "risks": [
@@ -1073,7 +1142,11 @@
       ],
       "verifications": [
         "VER-004",
-        "VER-031"
+        "VER-031",
+        "VER-036",
+        "VER-038",
+        "VER-039",
+        "VER-040"
       ],
       "gaps": [
         "GAP-009"
@@ -1146,7 +1219,12 @@
         "VER-029",
         "VER-031",
         "VER-032",
-        "VER-034"
+        "VER-034",
+        "VER-036",
+        "VER-037",
+        "VER-038",
+        "VER-039",
+        "VER-040"
       ],
       "gaps": [
         "GAP-007",

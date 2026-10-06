@@ -36,3 +36,12 @@ Les DEP identifient la chaîne de construction et sa surveillance. Le suivi des 
 utilise la procédure d'anomalies des [plans](../Plans.md) ; canal privé, responsable opérationnel
 et délais sont une lacune explicite GAP-004 à résoudre avant publication. Aucun processus de
 réponse déjà opérationnel n'est revendiqué ici.
+
+
+La [revue des archives externes](../../../docs/file-storage-closure.md) compare les
+empreintes sans importer les images dans Git et refuse les références sortant du
+répertoire déclaré. Elle requiert une archive stable ; un SHA-256 comparé à l'index
+identifie des octets, sans prouver leur provenance ni authentifier l'oracle. Le pilotage
+ne remplace ni les accès exclusifs du backend ni la responsabilité de l'hôte sur les
+identités, la quiescence et les durées de vie. Aucun chiffrement ni témoin indépendant
+n'est ajouté par ce lot.
