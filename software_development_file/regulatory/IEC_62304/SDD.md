@@ -108,3 +108,16 @@ Cette synchronisation est CTRL-015, vérifiée par VER-035. Elle ne vérifie ni 
 borné de CTRL-010/REQ-015 ni les budgets de surcharge de SimpleLogger encore ouverts.
 Le [résultat Orin Nano](../../../docs/orin-nano-electrical-results.md) consigne la réussite
 électrique déclarée, sans inventer le tuple ni les artefacts nécessaires à sa revue.
+
+
+## Premier pilotage de référence (#114 / #116)
+
+CTRL-004/CTRL-007 incluent [AuditService](../../../docs/audit-service.md), composition
+possédant le consommateur et le sink sur un support injecté. VER-036–040 couvrent budget
+par anneau, arrêt borné, réveil inactif, ancrage et pertes indépendantes. Le callback de
+l'hôte est préservé et la capture faible évite un cycle de propriété. Le service n'ajoute
+ni thread au cœur ni politique de rétention ; les opérations externes restent synchrones.
+Les refus et backlog d'arrêt sont observables sans promotion à durabilité. La
+[préparation de clôture](../../../docs/file-storage-closure.md) identifie les preuves
+externes encore dues. Aucun nouveau composant tiers n'est lié à la bibliothèque ; DEP-010 inventorie zstd
+comme outil de revue d'archives, hors dépendances du déploiement.

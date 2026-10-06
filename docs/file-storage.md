@@ -190,3 +190,9 @@ Références de primitives : [write(2)](https://man7.org/linux/man-pages/man2/wr
 [open(2)](https://man7.org/linux/man-pages/man2/open.2.html),
 [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html),
 [close(2)](https://man7.org/linux/man-pages/man2/close.2.html).
+
+## Raccordement au pilotage
+
+Le premier [service de référence](audit-service.md) raccorde `FileAudit` au drain, aux
+synchronisations et à l’arrêt. La [préparation de clôture](file-storage-closure.md)
+conserve les réserves du profil et le contrôle des archives externes sans images dans Git.

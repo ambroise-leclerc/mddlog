@@ -114,6 +114,7 @@ add_executable(mddlog_specs
     spec/AuditGeneratedRecoverySpec.cpp
     spec/AuditScenarioSpec.cpp
     spec/AuditDrainSpec.cpp
+    spec/AuditServiceSpec.cpp
     spec/AuditCanonicalSpec.cpp
     spec/AuditAnchorSpec.cpp
     spec/AuditStorageSpec.cpp
@@ -193,4 +194,11 @@ if(TARGET mddlog_contextual_inventory)
         add_test(NAME examples.contextualInventory.${scenario} COMMAND mddlog_contextual_inventory ${scenario})
         set_tests_properties(examples.contextualInventory.${scenario} PROPERTIES LABELS "examples;api;integration" TIMEOUT 20)
     endforeach()
+endif()
+
+if(TARGET mddlog_file_audit)
+    add_test(NAME examples.fileAudit.lifecycle
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/integration/FileAuditLifecycle.py
+            $<TARGET_FILE:mddlog_file_audit>)
+    set_tests_properties(examples.fileAudit.lifecycle PROPERTIES LABELS "examples;storage;integration" TIMEOUT 60)
 endif()

@@ -2,13 +2,13 @@
 import std;
 import mddlog.adapter.filestoragemedium;
 import mddlog.adapter.auditstore;
-import mddlog.adapter.auditdrain;
+import mddlog.adapter.auditservice;
 import mddlog.core.auditbinding;
 
 namespace {
 using namespace mddlog::adapter;
-constexpr std::size_t segmentBytes = 2048;
-constexpr std::size_t segmentCount = 8;
+constexpr std::size_t segmentBytes = 8192;
+constexpr std::size_t segmentCount = 16;
 
 template <std::size_t Capacity>
 [[nodiscard]] bool emit(mddlog::core::AuditBinding<Capacity>& audit) {
@@ -39,18 +39,15 @@ int main(int argc, char** argv) {
         storage.segmentSize        = segmentBytes;
         storage.segmentCount       = segmentCount;
         storage.maxProducerStreams = 1;
-        auto sink                  = PersistingAuditSink::create(medium, storage);
-        if (!sink)
-            return 1;
-        if (const auto previous = medium.segments(); !previous || !previous->empty()) {
-            std::println(std::cerr, "Use an empty directory for this demonstration; archive recovery belongs to the host lifecycle.");
+        storage.ledger             = LedgerConfig{.streamId = stream + ":ledger", .time = {}};
+        mddlog::core::AuditRing<4> ring(stream);
+        auto                       service = AuditService::create(medium, {.storage = storage});
+        if (!service) {
+            std::println(std::cerr, "Cannot configure audit service: issue {}", std::to_underlying(service.error().issue));
             return 1;
         }
-        mddlog::core::AuditRing<4> ring(stream);
-        AuditSinkAdapter           consumer;
-        if (consumer.addRing(ring) != AuditRingRegistration::Registered)
+        if ((*service)->addRing(ring) != AuditServiceRegistration::Registered)
             return 1;
-        consumer.setSink(*sink);
         const auto description = mddlog::core::AuditDescription::create({.action = "inventory.inspect"});
         const auto context     = mddlog::core::AuditContext::create({.target = "warehouse"});
         if (!description || !context)
@@ -58,10 +55,23 @@ int main(int argc, char** argv) {
         mddlog::core::AuditBinding audit(ring, *description, *context);
         if (!emit(audit))
             return 1;
-        if (consumer.drainOnce().handedOff != 1)
+        // Called by the host loop, including during producer inactivity.
+        if ((*service)->poll().handedOff != 1) {
+            const auto health = (*service)->health();
+            std::println(std::cerr,
+                         "Audit hand-off failed: delivery {}, storage {}",
+                         std::to_underlying(health.delivery.lastIssue),
+                         std::to_underlying(health.storage.lastIssue));
             return 1;
-        (*sink)->flush();
-        std::println("Admitted and written: 1; durable position: {} (unqualified deployment)", (*sink)->durablePosition(stream));
+        }
+        // Producers are quiescent here. The report keeps hand-off separate from confirmation.
+        const auto stopped = (*service)->stop();
+        if (!stopped.closed || stopped.health.delivery.pendingInRings != 0 || stopped.health.delivery.reportedLosses != 0)
+            return 1;
+        const auto stored = std::ranges::find(stopped.health.storage.streams, stream, &StreamStorageHealth::streamId);
+        if (stored == stopped.health.storage.streams.end() || stored->state != StreamStorageState::Closed)
+            return 1;
+        std::println("Admitted and written: 1; durable position: {} (unqualified deployment)", stored->durablePosition);
     }
     files.access = FileAccess::ReadOnly;
     auto reader  = FileStorageMedium::create(files);

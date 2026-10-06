@@ -239,6 +239,7 @@ target_sources(mddlog
         include/mddlog/adapter/AuditLog.cppm
         include/mddlog/adapter/AuditLogVerifier.cppm
         include/mddlog/adapter/AuditStore.cppm
+        include/mddlog/adapter/AuditService.cppm
         include/mddlog/sinks/ConsoleSink.cppm
         include/mddlog/adapter/Logger.cppm
         include/mddlog/adapter/DiagnosticBinding.cppm

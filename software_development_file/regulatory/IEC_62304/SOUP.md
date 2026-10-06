@@ -23,3 +23,10 @@ n’est revendiqué. Les résultats et anomalies de chaque examen restent à con
 Avant une mise à jour : vérifier licence et provenance, examiner défauts et avis de sécurité,
 reconstruire modules et consommateurs, exécuter les vérifications impactées et faire accepter
 le changement. Les rôles et la conservation sont définis dans [les plans](../Plans.md).
+
+
+DEP-010 inventorie le CLI Zstandard du [contrôle des archives externes](../../../docs/file-storage-closure.md).
+Il n'est lié ni déployé avec la bibliothèque ; son chemin et son empreinte sont consignés
+par le rapport. La campagne locale utilise zstd 1.5.7. Les notices de la distribution
+et la maîtrise de l'outil restent à examiner dans le profil de revue (GAP-005) ; les
+comparaisons d'empreintes ne qualifient pas la persistance matérielle (GAP-007).
