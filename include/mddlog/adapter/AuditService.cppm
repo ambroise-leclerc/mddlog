@@ -233,7 +233,8 @@ public:
         if (closed
             && (snapshot.unconfirmed != 0 || snapshot.unanchored != 0 || !snapshot.storage.integrity.empty() || snapshot.delivery.reportedLosses != 0
                 || std::ranges::any_of(snapshot.storage.streams, [](const auto& stream) {
-                       return stream.state == StreamStorageState::Failed;
+                       return stream.state == StreamStorageState::Failed || stream.appendedPosition > stream.durablePosition
+                              || stream.durablePosition > stream.anchoredPosition;
                    })))
             status = AuditStopStatus::Degraded;
         if (expired())

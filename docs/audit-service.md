@@ -85,7 +85,8 @@ Après cessation et quiescence des producteurs, `stop(maxDrainPasses)` ou
 quand les anneaux sont vides. Le rapport distingue `Completed`, `Pending`,
 `DeadlineExceeded`, `Degraded` et `InvalidBudget`. `closed` signifie fin du cycle de
 vie, indépendamment de la durabilité et de l’ancrage. Le backlog reste explicite et
-un arrêt partiel peut être réessayé. Une fermeture dégradée n’efface aucune perte.
+un arrêt partiel peut être réessayé. Une fermeture dégradée n’efface aucune perte. Son statut tient aussi compte des
+positions non confirmées ou non ancrées du registre, même sans événement producteur.
 Un appel sur un service fermé ne réexécute pas les I/O.
 
 La limite temporelle est **souple**, vérifiée entre passages et avant fermeture.

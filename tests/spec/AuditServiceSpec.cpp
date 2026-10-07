@@ -135,33 +135,52 @@ const speclab::Register idle{"Inactive streams reach their sync age and unavaila
                                      .Execute();
                              }};
 
-const speclab::Register unsupported{"An unqualified medium never produces an anchor", "unit", [] {
-                                        return speclab::Test("audit-service-unqualified")
-                                            .Then("shutdown reports written records and zero confirmed position",
-                                                  [] {
-                                                      speclab::core::Checks  checks;
-                                                      InMemoryStorageMedium  medium{24, false};
-                                                      InMemoryAnchorProvider provider{"witness"};
-                                                      auto                   config = storageConfig();
-                                                      config.provider               = &provider;
-                                                      AuditRing<1> ring{"unqualified"};
-                                                      auto         made = AuditService::create(medium, {.storage = config});
-                                                      checks.expect(made.has_value(), "service created");
-                                                      checks.raise();
-                                                      auto& service = **made;
-                                                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered, "registered");
-                                                      checks.expect(ring.tryRecord(request()).wasAdmitted(), "admitted");
-                                                      const auto result = service.stop();
-                                                      checks.expect(result.closed && result.health.delivery.handedOff == 1, "lifecycle ended");
-                                                      checks.expect(result.health.storage.streams.at(0).appendedPosition == 1
-                                                                        && result.health.storage.streams.at(0).durablePosition == 0,
-                                                                    "unconfirmed record remains explicit");
-                                                      checks.expect(result.health.storage.counters.syncUnsupported > 0, "unsupported observable");
-                                                      checks.expect(std::holds_alternative<AnchorAbsent>(provider.latest("unqualified")), "no anchor offered");
-                                                      checks.raise();
-                                                  })
-                                            .Execute();
-                                    }};
+const speclab::Register unsupported{
+    "An unqualified medium never produces an anchor",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-unqualified")
+            .Then("shutdown reports written records and zero confirmed position",
+                  [] {
+                      speclab::core::Checks  checks;
+                      InMemoryStorageMedium  medium{24, false};
+                      InMemoryAnchorProvider provider{"witness"};
+                      auto                   config = storageConfig();
+                      config.provider               = &provider;
+                      AuditRing<1> ring{"unqualified"};
+                      auto         made = AuditService::create(medium, {.storage = config});
+                      checks.expect(made.has_value(), "service created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered, "registered");
+                      checks.expect(ring.tryRecord(request()).wasAdmitted(), "admitted");
+                      const auto result = service.stop();
+                      checks.expect(result.closed && result.health.delivery.handedOff == 1, "lifecycle ended");
+                      checks.expect(result.health.storage.streams.at(0).appendedPosition == 1 && result.health.storage.streams.at(0).durablePosition == 0,
+                                    "unconfirmed record remains explicit");
+                      checks.expect(result.health.storage.counters.syncUnsupported > 0, "unsupported observable");
+                      checks.expect(std::holds_alternative<AnchorAbsent>(provider.latest("unqualified")), "no anchor offered");
+                      checks.raise();
+                  })
+            .Then("an unconfirmed ledger also makes an empty shutdown degraded",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24, false};
+                      auto                  config = storageConfig();
+                      config.ledger                = LedgerConfig{.streamId = "ledger/empty", .time = {}};
+                      auto made                    = AuditService::create(medium, {.storage = config});
+                      checks.expect(made.has_value(), "unqualified ledger created without fabricated confirmation");
+                      checks.raise();
+                      const auto stopped = (*made)->stop();
+                      checks.expect(stopped.closed && stopped.status == AuditStopStatus::Degraded, "control ledger exposure degrades shutdown");
+                      checks.expect(stopped.health.unconfirmed == 0 && stopped.health.delivery.reportedLosses == 0,
+                                    "control records are not producer events or losses");
+                      checks.expect(stopped.health.storage.streams.at(0).appendedPosition > stopped.health.storage.streams.at(0).durablePosition,
+                                    "unconfirmed ledger is explicit");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 
 const speclab::Register failure{
     "Storage failure reaches the service health and the host callback",
