@@ -97,9 +97,13 @@ const speclab::Register generatedRecovery{
                             mddlog::spec::requireReaderInvariant(bytes.size() >= prefix.size()
                                                                  && std::ranges::equal(prefix, std::span{bytes}.first(prefix.size())));
                         }
-                        LogVerifier after{medium, provider, retained};
-                        const auto  secondReport = after.verify();
-                        const auto* second       = secondReport.find(stream);
+                        RetainedPosition chunkRetained = retained;
+                        LogVerifier      after{medium, provider, retained};
+                        const auto       secondReport = after.verify();
+                        VerifierConfig   chunkConfig;
+                        chunkConfig.resources.readChunkBytes = 11;
+                        mddlog::spec::compareAuditReports(secondReport, LogVerifier{medium, provider, chunkRetained, chunkConfig}.verify());
+                        const auto* second = secondReport.find(stream);
                         mddlog::spec::requireReaderInvariant(second && second->report.anchoredThrough == confirmed && second->report.lastPresent >= durable);
                         config.ledger        = LedgerConfig{.streamId = "generated/ledger/2"};
                         const auto restarted = PersistingAuditSink::create(medium, config);

@@ -165,7 +165,8 @@ struct SegmentScan {
     /** @brief Offset just after the last valid frame (the end of the preamble when no frame is valid). */
     std::size_t validEnd = 0;
     /** @brief Bytes from validEnd to the end of the segment: unused space, or the trace of a cut. Never parsed. */
-    std::size_t trailingBytes = 0;
+    std::size_t trailingBytes       = 0;
+    bool        recordLimitExceeded = false;
 };
 
 namespace detail {
@@ -215,7 +216,7 @@ struct FrameView {
  * It never parses a record from the trailing bytes, never repairs them and never resynchronises inside them. The records point into `bytes`,
  * which must outlive the result.
  */
-[[nodiscard]] inline SegmentScan scanSegment(std::span<const std::uint8_t> bytes) {
+[[nodiscard]] inline SegmentScan scanSegment(std::span<const std::uint8_t> bytes, std::size_t maxRecords = std::numeric_limits<std::size_t>::max()) {
     SegmentScan scan;
     if (bytes.size() < segmentPreambleSize || !std::ranges::equal(bytes.first(segmentMagic.size()), segmentMagic)) {
         scan.trailingBytes = bytes.size();
@@ -247,6 +248,10 @@ struct FrameView {
         const auto frame = detail::parseFrame(bytes, scan.validEnd, false);
         if (!frame)
             break;
+        if (scan.records.size() == maxRecords) {
+            scan.recordLimitExceeded = true;
+            break;
+        }
         ScannedRecord record{.frameOffset = scan.validEnd, .canonical = frame->payload.first(frame->payload.size() - sha256DigestSize)};
         std::ranges::copy(frame->payload.last(sha256DigestSize), record.digest.begin());
         scan.records.push_back(record);

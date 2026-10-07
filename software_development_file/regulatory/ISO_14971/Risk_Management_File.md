@@ -69,3 +69,14 @@ Les inversions de positions restent des anomalies explicites malgré le bornage 
 écarts à zéro. Après divergence du témoin, l’ancrage de l’instance est bloqué pour
 éviter des tentatives et fautes répétées. Une fermeture terminée conserve son statut
 dégradé même si le délai est dépassé ; le dépassement reste mesuré dans `elapsed`.
+
+Pour RISK-007, CTRL-016 borne les données conservées et le travail de lecture du
+profil de #117 ; VER-054–059 refusent les métadonnées hors profil, les inventaires
+excessifs et les défaillances de mémoire sans verdict complet ni promotion du
+checkpoint. Une limite d’historique peut empêcher une nouvelle session après longue
+exploitation : l’hôte prévoit archivage, supervision et reconfiguration mesurée.
+Les chunks ne réduisent pas l’image possédée à une mémoire constante. Les allocations
+internes d’un backend personnalisé, fsync, callbacks, ordonnanceur et entrées
+diagnostiques arbitraires restent sous contrat de déploiement. Les mesures de RSS et
+les seuils CI détectent des régressions ; ils ne démontrent pas un WCET et ne décident
+pas l’acceptabilité du risque système. GAP-011/GAP-015 restent ouverts.

@@ -3,6 +3,7 @@
 export module mddlog.adapter.auditmedium;
 
 import std;
+export import mddlog.adapter.auditresources;
 
 export namespace mddlog::adapter {
 
@@ -72,6 +73,86 @@ public:
     [[nodiscard]] virtual std::optional<std::vector<SegmentInfo>> segments() = 0;
     /** @brief Remove a whole segment. Only retention calls it (Decision 10). */
     [[nodiscard]] virtual bool reclaim(SegmentRef segment) = 0;
+};
+
+/** @brief Validates the complete inventory before reads; bounds requests and cumulative work. */
+class AuditReadSession {
+public:
+    explicit AuditReadSession(AuditResourceLimits declared = {}) : limits(declared) {
+        if (!limits.valid())
+            error = AuditResourceIssue::InvalidLimits;
+    }
+    [[nodiscard]] std::optional<std::vector<SegmentInfo>> inventory(StorageMedium& medium) {
+        if (error != AuditResourceIssue::None)
+            return std::nullopt;
+        usage.totalBytes = 0;
+        usage.segments   = 0;
+        try {
+            auto listing = medium.segments();
+            if (!listing)
+                return std::nullopt;
+            if (listing->size() > limits.maxSegments) {
+                error = AuditResourceIssue::Segments;
+                return std::nullopt;
+            }
+            for (const auto& item : *listing) {
+                if (item.size > limits.maxSegmentBytes) {
+                    error = AuditResourceIssue::SegmentBytes;
+                    return std::nullopt;
+                }
+                if (item.size > limits.maxTotalBytes - usage.totalBytes) {
+                    error = AuditResourceIssue::TotalBytes;
+                    return std::nullopt;
+                }
+                usage.totalBytes += item.size;
+            }
+            usage.segments = listing->size();
+            return listing;
+        } catch (const std::bad_alloc&) {
+            error = AuditResourceIssue::MemoryUnavailable;
+            return std::nullopt;
+        }
+    }
+    [[nodiscard]] std::optional<std::vector<std::uint8_t>> read(StorageMedium& medium, SegmentInfo info) {
+        if (error != AuditResourceIssue::None)
+            return std::nullopt;
+        if (info.size > limits.maxSegmentBytes || info.size > std::vector<std::uint8_t>{}.max_size()) {
+            error = AuditResourceIssue::SegmentBytes;
+            return std::nullopt;
+        }
+        if (info.size > limits.maxReadBytes - usage.bytesRead) {
+            error = AuditResourceIssue::ReadBytes;
+            return std::nullopt;
+        }
+        try {
+            std::vector<std::uint8_t> bytes;
+            bytes.reserve(static_cast<std::size_t>(info.size));
+            while (bytes.size() < info.size) {
+                const auto amount = std::min<std::uint64_t>(limits.readChunkBytes, info.size - bytes.size());
+                ++usage.readCalls;
+                usage.bytesRead += amount;
+                auto chunk       = medium.read(info.segment, bytes.size(), amount);
+                if (!chunk || chunk->size() != amount)
+                    return std::nullopt;
+                bytes.insert(bytes.end(), chunk->begin(), chunk->end());
+            }
+            return bytes;
+        } catch (const std::bad_alloc&) {
+            error = AuditResourceIssue::MemoryUnavailable;
+            return std::nullopt;
+        }
+    }
+    [[nodiscard]] AuditResourceIssue issue() const noexcept {
+        return error;
+    }
+    [[nodiscard]] const AuditResourceUsage& consumed() const noexcept {
+        return usage;
+    }
+
+private:
+    AuditResourceLimits limits;
+    AuditResourceUsage  usage;
+    AuditResourceIssue  error = AuditResourceIssue::None;
 };
 
 /**

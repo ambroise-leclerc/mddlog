@@ -52,11 +52,25 @@ public:
     LogImage& operator=(LogImage&&) noexcept = default;
     ~LogImage()                              = default;
 
-    [[nodiscard]] static LogImage read(StorageMedium& medium) {
-        LogImage   out;
-        const auto listing = medium.segments();
+    [[nodiscard]] static LogImage read(StorageMedium& medium, AuditResourceLimits limits = {}) {
+        try {
+            return readWithinLimits(medium, limits);
+        } catch (const std::bad_alloc&) {
+            LogImage out;
+            out.unreadableFlag = true;
+            out.limitIssue     = AuditResourceIssue::MemoryUnavailable;
+            return out;
+        }
+    }
+
+private:
+    [[nodiscard]] static LogImage readWithinLimits(StorageMedium& medium, AuditResourceLimits limits) {
+        LogImage         out;
+        AuditReadSession session{limits};
+        const auto       listing = session.inventory(medium);
         if (!listing) {
             out.unreadableFlag = true;
+            out.limitIssue     = session.issue();
             return out;
         }
         struct Pending {
@@ -66,13 +80,29 @@ public:
         };
         std::map<std::string, std::vector<Pending>, std::less<>> grouped;
         for (const auto& info : *listing) {
-            auto bytes = medium.read(info.segment, 0, info.size);
+            auto       bytes           = session.read(medium, info);
+            const auto previousRecords = out.readUsage.records;
+            out.readUsage              = session.consumed();
+            out.readUsage.records      = previousRecords;
+            if (session.issue() != AuditResourceIssue::None) {
+                out.limitIssue     = session.issue();
+                out.unreadableFlag = true;
+                out.buffers.clear();
+                return out;
+            }
             if (!bytes) {
                 out.unreadableFlag = true;
                 continue;
             }
             out.buffers.push_back(std::move(*bytes));
-            SegmentScan scan = scanSegment(out.buffers.back());
+            SegmentScan scan = scanSegment(out.buffers.back(), limits.maxRecords - out.readUsage.records);
+            if (scan.recordLimitExceeded) {
+                out.limitIssue     = AuditResourceIssue::Records;
+                out.unreadableFlag = true;
+                out.buffers.clear();
+                return out;
+            }
+            out.readUsage.records += scan.records.size();
             switch (scan.status) {
                 case SegmentStatus::UnknownLayoutVersion:
                     if (!out.unknownVersion)
@@ -87,6 +117,12 @@ public:
                         break;
                     SegmentHeader header = *scan.header;
                     const auto    id     = header.streamId;
+                    if (!grouped.contains(id) && grouped.size() >= limits.maxStreams) {
+                        out.limitIssue     = AuditResourceIssue::Streams;
+                        out.unreadableFlag = true;
+                        out.buffers.clear();
+                        return out;
+                    }
                     grouped[id].push_back({.ref = info.segment, .header = std::move(header), .scan = std::move(scan)});
                     break;
                 }
@@ -111,6 +147,14 @@ public:
             out.held.emplace(id, std::move(stream));
         }
         return out;
+    }
+
+public:
+    [[nodiscard]] AuditResourceIssue resourceIssue() const noexcept {
+        return limitIssue;
+    }
+    [[nodiscard]] const AuditResourceUsage& resourceUsage() const noexcept {
+        return readUsage;
     }
 
     [[nodiscard]] const std::map<std::string, StreamImage, std::less<>>& streams() const noexcept {
@@ -149,6 +193,8 @@ private:
     bool                                            unreadableFlag = false;
     std::optional<std::uint16_t>                    unknownVersion;
     std::size_t                                     headerless = 0;
+    AuditResourceIssue                              limitIssue = AuditResourceIssue::None;
+    AuditResourceUsage                              readUsage;
 };
 
 /** @brief A recorded trim: records `1 … position` of `stream` were about to be removed, and `digest` is H at `position` (10.2, 10.4). */
@@ -534,6 +580,7 @@ struct ChainStateRecovery {
     std::vector<std::string>       toCite;
     std::vector<IntegrityFault>    faults;
     std::vector<PendingRetirement> pendingRetirements;
+    AuditResourceIssue             resourceIssue = AuditResourceIssue::None;
 
     /** @brief The log holds no ledger (10.3). A cycle or a fork is never absent state. */
     [[nodiscard]] bool absent() const noexcept {
@@ -544,14 +591,65 @@ struct ChainStateRecovery {
 /** @brief The log read as a whole: every stream and ledger, the trims the ledgers record, and how the ledgers cite one another (10.1). */
 class LogAnalysis {
 public:
-    [[nodiscard]] static LogAnalysis read(StorageMedium& medium) {
+    [[nodiscard]] static LogAnalysis read(StorageMedium& medium, AuditResourceLimits limits = {}) {
         LogAnalysis out;
-        out.pictured = LogImage::read(medium);
-        out.readLedgers();
-        out.evaluate();
+        out.pictured = LogImage::read(medium, limits);
+        if (out.pictured.resourceIssue() != AuditResourceIssue::None)
+            return out;
+        try {
+            out.readLedgers();
+            std::set<std::string, std::less<>> identities;
+            const auto                         remember = [&](std::string_view identity) {
+                if (identities.contains(identity))
+                    return true;
+                if (identities.size() >= limits.maxStreams)
+                    return false;
+                identities.emplace(identity);
+                return true;
+            };
+            for (const auto& [id, stream] : out.pictured.streams()) {
+                if (!remember(id)) {
+                    out.analysisIssue = AuditResourceIssue::Streams;
+                    return out;
+                }
+            }
+            for (const auto& ledger : out.ledgerList) {
+                if (ledger.predecessor && !remember(ledger.predecessor->target)) {
+                    out.analysisIssue = AuditResourceIssue::Streams;
+                    return out;
+                }
+                for (const auto& id : ledger.opened)
+                    if (!remember(id)) {
+                        out.analysisIssue = AuditResourceIssue::Streams;
+                        return out;
+                    }
+                for (const auto& citation : ledger.recovered)
+                    if (!remember(citation.target)) {
+                        out.analysisIssue = AuditResourceIssue::Streams;
+                        return out;
+                    }
+                for (const auto& trim : ledger.trims)
+                    if (!remember(trim.stream)) {
+                        out.analysisIssue = AuditResourceIssue::Streams;
+                        return out;
+                    }
+                for (const auto& [id, close] : ledger.closes)
+                    if (!remember(id)) {
+                        out.analysisIssue = AuditResourceIssue::Streams;
+                        return out;
+                    }
+            }
+            out.evaluate();
+        } catch (const std::bad_alloc&) {
+            out.evaluated.clear();
+            out.analysisIssue = AuditResourceIssue::MemoryUnavailable;
+        }
         return out;
     }
 
+    [[nodiscard]] AuditResourceIssue resourceIssue() const noexcept {
+        return analysisIssue != AuditResourceIssue::None ? analysisIssue : pictured.resourceIssue();
+    }
     [[nodiscard]] const LogImage& image() const noexcept {
         return pictured;
     }
@@ -802,6 +900,7 @@ private:
         }
     }
 
+    AuditResourceIssue                                   analysisIssue = AuditResourceIssue::None;
     LogImage                                             pictured;
     std::vector<LedgerImage>                             ledgerList;
     std::map<std::string, StreamEvaluation, std::less<>> evaluated;
@@ -829,8 +928,12 @@ namespace detail {
  * @brief The provider's streams against the log (10.3, 10.5): anchored evidence that has gone is a fault, and a retirement an earlier start left owed is
  * queued only on the word of a ledger an anchor covers, for a trim that reaches the anchor and every position the ledgers cite.
  */
-inline void checkProviderStreams(const LogAnalysis& log, AnchorProvider& provider, bool imageComplete, ChainStateRecovery& out) {
+inline void checkProviderStreams(const LogAnalysis& log, AnchorProvider& provider, bool imageComplete, ChainStateRecovery& out, std::size_t maxFaults) {
     const auto fault = [&](IntegrityFaultKind kind, std::string stream, std::uint64_t position = 0) {
+        if (out.faults.size() >= maxFaults) {
+            out.resourceIssue = AuditResourceIssue::IntegrityFaults;
+            return;
+        }
         out.faults.push_back({.kind = kind, .stream = std::move(stream), .position = position});
     };
     const StreamsAnswer listing = provider.streams();
@@ -894,12 +997,36 @@ inline void checkProviderStreams(const LogAnalysis& log, AnchorProvider& provide
  * Nothing is repaired, rewritten or reordered. The result says what record 1 and the `recovered` records may cite, and what the adapter must report as an
  * integrity fault. `provider` may be null.
  */
-[[nodiscard]] inline ChainStateRecovery recoverChainState(const LogAnalysis& log, AnchorProvider* provider) {
+[[nodiscard]] inline ChainStateRecovery recoverChainState(const LogAnalysis& log, AnchorProvider* provider, AuditResourceLimits limits = {}) try {
     ChainStateRecovery out;
-    const auto         fault = [&](IntegrityFaultKind kind, std::string stream, std::uint64_t position = 0) {
+    out.resourceIssue = log.resourceIssue();
+    if (out.resourceIssue != AuditResourceIssue::None)
+        return out;
+    if (!limits.valid())
+        out.resourceIssue = AuditResourceIssue::InvalidLimits;
+    else if (log.streams().size() > limits.maxStreams)
+        out.resourceIssue = AuditResourceIssue::Streams;
+    else if (log.image().resourceUsage().records > limits.maxRecords)
+        out.resourceIssue = AuditResourceIssue::Records;
+    else if (log.image().resourceUsage().segments > limits.maxSegments)
+        out.resourceIssue = AuditResourceIssue::Segments;
+    else if (log.image().resourceUsage().totalBytes > limits.maxTotalBytes)
+        out.resourceIssue = AuditResourceIssue::TotalBytes;
+    if (out.resourceIssue != AuditResourceIssue::None)
+        return out;
+    const auto fault = [&](IntegrityFaultKind kind, std::string stream, std::uint64_t position = 0) {
+        if (out.faults.size() >= limits.maxIntegrityFaults) {
+            out.resourceIssue = AuditResourceIssue::IntegrityFaults;
+            return;
+        }
         out.faults.push_back({.kind = kind, .stream = std::move(stream), .position = position});
     };
     // A segment the reader cannot read, or cannot tie to a stream, may hold records of any stream (9.4): no stream's end is then known.
+    std::optional<ResourceAnchorProvider> bounded;
+    if (provider != nullptr) {
+        bounded.emplace(*provider, limits);
+        provider = &*bounded;
+    }
     const bool imageComplete = !log.image().unreadable() && !log.image().unknownLayoutVersion().has_value();
 
     for (const auto& [id, ev] : log.streams()) {
@@ -1044,7 +1171,23 @@ inline void checkProviderStreams(const LogAnalysis& log, AnchorProvider& provide
 
     // The provider's view: streams it holds that the log neither holds nor accounts for with a trim are anchored evidence that has gone.
     if (provider != nullptr)
-        detail::checkProviderStreams(log, *provider, imageComplete, out);
+        detail::checkProviderStreams(log, *provider, imageComplete, out, limits.maxIntegrityFaults);
+    if (bounded && bounded->resourceIssue() != AuditResourceIssue::None) {
+        out.resourceIssue = bounded->resourceIssue();
+        out.held.clear();
+        out.toCite.clear();
+        out.faults.clear();
+        out.pendingRetirements.clear();
+    }
+    if (out.resourceIssue != AuditResourceIssue::None) {
+        const auto issue  = out.resourceIssue;
+        out               = {};
+        out.resourceIssue = issue;
+    }
+    return out;
+} catch (const std::bad_alloc&) {
+    ChainStateRecovery out;
+    out.resourceIssue = AuditResourceIssue::MemoryUnavailable;
     return out;
 }
 

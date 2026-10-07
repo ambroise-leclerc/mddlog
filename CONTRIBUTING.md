@@ -158,7 +158,7 @@ scripts/run-clang-tidy.sh build-clang
 ```
 
 - **Version**: clang-tidy 21 (`clang-tidy-21`), verified at run time; any other major version fails.
-- **Scope** (translation units): `include/mddlog/**/*.cppm`, `tests/spec/*.cpp`, `examples/*.cpp`.
+- **Scope** (translation units): `include/mddlog/**/*.cppm`, `tests/spec/*.cpp`, `tests/bench/*.cpp`, `examples/*.cpp`.
   `tests/framework/*.hpp` is a header, analysed through the specs that include it.
 - **What fails the run**: any diagnostic (findings are promoted to errors), any tool failure, a
   missing or unbuilt Clang preset, a file of the scope absent from `compile_commands.json`, or an

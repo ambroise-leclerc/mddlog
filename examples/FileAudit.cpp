@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
         return 1;
     const auto         stored = readStoredStream(**reader, stream);
     AuditChainVerifier verifier(stream);
-    if (stored.records().size() != 1 || stored.trailingBytesOfLastSegment() != 0)
+    if (!stored.complete() || stored.resourceIssue() != AuditResourceIssue::None || stored.records().size() != 1 || stored.trailingBytesOfLastSegment() != 0)
         return 1;
     for (const auto& record : stored.records()) {
         if (verifier.check(record.bytes, record.digest) != ChainFinding::Ok)

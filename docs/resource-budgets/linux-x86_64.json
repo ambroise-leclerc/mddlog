@@ -1,0 +1,37 @@
+{
+  "name": "linux-x86_64-clang21-software-reference",
+  "description": "Release, Clang/libc++ 21, in-memory corpus; regression envelopes, not WCET or physical durability qualification",
+  "limits": {
+    "maxSegments": 512,
+    "maxSegmentBytes": 32768,
+    "maxTotalBytes": 16777216,
+    "readChunkBytes": 4096,
+    "maxReadBytes": 33554432,
+    "maxStreams": 256,
+    "maxRecords": 65536,
+    "maxProviderEntries": 2048,
+    "maxProviderTextBytes": 1024,
+    "maxProviderCalls": 8192,
+    "maxIntegrityFaults": 2048
+  },
+  "measurementEnvelope": {
+    "peakRssKiB": 262144,
+    "timeoutSeconds": 120,
+    "operationNanoseconds": {
+      "startup_empty": 1000000000,
+      "append": 5000000000,
+      "close": 1000000000,
+      "restart_64": 60000000000,
+      "restart_max": 2000000000,
+      "startup_rich": 2000000000,
+      "saturated_admission": 1000000000,
+      "analysis": 5000000000,
+      "recovery": 2000000000,
+      "verify": 10000000000,
+      "rotation": 5000000000,
+      "retention": 5000000000,
+      "admission": 1000000000,
+      "sha256": 2000000000
+    }
+  }
+}

@@ -145,7 +145,8 @@ enum class VerdictCause : std::uint8_t {
     /** @brief A whole-stream trim and the provider's retirement disagree on the digest at the same position (10.6). Set by the log reader. */
     TrimDiffersFromRetirement,
     /** @brief The provider retired the stream past the highest recorded trim: anchored records went with no trim (10.5, 10.6). Set by the log reader. */
-    RetirementBeyondTrim
+    RetirementBeyondTrim,
+    ResourceLimit
 };
 
 /** @brief Outcome of the retained-position check of 7.4. */
@@ -176,6 +177,8 @@ struct VerifierConfig {
     std::optional<std::chrono::nanoseconds> maxAnchorAge;
     /** @brief The verification time, host-supplied. */
     core::RawTime verificationTime = core::RawTime::unavailable();
+    /** @brief Reader cardinality and work limits, shared with persistence. */
+    AuditResourceLimits resources;
 };
 
 /** @brief The highest anchor verified for one stream (7.4). */
@@ -298,16 +301,30 @@ class AnchorVerifier {
 public:
     /** @brief Holds references: the provider and the retained position must outlive the verifier. */
     AnchorVerifier(AnchorProvider& anchorProvider, RetainedPosition& retainedPosition, VerifierConfig verifierConfig = {}) noexcept
-        : provider(&anchorProvider), retained(&retainedPosition), config(verifierConfig) {}
+        : boundedProvider(anchorProvider, verifierConfig.resources), provider(&boundedProvider), retained(&retainedPosition), config(verifierConfig) {}
 
     /** @brief Verify one stream instance whose records are given in storage order. An empty span means the log holds none. */
     [[nodiscard]] StreamReport
     verify(std::string_view streamId, std::span<const StoredRecord> records, const StreamStart& start = {}, const StoredLayout& layout = {}) {
         StreamReport report;
+        if (!core::AuditEvent::validStreamId(streamId)) {
+            report.verdict = Verdict::CannotVerify;
+            report.cause   = VerdictCause::InvalidStreamIdentity;
+            return report;
+        }
         report.streamId      = std::string{streamId};
         report.firstRetained = start.afterSequence + 1;
         report.lastPresent   = start.afterSequence;
 
+        if (!config.resources.valid())
+            return resourceRefusal(report, AuditResourceIssue::InvalidLimits);
+        if (records.size() > config.resources.maxRecords)
+            return resourceRefusal(report, AuditResourceIssue::Records);
+        if (layout.segments.size() > config.resources.maxSegments)
+            return resourceRefusal(report, AuditResourceIssue::Segments);
+        if (retained->allAnchors().size() > config.resources.maxProviderEntries || retained->allHeads().size() > config.resources.maxProviderEntries
+            || (!retained->anchor(streamId) && retained->allAnchors().size() >= config.resources.maxProviderEntries))
+            return resourceRefusal(report, AuditResourceIssue::ProviderEntries);
         // 1. The chain: Inconsistent comes before anything the provider says.
         AuditChainVerifier chain{streamId, start.afterSequence, start.afterDigest};
         if (!chain.valid())
@@ -316,6 +333,8 @@ public:
         const LatestAnswer  latest  = provider->latest(streamId);
         const StreamsAnswer listing = provider->streams();
         const auto          before  = retained->anchor(streamId);
+        if (boundedProvider.resourceIssue() != AuditResourceIssue::None)
+            return resourceRefusal(report);
         listedHead.reset();
         if (const auto* all = std::get_if<ProviderListing>(&listing))
             listedHead = std::pair{all->providerId, all->head};
@@ -447,6 +466,10 @@ public:
      */
     [[nodiscard]] std::vector<StreamReport> verifyUnlisted(std::span<const std::string> logStreams) {
         std::set<std::string> known;
+        if (retained->allAnchors().size() > config.resources.maxProviderEntries) {
+            localIssue = AuditResourceIssue::ProviderEntries;
+            return {};
+        }
         if (const auto listing = provider->streams(); const auto* all = std::get_if<ProviderListing>(&listing)) {
             for (const StreamEntry& entry : all->entries)
                 known.insert(entryAnchor(entry).streamId);
@@ -462,6 +485,9 @@ public:
         return reports;
     }
 
+    [[nodiscard]] AuditResourceIssue resourceIssue() const noexcept {
+        return localIssue != AuditResourceIssue::None ? localIssue : boundedProvider.resourceIssue();
+    }
     /**
      * @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5).
      *
@@ -481,6 +507,12 @@ public:
     }
 
 private:
+    [[nodiscard]] StreamReport resourceRefusal(StreamReport& report, AuditResourceIssue issue = AuditResourceIssue::None) {
+        localIssue     = issue != AuditResourceIssue::None ? issue : boundedProvider.resourceIssue();
+        report.verdict = Verdict::CannotVerify;
+        report.cause   = VerdictCause::ResourceLimit;
+        return report;
+    }
     [[nodiscard]] static const Anchor& entryAnchor(const StreamEntry& entry) noexcept {
         if (const auto* anchor = std::get_if<Anchor>(&entry))
             return *anchor;
@@ -563,6 +595,8 @@ private:
         report.verdict = verdict;
         report.cause   = cause;
         if (verdict == Verdict::Anchored || verdict == Verdict::Retired) {
+            if (listedHead && !retained->allHeads().contains(listedHead->first) && retained->allHeads().size() >= config.resources.maxProviderEntries)
+                return resourceRefusal(report, AuditResourceIssue::ProviderEntries);
             if (listedHead.has_value())
                 retained->raiseHead(listedHead->first, listedHead->second);
             if (report.anchor.has_value())
@@ -575,9 +609,11 @@ private:
         return report;
     }
 
-    AnchorProvider*   provider;
-    RetainedPosition* retained;
-    VerifierConfig    config;
+    AuditResourceIssue     localIssue = AuditResourceIssue::None;
+    ResourceAnchorProvider boundedProvider;
+    AnchorProvider*        provider;
+    RetainedPosition*      retained;
+    VerifierConfig         config;
     /** @brief The provider head seen by the verification in progress, raised into the retained position on a clean result. */
     std::optional<std::pair<std::string, std::uint64_t>> listedHead;
     /** @brief Whether latest() returned a retirement in the verification in progress, whatever became of the records. */

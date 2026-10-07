@@ -74,6 +74,7 @@ collect_scope() {
 }
 collect_scope include/mddlog '*.cppm'
 collect_scope tests/spec '*.cpp'
+collect_scope tests/bench '*.cpp'
 collect_scope examples '*.cpp'
 if ! grep -q '^MDDLOG_BUILD_FUZZERS:BOOL=ON$' "$build_dir/CMakeCache.txt"; then
     enabled_scope=()

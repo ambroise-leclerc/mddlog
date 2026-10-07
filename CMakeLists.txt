@@ -231,6 +231,7 @@ target_sources(mddlog
         include/mddlog/adapter/Sha256.cppm
         include/mddlog/adapter/AuditCanonical.cppm
         include/mddlog/adapter/AuditChain.cppm
+        include/mddlog/adapter/AuditResources.cppm
         include/mddlog/adapter/AuditAnchor.cppm
         include/mddlog/adapter/AuditVerifier.cppm
         include/mddlog/adapter/AuditLayout.cppm

@@ -42,7 +42,8 @@ enum class StorageIssue : std::uint8_t {
     NotEncodable,
     MediumUnreadable,
     /** @brief Recovery or a provider check found a suspect stream or ledger (10.3, 7.3). The records are never repaired. */
-    IntegrityFault
+    IntegrityFault,
+    ResourceLimit
 };
 
 /** @brief When a sync is issued, besides the one before a rotation and the one on orderly close (9.3). */
@@ -91,8 +92,9 @@ struct StorageConfig {
     /**
      * @brief The anchor provider (7.2), or null: no anchor is ever advanced or retired, and rotation is not bounded by an anchor (10.4). Must outlive the sink.
      */
-    AnchorProvider* provider = nullptr;
-    RetentionPolicy retention;
+    AnchorProvider*     provider = nullptr;
+    RetentionPolicy     retention;
+    AuditResourceLimits resources;
 };
 
 enum class StorageConfigError : std::uint8_t {
@@ -108,7 +110,9 @@ enum class StorageConfigError : std::uint8_t {
      * @brief The medium already holds a stream instance with the ledger's identity, or a ledger in the log names it, even for a stream whose records were
      * removed: a restart starts a new ledger (10.1).
      */
-    LedgerIdentityInUse
+    LedgerIdentityInUse,
+    InvalidResources,
+    ResourceLimit
 };
 
 /**
@@ -119,7 +123,12 @@ enum class StorageConfigError : std::uint8_t {
     if (segmentSize < maxSegmentOpeningSize + maxRecordFrameSize)
         return 0;
     const std::size_t perSegment = (segmentSize - maxSegmentOpeningSize) / maxRecordFrameSize;
-    const std::size_t frames     = segmentCount + maxProducerStreams + 3;
+    const auto        maximum    = std::numeric_limits<std::size_t>::max();
+    if (segmentCount > maximum - 3 || maxProducerStreams > maximum - 3 - segmentCount)
+        return 0;
+    const std::size_t frames = segmentCount + maxProducerStreams + 3;
+    if (frames > maximum - (perSegment - 1))
+        return 0;
     return ((frames + perSegment - 1) / perSegment) + 1;
 }
 
@@ -156,6 +165,7 @@ struct RecoveryReport {
     std::vector<RecoveryFinding> findings;
     /** @brief Identities of the stream instances the medium already holds. */
     std::vector<std::string> streamsHeld;
+    AuditResourceIssue       resourceIssue = AuditResourceIssue::None;
 };
 
 [[nodiscard]] inline RecoveryFinding unlocatedFinding(RecoveryFindingKind kind, SegmentRef segment) {
@@ -165,73 +175,99 @@ struct RecoveryReport {
     return finding;
 }
 
-[[nodiscard]] inline RecoveryReport checkMediumAtStart(StorageMedium& medium) {
+[[nodiscard]] inline RecoveryReport checkMediumAtStart(StorageMedium& medium, AuditResourceLimits limits = {}) {
     RecoveryReport report;
-    const auto     listing = medium.segments();
-    if (!listing) {
-        report.mediumReadable = false;
-        return report;
-    }
-    struct Held {
-        SegmentRef    segment = 0;
-        std::uint64_t size    = 0;
-        std::uint32_t index   = 0;
-    };
-    std::map<std::string, std::vector<Held>, std::less<>> instances;
-    for (const auto& info : *listing) {
-        ++report.segmentsExamined;
-        const auto prefix = medium.read(info.segment, 0, std::min<std::uint64_t>(info.size, maxSegmentOpeningSize));
-        if (!prefix) {
-            report.findings.push_back(unlocatedFinding(RecoveryFindingKind::UnreadableSegment, info.segment));
-            continue;
+    try {
+        AuditReadSession session{limits};
+        const auto       listing = session.inventory(medium);
+        if (!listing) {
+            report.mediumReadable = false;
+            report.resourceIssue  = session.issue();
+            return report;
         }
-        const SegmentScan scan = scanSegment(*prefix);
-        switch (scan.status) {
-            case SegmentStatus::NoValidPreamble:
-                report.findings.push_back(unlocatedFinding(RecoveryFindingKind::NoValidPreamble, info.segment));
-                break;
-            case SegmentStatus::UnknownLayoutVersion:
-                report.findings.push_back(unlocatedFinding(RecoveryFindingKind::UnknownLayoutVersion, info.segment));
-                break;
-            case SegmentStatus::NoValidHeader:
-                report.findings.push_back(unlocatedFinding(RecoveryFindingKind::NoValidHeader, info.segment));
-                break;
-            case SegmentStatus::Readable:
-                if (scan.header)
-                    instances[scan.header->streamId].push_back({.segment = info.segment, .size = info.size, .index = scan.header->segmentIndex});
-                break;
-        }
-    }
-    for (auto& [streamId, held] : instances) {
-        report.streamsHeld.push_back(streamId);
-        std::ranges::sort(held, {}, &Held::index);
-        for (std::size_t i = 1; i < held.size(); ++i) {
-            if (held[i].index == held[i - 1].index) {
-                report.findings.push_back(
-                    {.kind = RecoveryFindingKind::DuplicateSegmentIndex, .segment = held[i].segment, .streamId = streamId, .segmentIndex = held[i].index});
-            } else if (held[i].index != held[i - 1].index + 1) {
-                report.findings.push_back(
-                    {.kind = RecoveryFindingKind::SegmentIndexGap, .segment = held[i].segment, .streamId = streamId, .segmentIndex = held[i].index});
+        struct Held {
+            SegmentRef    segment = 0;
+            std::uint64_t size    = 0;
+            std::uint32_t index   = 0;
+        };
+        std::map<std::string, std::vector<Held>, std::less<>> instances;
+        for (const auto& info : *listing) {
+            ++report.segmentsExamined;
+            const auto prefix = session.read(medium, {.segment = info.segment, .size = std::min<std::uint64_t>(info.size, maxSegmentOpeningSize)});
+            if (!prefix) {
+                report.findings.push_back(unlocatedFinding(RecoveryFindingKind::UnreadableSegment, info.segment));
+                continue;
+            }
+            const SegmentScan scan = scanSegment(*prefix);
+            switch (scan.status) {
+                case SegmentStatus::NoValidPreamble:
+                    report.findings.push_back(unlocatedFinding(RecoveryFindingKind::NoValidPreamble, info.segment));
+                    break;
+                case SegmentStatus::UnknownLayoutVersion:
+                    report.findings.push_back(unlocatedFinding(RecoveryFindingKind::UnknownLayoutVersion, info.segment));
+                    break;
+                case SegmentStatus::NoValidHeader:
+                    report.findings.push_back(unlocatedFinding(RecoveryFindingKind::NoValidHeader, info.segment));
+                    break;
+                case SegmentStatus::Readable:
+                    if (scan.header && !instances.contains(scan.header->streamId) && instances.size() >= limits.maxStreams) {
+                        report.mediumReadable = false;
+                        report.resourceIssue  = AuditResourceIssue::Streams;
+                        return report;
+                    }
+                    if (scan.header)
+                        instances[scan.header->streamId].push_back({.segment = info.segment, .size = info.size, .index = scan.header->segmentIndex});
+                    break;
             }
         }
-        const Held& last = held.back();
-        const auto  all  = medium.read(last.segment, 0, last.size);
-        if (!all) {
-            report.findings.push_back(
-                {.kind = RecoveryFindingKind::UnreadableSegment, .segment = last.segment, .streamId = streamId, .segmentIndex = last.index});
-            continue;
+        std::size_t scannedRecords = 0;
+        for (auto& [streamId, held] : instances) {
+            report.streamsHeld.push_back(streamId);
+            std::ranges::sort(held, {}, &Held::index);
+            for (std::size_t i = 1; i < held.size(); ++i) {
+                if (held[i].index == held[i - 1].index) {
+                    report.findings.push_back(
+                        {.kind = RecoveryFindingKind::DuplicateSegmentIndex, .segment = held[i].segment, .streamId = streamId, .segmentIndex = held[i].index});
+                } else if (held[i].index != held[i - 1].index + 1) {
+                    report.findings.push_back(
+                        {.kind = RecoveryFindingKind::SegmentIndexGap, .segment = held[i].segment, .streamId = streamId, .segmentIndex = held[i].index});
+                }
+            }
+            const Held& last = held.back();
+            const auto  all  = session.read(medium, {.segment = last.segment, .size = last.size});
+            if (!all) {
+                report.findings.push_back(
+                    {.kind = RecoveryFindingKind::UnreadableSegment, .segment = last.segment, .streamId = streamId, .segmentIndex = last.index});
+                continue;
+            }
+            const SegmentScan scan = scanSegment(*all, limits.maxRecords - scannedRecords);
+            if (scan.recordLimitExceeded) {
+                report.mediumReadable = false;
+                report.resourceIssue  = AuditResourceIssue::Records;
+                return report;
+            }
+            scannedRecords += scan.records.size();
+            if (scan.trailingBytes != 0) {
+                report.findings.push_back({.kind         = RecoveryFindingKind::TrailingBytes,
+                                           .segment      = last.segment,
+                                           .streamId     = streamId,
+                                           .segmentIndex = last.index,
+                                           .offset       = scan.validEnd,
+                                           .length       = scan.trailingBytes});
+            }
         }
-        const SegmentScan scan = scanSegment(*all);
-        if (scan.trailingBytes != 0) {
-            report.findings.push_back({.kind         = RecoveryFindingKind::TrailingBytes,
-                                       .segment      = last.segment,
-                                       .streamId     = streamId,
-                                       .segmentIndex = last.index,
-                                       .offset       = scan.validEnd,
-                                       .length       = scan.trailingBytes});
+        if (session.issue() != AuditResourceIssue::None) {
+            report.mediumReadable = false;
+            report.resourceIssue  = session.issue();
         }
+        return report;
+    } catch (const std::bad_alloc&) {
+        report.mediumReadable = false;
+        report.resourceIssue  = AuditResourceIssue::MemoryUnavailable;
+        report.findings.clear();
+        report.streamsHeld.clear();
+        return report;
     }
-    return report;
 }
 
 /**
@@ -270,6 +306,9 @@ public:
     [[nodiscard]] std::size_t segmentsWithoutHeader() const noexcept {
         return withoutHeader;
     }
+    [[nodiscard]] AuditResourceIssue resourceIssue() const noexcept {
+        return limitIssue;
+    }
     /** @brief False when the medium could not be listed, a segment could not be read, or a segment is in an unknown layout version: the records may not be the
      * stream. */
     [[nodiscard]] bool complete() const noexcept {
@@ -277,7 +316,7 @@ public:
     }
 
 private:
-    friend StoredStream readStoredStream(StorageMedium&, std::string_view);
+    friend StoredStream readStoredStream(StorageMedium&, std::string_view, AuditResourceLimits);
 
     std::vector<std::vector<std::uint8_t>> buffers;
     std::vector<StoredRecord>              stored;
@@ -285,6 +324,7 @@ private:
     StoredLayout                           structure;
     std::size_t                            trailing      = 0;
     std::size_t                            withoutHeader = 0;
+    AuditResourceIssue                     limitIssue    = AuditResourceIssue::None;
 };
 
 /**
@@ -293,53 +333,73 @@ private:
  * A segment in a layout version this reader does not know has no header it can read, so it cannot be tied to a stream: it is reported for every stream, and
  * none of them can be verified (9.4).
  */
-[[nodiscard]] inline StoredStream readStoredStream(StorageMedium& medium, std::string_view streamId) {
+[[nodiscard]] inline StoredStream readStoredStream(StorageMedium& medium, std::string_view streamId, AuditResourceLimits limits = {}) {
     StoredStream out;
-    const auto   listing = medium.segments();
-    if (!listing) {
+    try {
+        AuditReadSession session{limits};
+        const auto       listing = session.inventory(medium);
+        if (!listing) {
+            out.structure.unreadable = true;
+            out.limitIssue           = session.issue();
+            return out;
+        }
+        struct Found {
+            std::uint32_t index         = 0;
+            std::uint64_t firstSequence = 0;
+            std::size_t   buffer        = 0;
+        };
+        std::vector<Found> found;
+        std::size_t        scannedRecords = 0;
+        for (const auto& info : *listing) {
+            auto bytes = session.read(medium, info);
+            if (!bytes) {
+                out.limitIssue           = session.issue();
+                out.structure.unreadable = true;
+                continue;
+            }
+            const SegmentScan scan = scanSegment(*bytes, limits.maxRecords - scannedRecords);
+            if (scan.recordLimitExceeded) {
+                out.structure.unreadable = true;
+                out.limitIssue           = AuditResourceIssue::Records;
+                return out;
+            }
+            scannedRecords += scan.records.size();
+            switch (scan.status) {
+                case SegmentStatus::UnknownLayoutVersion:
+                    if (!out.structure.unknownLayoutVersion)
+                        out.structure.unknownLayoutVersion = scan.layoutVersion;
+                    break;
+                case SegmentStatus::NoValidPreamble:
+                case SegmentStatus::NoValidHeader:
+                    ++out.withoutHeader;
+                    break;
+                case SegmentStatus::Readable:
+                    if (scan.header && scan.header->streamId == streamId) {
+                        found.push_back({.index = scan.header->segmentIndex, .firstSequence = scan.header->firstSequence, .buffer = out.buffers.size()});
+                        out.buffers.push_back(std::move(*bytes));
+                    }
+                    break;
+            }
+        }
+        std::ranges::sort(found, {}, &Found::index);
+        for (const auto& item : found) {
+            const SegmentScan scan = scanSegment(out.buffers[item.buffer]);
+            out.indices.push_back(item.index);
+            out.structure.segments.push_back({.segmentIndex = item.index, .firstSequence = item.firstSequence, .recordCount = scan.records.size()});
+            for (const auto& record : scan.records)
+                out.stored.push_back({.bytes = record.canonical, .digest = record.digest});
+            out.trailing = scan.trailingBytes;
+        }
+        return out;
+    } catch (const std::bad_alloc&) {
         out.structure.unreadable = true;
+        out.limitIssue           = AuditResourceIssue::MemoryUnavailable;
+        out.buffers.clear();
+        out.stored.clear();
+        out.indices.clear();
+        out.structure.segments.clear();
         return out;
     }
-    struct Found {
-        std::uint32_t index         = 0;
-        std::uint64_t firstSequence = 0;
-        std::size_t   buffer        = 0;
-    };
-    std::vector<Found> found;
-    for (const auto& info : *listing) {
-        auto bytes = medium.read(info.segment, 0, info.size);
-        if (!bytes) {
-            out.structure.unreadable = true;
-            continue;
-        }
-        const SegmentScan scan = scanSegment(*bytes);
-        switch (scan.status) {
-            case SegmentStatus::UnknownLayoutVersion:
-                if (!out.structure.unknownLayoutVersion)
-                    out.structure.unknownLayoutVersion = scan.layoutVersion;
-                break;
-            case SegmentStatus::NoValidPreamble:
-            case SegmentStatus::NoValidHeader:
-                ++out.withoutHeader;
-                break;
-            case SegmentStatus::Readable:
-                if (scan.header && scan.header->streamId == streamId) {
-                    found.push_back({.index = scan.header->segmentIndex, .firstSequence = scan.header->firstSequence, .buffer = out.buffers.size()});
-                    out.buffers.push_back(std::move(*bytes));
-                }
-                break;
-        }
-    }
-    std::ranges::sort(found, {}, &Found::index);
-    for (const auto& item : found) {
-        const SegmentScan scan = scanSegment(out.buffers[item.buffer]);
-        out.indices.push_back(item.index);
-        out.structure.segments.push_back({.segmentIndex = item.index, .firstSequence = item.firstSequence, .recordCount = scan.records.size()});
-        for (const auto& record : scan.records)
-            out.stored.push_back({.bytes = record.canonical, .digest = record.digest});
-        out.trailing = scan.trailingBytes;
-    }
-    return out;
 }
 
 /** @brief One stream instance's storage state and durable position, as the health signal publishes it (9.6). */
@@ -453,7 +513,8 @@ enum class RetentionOutcome : std::uint8_t {
     LedgerStillNeeded,
     MediumUnreadable,
     /** @brief The trim was confirmed but the medium did not reclaim every segment: the removal is interrupted (10.4). */
-    ReclaimInterrupted
+    ReclaimInterrupted,
+    ResourceLimit
 };
 
 struct RetentionResult {
@@ -488,10 +549,11 @@ struct StorageHealthSnapshot {
     /** @brief The suspect streams and ledgers found at start and by provider checks. Nothing here is an audit event (9.6). */
     std::vector<IntegrityFault> integrity;
     /** @brief Free segments beyond the ledger's reserve, as last counted: what producer streams may still open. */
-    std::uint64_t   freeSegmentsBeyondReserve = 0;
-    std::uint64_t   reserveSegments           = 0;
-    StorageCounters counters;
-    StorageIssue    lastIssue = StorageIssue::None;
+    std::uint64_t      freeSegmentsBeyondReserve = 0;
+    std::uint64_t      reserveSegments           = 0;
+    StorageCounters    counters;
+    StorageIssue       lastIssue     = StorageIssue::None;
+    AuditResourceIssue resourceIssue = AuditResourceIssue::None;
 };
 
 /**
@@ -518,7 +580,7 @@ public:
      * Without a ledger it writes nothing. With one it also recovers chain state and writes the ledger's record 1 and its `recovered` records, each durably
      * confirmed before the next (10.2, 10.3); restart() says what was recorded, and a failure to write them is a failed ledger in health(), not an error here.
      */
-    [[nodiscard]] static std::expected<std::shared_ptr<PersistingAuditSink>, StorageConfigError> create(StorageMedium& medium, StorageConfig config) {
+    [[nodiscard]] static std::expected<std::shared_ptr<PersistingAuditSink>, StorageConfigError> create(StorageMedium& medium, StorageConfig config) try {
         if (config.segmentSize < maxSegmentOpeningSize + maxRecordFrameSize)
             return std::unexpected{StorageConfigError::SegmentTooSmall};
         if (config.maxProducerStreams == 0)
@@ -534,20 +596,34 @@ public:
             config.clock = [] {
                 return std::chrono::steady_clock::now();
             };
-        auto recovered = checkMediumAtStart(medium);
+        if (!config.resources.valid() || config.segmentCount > config.resources.maxSegments || config.segmentSize > config.resources.maxSegmentBytes
+            || config.segmentCount > config.resources.maxTotalBytes / config.segmentSize
+            || config.maxProducerStreams > config.resources.maxStreams - (config.ledger ? 1U : 0U))
+            return std::unexpected{StorageConfigError::InvalidResources};
+        auto recovered = checkMediumAtStart(medium, config.resources);
+        if (recovered.resourceIssue != AuditResourceIssue::None)
+            return std::unexpected{StorageConfigError::ResourceLimit};
         if (config.ledger.has_value() && std::ranges::find(recovered.streamsHeld, config.ledger->streamId) != recovered.streamsHeld.end())
             return std::unexpected{StorageConfigError::LedgerIdentityInUse};
         std::optional<LogAnalysis> log;
         if (config.ledger.has_value()) {
-            log.emplace(LogAnalysis::read(medium));
+            log.emplace(LogAnalysis::read(medium, config.resources));
+            if (log->resourceIssue() != AuditResourceIssue::None)
+                return std::unexpected{StorageConfigError::ResourceLimit};
             if (std::ranges::binary_search(namedIdentities(*log), config.ledger->streamId, std::less<>{}))
                 return std::unexpected{StorageConfigError::LedgerIdentityInUse};
         }
         // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the constructor is private, so make_shared cannot reach it.
         std::shared_ptr<PersistingAuditSink> sink{new PersistingAuditSink(medium, std::move(config), reserve, std::move(recovered))};
-        if (log.has_value())
+        sink->historicalIdentities = sink->startup.streamsHeld.size();
+        if (log.has_value()) {
             sink->startLedger(*log);
+            if (sink->health().lastIssue == StorageIssue::ResourceLimit)
+                return std::unexpected{StorageConfigError::ResourceLimit};
+        }
         return sink;
+    } catch (const std::bad_alloc&) {
+        return std::unexpected{StorageConfigError::ResourceLimit};
     }
 
     PersistingAuditSink(const PersistingAuditSink&)            = delete;
@@ -590,6 +666,11 @@ public:
             if (std::ranges::binary_search(startup.streamsHeld, id) || std::ranges::binary_search(namedByLedgers, id, std::less<>{})
                 || (ledger != nullptr && ledger->id == id)) {
                 counters.streamIdentityInUse.fetch_add(1, std::memory_order_relaxed);
+                return false;
+            }
+            if (streams.size() >= config.resources.maxStreams - historicalIdentities - (ledger != nullptr ? 1U : 0U)) {
+                counters.streamLimitRefused.fetch_add(1, std::memory_order_relaxed);
+                noteResourceLimit(AuditResourceIssue::Streams);
                 return false;
             }
             // S bounds the instances open at once: one that failed has ended and no longer counts (9.6).
@@ -798,6 +879,7 @@ public:
             out.integrity = integrityFaults;
         }
         out.freeSegmentsBeyondReserve = freeBeyondReserve.load(std::memory_order_relaxed);
+        out.resourceIssue             = resourceError.load(std::memory_order_relaxed);
         out.reserveSegments           = reserve;
         out.counters                  = counterSnapshot();
         out.lastIssue                 = lastIssue.load(std::memory_order_relaxed);
@@ -862,8 +944,8 @@ private:
     /** @brief The cached state, read now when there is none. */
     [[nodiscard]] const LogState& current(std::optional<LogState>& cache) {
         if (!cache.has_value()) {
-            LogAnalysis        log      = LogAnalysis::read(medium);
-            ChainStateRecovery recovery = recoverChainState(log, provider());
+            LogAnalysis        log      = LogAnalysis::read(medium, config.resources);
+            ChainStateRecovery recovery = recoverChainState(log, provider(), config.resources);
             cache.emplace(LogState{.log = std::move(log), .recovery = std::move(recovery)});
         }
         return *cache;
@@ -1027,11 +1109,19 @@ private:
         publish(stream);
     }
 
+    void noteResourceLimit(AuditResourceIssue issue) noexcept {
+        resourceError.store(issue, std::memory_order_relaxed);
+        note(StorageIssue::ResourceLimit);
+    }
+
     /** @brief Free segments beyond the reserve, counted from the medium; empty when it cannot say. */
     [[nodiscard]] std::optional<std::uint64_t> refreshFree() {
         std::optional<std::vector<SegmentInfo>> listing;
         try {
-            listing = medium.segments();
+            AuditReadSession session(config.resources);
+            listing = session.inventory(medium);
+            if (session.issue() != AuditResourceIssue::None)
+                noteResourceLimit(session.issue());
         } catch (...) {
             listing.reset();
         }
@@ -1214,6 +1304,11 @@ private:
                     return known.kind == found.kind && known.stream == found.stream && known.position == found.position;
                 };
                 if (std::ranges::none_of(integrityFaults, same)) {
+                    if (integrityFaults.size() >= config.resources.maxIntegrityFaults) {
+                        resourceError.store(AuditResourceIssue::IntegrityFaults, std::memory_order_relaxed);
+                        note(StorageIssue::ResourceLimit);
+                        break;
+                    }
                     integrityFaults.push_back(found);
                     ++added;
                 }
@@ -1273,10 +1368,24 @@ private:
         restartInfo.ledgerEnabled = true;
         publish(*ledger);
 
-        const ChainStateRecovery recovery = recoverChainState(log, provider());
-        namedByLedgers                    = namedIdentities(log);
-        restartInfo.faults                = recovery.faults;
-        restartInfo.fork                  = recovery.fork;
+        const ChainStateRecovery recovery = recoverChainState(log, provider(), config.resources);
+        if (recovery.resourceIssue != AuditResourceIssue::None) {
+            noteResourceLimit(recovery.resourceIssue);
+            fail(*ledger, StorageIssue::ResourceLimit);
+            return;
+        }
+        namedByLedgers       = namedIdentities(log);
+        historicalIdentities = namedByLedgers.size();
+        for (const auto& id : startup.streamsHeld)
+            if (!std::ranges::binary_search(namedByLedgers, id, std::less<>{}))
+                ++historicalIdentities;
+        if (historicalIdentities >= config.resources.maxStreams) {
+            noteResourceLimit(AuditResourceIssue::Streams);
+            fail(*ledger, StorageIssue::ResourceLimit);
+            return;
+        }
+        restartInfo.faults = recovery.faults;
+        restartInfo.fork   = recovery.fork;
         recordFaults(recovery.faults);
 
         LedgerEntry first = LedgerEntry::origin(ledger->id);
@@ -1455,7 +1564,7 @@ private:
      * The order keeps an interruption on the safe side: the trim record is durably confirmed first, then the segments go, then the provider is told. A medium
      * that cannot confirm the trim never loses a segment on its account.
      */
-    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole, std::optional<LogState>* cache) {
+    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole, std::optional<LogState>* cache) try {
         const auto refuse = [&](RetentionOutcome outcome, std::uint64_t recordedTrim = 0) {
             counters.retentionRefused.fetch_add(1, std::memory_order_relaxed);
             return RetentionResult{.outcome = outcome, .trimmedThrough = recordedTrim};
@@ -1472,8 +1581,12 @@ private:
         const LogState&           read     = current(cache != nullptr ? *cache : local);
         const LogAnalysis&        log      = read.log;
         const ChainStateRecovery& recovery = read.recovery;
-        const StreamEvaluation*   ev       = log.evaluation(target);
-        const StreamImage*        image    = log.image().find(target);
+        if (read.log.resourceIssue() != AuditResourceIssue::None || recovery.resourceIssue != AuditResourceIssue::None) {
+            noteResourceLimit(read.log.resourceIssue() != AuditResourceIssue::None ? read.log.resourceIssue() : recovery.resourceIssue);
+            return refuse(RetentionOutcome::ResourceLimit);
+        }
+        const StreamEvaluation* ev    = log.evaluation(target);
+        const StreamImage*      image = log.image().find(target);
         if (log.image().unreadable())
             return refuse(RetentionOutcome::MediumUnreadable);
         if (ev == nullptr || !ev->inImage || image == nullptr)
@@ -1591,13 +1704,18 @@ private:
             }
         }
         return result;
+    } catch (const std::bad_alloc&) {
+        noteResourceLimit(AuditResourceIssue::MemoryUnavailable);
+        return {.outcome = RetentionOutcome::ResourceLimit};
     }
 
-    StorageMedium& medium;
-    StorageConfig  config;
-    std::size_t    reserve;
-    RecoveryReport startup;
-    bool           closed = false;
+    StorageMedium&                  medium;
+    std::size_t                     historicalIdentities = 0;
+    std::atomic<AuditResourceIssue> resourceError{AuditResourceIssue::None};
+    StorageConfig                   config;
+    std::size_t                     reserve;
+    RecoveryReport                  startup;
+    bool                            closed = false;
 
     std::map<std::string, Stream, std::less<>> streams;
     AtomicCounters                             counters;
