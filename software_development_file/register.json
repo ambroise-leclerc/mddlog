@@ -102,7 +102,7 @@
       "status": "open",
       "issue": 116,
       "owner": "Ambroise Leclerc",
-      "closure": "Pilotage logiciel centralisé livré en #116 : budgets globaux avec rotation, sync/ancrage par nombre et âge, rétention explicite, reprise par réconciliation, santé agrégée, callbacks isolés et arrêt borné avec rapport dégradé. Exemples portable et fichiers ; composition réelle à deux producteurs et UID distincts. Voir docs/audit-service.md et docs/audit-service-validation.md. Revue du lot et CI de la matrice avant clôture ; qualification des budgets/profile en GAP-010 (#117), physique et acceptation finale en GAP-015 (#122). Aucune nouvelle acceptation système présumée."
+      "closure": "Pilotage livré par #141 et dernier critère logiciel observateurs/budgets complété par les lots #117/#116 de clôture. Tous les observateurs permis sont testés sous profils déclarés et sous TSan ; VER-059 mesure 32 producteurs, saturation, indisponibilité/retour du témoin, poll et arrêt, avec enveloppes de régression Linux x86_64. VER-060 conserve Degraded sur refus de ressources même sans backlog ni position non confirmée/non ancrée. Preuves : docs/audit-service-validation.md et docs/audit-resource-validation.md. Revue/CI et fusion des deux lots requises pour clôture ; aucune nouvelle acceptation système, WCET ou qualification physique présumée. GAP-015/#122 restent ouverts."
     },
     {
       "id": "GAP-010",
@@ -1149,6 +1149,20 @@
       "limits": "Trois répétitions sur le tuple déclaré ; RSS et enveloppes de régression, pas WCET. Contexte/formatage et fsync mesurés avec messages et support déclarés ; qualification indépendante en #122."
     },
     {
+      "id": "VER-060",
+      "title": "Arrêt avec refus de ressources et observateurs sous profil déclaré",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007",
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-resource-stop",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Consommateur avancé sous quiescence ; les observateurs permis sont couverts avec cardinalités explicites et par le benchmark concurrent de VER-059. Qualification de dispositif et acceptation indépendante conservées en #122."
+    },
+    {
       "id": "VER-061",
       "title": "Allocation défaillante après un trim durable : position conservée et rejeu sans second trim",
       "status": "coverage-existing",
@@ -1442,7 +1456,8 @@
         "RISK-002"
       ],
       "controls": [
-        "CTRL-004"
+        "CTRL-004",
+        "CTRL-016"
       ],
       "verifications": [
         "VER-004",
@@ -1459,7 +1474,9 @@
         "VER-050",
         "VER-051",
         "VER-052",
-        "VER-053"
+        "VER-053",
+        "VER-059",
+        "VER-060"
       ],
       "gaps": [
         "GAP-009"

@@ -80,8 +80,9 @@ les **208/208 CTest Clang**, **14/14 tests du service GCC** et
 
 L’exemple portable utilise des doubles. Le backend réel du scénario multi-UID est
 sur tmpfs : son option `QualifiedFsync` est une hypothèse de fixture, jamais une
-preuve de coupure électrique. #117 doit caractériser les budgets mémoire/temps sur
-le profil retenu, notamment `tick`, rétention, récupération et fermeture. Le délai
+preuve de coupure électrique. Le [lot #117](audit-resource-validation.md) caractérise
+les budgets mémoire/temps du profil logiciel Linux x86_64, notamment reprise,
+rétention, poll, observateurs et fermeture. Le délai
 souple d’arrêt constate un dépassement ; il n’annule pas `fsync` ni un provider
 arbitraire. #122 conserve la qualification et l’acceptation du dossier final.
 
@@ -89,3 +90,45 @@ Le contrat suppose quiescence avant arrêt/destruction et un seul consommateur.
 La reprise du support exige une nouvelle session ; les refus et le backlog ancien
 restent à traiter par la politique hôte. La revue d’ergonomie vérifie que le code
 métier ne porte ni réglages ni entretien, sans accepter l’aptitude d’un dispositif.
+
+
+## Clôture du critère observateurs/budgets — lot dépendant de #142
+
+Le dernier critère de #116 est désormais couvert pour le profil logiciel déclaré :
+VER-059 applique les limites de #117 au service et mesure 32 producteurs, saturation
+imposée, témoin indisponible puis rétabli, passes/observations et arrêt quiescent.
+Les trois répétitions respectent les enveloppes ; les mesures et leurs réserves
+sont dans [audit-resource-validation.md](audit-resource-validation.md).
+
+Le scénario `audit-service-concurrent-health` déclare aussi explicitement ses
+cardinalités et couvre tous les observateurs permis : santé du service/sink,
+claim et position durable, admissions/acquittements/refus atomiques. Il conserve
+l’ordre des positions sans exiger la simultanéité de snapshots distincts.
+VER-060 ajoute le cas de consommation avancée du sink : un historique épuisé reste
+visible dans `resourceIssue` et donne `Degraded` à l’arrêt, même si tous les records
+stockés sont confirmés et ancrés et les anneaux vides. Il ne masque pas la cause
+sous `Completed` et ne crée ni perte ni refus d’ancrage fictifs.
+
+La PR du présent lot cible `develop` et dépend de #142 : fusionner #142 puis
+rebaser ce lot pour garder uniquement son diff de clôture. La revue du profil et
+la CI demeurent requises ; la livraison du code et la preuve de budget ne valent
+pas nouvelle acceptation de la base ou du risque de dispositif. GAP-009 peut être
+clos après revue/fusion de ces deux lots ; GAP-015 et #122 restent ouverts.
+
+
+Validation de ce lot de clôture : Clang Release **218/218 CTest**, GCC Release
+**217/217 CTest**, ASan/UBSan **197/197** scénarios et intégrations sélectionnés.
+La sélection TSan des anneaux, observateurs du service, registre, refus de ressources
+et benchmark de charge passe **29/29** sous Clang/libc++ ; la CI utilise GCC/libstdc++.
+
+Un élargissement local TSan à 13 cas sous Clang/libc++ 21 a échoué dans deux tests
+du `SimpleLogger` historique, tandis que les onze autres cas passent. Le signalement
+porte sur la destruction de l’état partagé d’un `promise<void>` et l’attente du
+`future`. Il se reproduit aussi sans mddlog, avec 20 000 itérations de la seule
+séquence standard suivante : créer promise/future, déplacer la promise dans un
+thread qui appelle `set_value`, attendre puis détruire le future, joindre le thread.
+Ce résultat ne permet pas d’affirmer une course dans le logger : la libc++ partagée
+de ce tuple n’est pas instrumentée. Aucun filtre de suppression n’est ajouté et
+ce contrôle élargi n’est pas déclaré réussi. #120 conserve le suivi du tuple et
+#118 la validation du logger/flush. Les maxima de budget restent des mesures,
+sans extrapolation WCET.

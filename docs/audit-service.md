@@ -126,6 +126,9 @@ Sans fournisseur d’ancrage, les positions durables non ancrées restent expos�
 une fermeture propre avec de telles positions est `Degraded`. Ce statut exprime
 une preuve d’audit incomplète ; il ne signifie pas nécessairement une panne du support.
 `unconfirmed`, les pertes et les fautes permettent de distinguer ces situations.
+Un refus de ressources publié par le sink (`storage.resourceIssue`) conserve aussi
+`Degraded`, même si tous les records déjà stockés sont confirmés et ancrés. Il reste
+distinct d’une position non confirmée, d’un backlog ou d’une faute de chaîne.
 Un service vide sans registre ni données peut se fermer avec `Completed` sans témoin.
 Un appel sur un service fermé ne réexécute pas les I/O.
 `DeadlineExceeded` s’applique seulement à un arrêt encore ouvert. Une fermeture
@@ -142,8 +145,11 @@ La limite temporelle est **souple**, vérifiée entre passages et avant fermetur
 Un `sync`, une rétention ou un appel fournisseur synchrone peut la dépasser ; le
 rapport le constate au retour. Le provider Unix impose son propre timeout de
 transport. Les systèmes de fichiers ne fournissent pas ici de délai maximal pour
-`fsync`. Les bornes matérielles, budgets de récupération, allocation et WCET restent
-à qualifier dans #117 et #122 ; aucun test logiciel ne vaut qualification électrique.
+`fsync`. Les [budgets de lecture et les mesures du profil logiciel](audit-resource-budgets.md)
+sont établis par #117 ; ce sont des plafonds de données/travail et des enveloppes
+mesurées, pas un quota d’allocateur ou un WCET. La qualification de l’application,
+les délais matériels et l’acceptation finale restent dans #122 ; aucun test logiciel
+ne vaut qualification électrique.
 
 ## Exemples et preuves
 
@@ -162,3 +168,12 @@ flux inactif, témoin indisponible/réponse perdue, retour explicite après pann
 support, callbacks, arrêt avec backlog et délai dépassé, santé concurrente et absence
 de promotion d’admission à durabilité. Voir [le relevé de validation](audit-service-validation.md)
 pour les résultats réellement exécutés et les réserves d’acceptation.
+
+
+Les observateurs autorisés restent `health()`, la santé/les claims/positions publiés
+du sink et les compteurs atomiques des anneaux. Leur inscription est terminée avant
+le premier poll ou observateur concurrent. Le [relevé ressources](audit-resource-validation.md)
+mesure l’ensemble de ces appels avec 32 producteurs et les budgets explicites du
+service ; les snapshots sont indépendants. Le scénario est aussi exécuté sous
+sanitizers. Le budget central est `config.storage.resources` ; les budgets de
+records/tentatives/ancrages par poll restent distincts de ce profil de lecture.
