@@ -20,6 +20,9 @@ ne garantit aucune unicité entre processus. `addRing()` refuse les identités i
 dupliquées, égales à celle du registre, l’excès de `maxProducerStreams` et toute
 inscription après le premier appel d’exploitation. Terminer les inscriptions avant
 les observations concurrentes. Aucune désinscription dynamique n’est proposée.
+Les refus d’identité invalide, dupliquée ou réservée au registre, ainsi que les refus
+de capacité, incrémentent `delivery.configurationErrors` et publient leur raison dans
+`lastIssue`. Ils n’inscrivent pas l’anneau et ne consomment pas de place producteur.
 
 Le callback de pertes s’exécute sur le consommateur. Il ne doit pas réentrer dans le
 service ; ses captures doivent lui survivre. Ses exceptions sont isolées et comptées

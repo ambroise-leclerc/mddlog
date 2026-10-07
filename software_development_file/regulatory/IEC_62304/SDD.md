@@ -115,7 +115,8 @@ Le [résultat Orin Nano](../../../docs/orin-nano-electrical-results.md) consigne
 CTRL-004/CTRL-007 incluent [AuditService](../../../docs/audit-service.md), propriétaire
 du consommateur et du sink avec liaisons explicites. VER-036–040 et VER-045–053 couvrent
 budgets et rotation, synchronisation/ancrage inactif, réconciliation des réponses perdues,
-santé, callback défaillant et arrêt dégradé. La rétention n’agit que sur déclaration ;
+santé (dont refus de capacité et d’identité du registre sans inscription), callback
+défaillant et arrêt dégradé. La rétention n’agit que sur déclaration ;
 une instance échouée ne redémarre pas silencieusement. Le délai d’arrêt est souple et
 ne borne pas un appel externe synchrone. VER-044 intègre deux producteurs, le backend
 réel et un témoin sous UID séparé. Le [relevé](../../../docs/audit-service-validation.md)

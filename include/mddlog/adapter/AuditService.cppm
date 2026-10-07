@@ -132,14 +132,18 @@ public:
             (void)consumer->addRing(ring);
             return AuditServiceRegistration::InvalidStream;
         }
-        if (ring.identity() == ledgerIdentity)
+        if (ring.identity() == ledgerIdentity) {
+            consumer->reportConfigurationError(AuditDrainStatus::LedgerIdentity);
             return AuditServiceRegistration::LedgerIdentity;
+        }
         if (std::ranges::find(identities, ring.identity()) != identities.end()) {
             (void)consumer->addRing(ring);
             return AuditServiceRegistration::DuplicateStream;
         }
-        if (registered >= streamLimit)
+        if (registered >= streamLimit) {
+            consumer->reportConfigurationError(AuditDrainStatus::Capacity);
             return AuditServiceRegistration::Capacity;
+        }
         identities.emplace_back(ring.identity());
         AuditRingRegistration answer = AuditRingRegistration::InvalidStream;
         try {

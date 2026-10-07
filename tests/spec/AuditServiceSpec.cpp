@@ -57,7 +57,10 @@ const speclab::Register fairness{"Every ring receives its budget and shutdown pr
                                                    auto                  made = AuditService::create(medium, {.storage = storageConfig()});
                                                    checks.expect(made.has_value(), "service created");
                                                    checks.raise();
-                                                   auto& service = **made;
+                                                   auto&      service     = **made;
+                                                   const auto invalidStop = service.stop(AuditStopOptions{.maxDrainPasses = 1, .timeBudget = 0ns});
+                                                   checks.expect(invalidStop.status == AuditStopStatus::InvalidBudget && !invalidStop.closed,
+                                                                 "invalid shutdown budget leaves registration open");
                                                    checks.expect(service.addRing(first) == AuditServiceRegistration::Registered, "first registered");
                                                    checks.expect(service.addRing(second) == AuditServiceRegistration::Registered, "second registered");
                                                    checks.expect(service.addRing(first) == AuditServiceRegistration::DuplicateStream, "duplicate refused");
@@ -68,6 +71,9 @@ const speclab::Register fairness{"Every ring receives its budget and shutdown pr
                                                    }
                                                    checks.expect(service.poll().handedOff == 2, "one event per ring");
                                                    const auto before = service.health();
+                                                   checks.expect(service.storageSink().durablePosition("first") == 1
+                                                                     && service.storageSink().health().streams.size() == before.storage.streams.size(),
+                                                                 "low-level access observes the service-owned storage");
                                                    checks.expect(before.delivery.pendingInRings == 6 && before.delivery.handedOff == 2, "backlog observable");
                                                    checks.expect(service.addRing(first) == AuditServiceRegistration::Started, "registration frozen");
                                                    const auto partial = service.stop(1);
@@ -332,6 +338,39 @@ const speclab::Register globalBudget{
                                     "uncertain first anchor does not starve the next stream");
                       const auto health = service.health();
                       checks.expect(health.delivery.admitted == 2 && health.delivery.ringFullRefusals == 1, "independent admission counters");
+                      checks.raise();
+                  })
+            .Then("ledger collisions and capacity refusals are observable without enrolling their rings",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      AuditRing<1>          collision{"ledger/enrollment"};
+                      AuditRing<1>          accepted{"accepted"};
+                      AuditRing<1>          excess{"excess"};
+                      auto                  config = storageConfig();
+                      config.maxProducerStreams    = 1;
+                      config.ledger                = LedgerConfig{.streamId = "ledger/enrollment", .time = {}};
+                      auto made                    = AuditService::create(medium, {.storage = config});
+                      checks.expect(made.has_value(), "created with reserved ledger identity");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(collision) == AuditServiceRegistration::LedgerIdentity, "ledger collision refused");
+                      const auto ledgerRefusal = service.health().delivery;
+                      checks.expect(ledgerRefusal.configurationErrors == 1 && ledgerRefusal.lastIssue == AuditDrainStatus::LedgerIdentity,
+                                    "ledger refusal counted with its reason");
+                      checks.expect(service.addRing(accepted) == AuditServiceRegistration::Registered, "refusal leaves producer capacity available");
+                      checks.expect(service.addRing(excess) == AuditServiceRegistration::Capacity, "excess producer refused");
+                      const auto capacityRefusal = service.health().delivery;
+                      checks.expect(capacityRefusal.configurationErrors == 2 && capacityRefusal.lastIssue == AuditDrainStatus::Capacity,
+                                    "capacity refusal counted with its reason");
+                      checks.expect(collision.tryRecord(request()).wasAdmitted() && accepted.tryRecord(request()).wasAdmitted()
+                                        && excess.tryRecord(request()).wasAdmitted(),
+                                    "all rings contain an event");
+                      checks.expect(service.poll().handedOff == 1 && accepted.acknowledgedCount() == 1, "only enrolled producer drained");
+                      checks.expect(collision.acknowledgedCount() == 0 && excess.acknowledgedCount() == 0, "refused rings retain their events");
+                      const auto delivery = service.health().delivery;
+                      checks.expect(delivery.admitted == 1 && delivery.pendingInRings == 0 && delivery.configurationErrors == 2,
+                                    "refused rings excluded from service delivery accounting");
                       checks.raise();
                   })
             .Execute();

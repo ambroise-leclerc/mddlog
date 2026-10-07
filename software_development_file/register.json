@@ -828,7 +828,7 @@
     },
     {
       "id": "VER-036",
-      "title": "Pilotage : budget par anneau et arrêt borné",
+      "title": "Pilotage : budget par anneau, arrêt borné et budget invalide, accès au stockage",
       "status": "coverage-existing",
       "controls": [
         "CTRL-004",
@@ -942,7 +942,7 @@
     },
     {
       "id": "VER-045",
-      "title": "Budget global et rotation du service",
+      "title": "Budget global, rotation et refus d’enrôlement observables sans drain",
       "status": "coverage-existing",
       "controls": [
         "CTRL-004",

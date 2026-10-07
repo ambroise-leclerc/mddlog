@@ -6,9 +6,11 @@ le logiciel vérifié ; ce relevé ne modifie pas l’acceptation de la base #12
 
 ## Couverture
 
-- VER-036–040 : contrats conservés, drain/arrêt, flux inactif, support non qualifié,
+- VER-036–040 : contrats conservés, drain/arrêt (dont budget invalide), accès au stockage,
+  flux inactif, support non qualifié,
   pertes et observateurs concurrents.
-- VER-045 : budget global, rotation et refus de saturation/enrôlement.
+- VER-045 : budget global, rotation et refus de saturation/enrôlement ; collisions
+  avec le registre et capacité comptées en santé, sans drain des anneaux refusés.
 - VER-046 : réconciliation d’une acceptation dont la réponse est perdue, sans rejeu.
 - VER-047 : ancrage par âge sous le seuil en nombre ; fenêtre d’exposition publiée.
 - VER-048 : appel fournisseur simulé lent, dépassement du délai souple d’arrêt et reprise.
@@ -48,6 +50,12 @@ L’analyse statique clang-tidy 21 est bloquante dans la
 la révision contrôlée. Aucun résultat CI non exécuté n’est présumé.
 Les autres systèmes de la matrice restent soumis à la CI de la PR ; aucun résultat
 Windows ou macOS local n’est présumé.
+
+Après revue, les vérifications VER-036 et VER-045 ont été complétées : budget d’arrêt
+invalide sans gel des inscriptions, accès au sink possédé, refus d’identité du registre
+et de capacité visibles en santé sans consommation des anneaux refusés. La suite
+Clang reste à **208/208** ; les **14/14 tests du service** passent aussi sous GCC et
+ASan/UBSan. Ces ajouts complètent des scénarios existants sans changer leur nombre.
 
 ## Réserves et suites
 

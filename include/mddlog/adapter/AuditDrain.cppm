@@ -17,7 +17,9 @@ enum class AuditDrainStatus : std::uint8_t {
     SinkThrew,
     AcknowledgementFailed,
     InvalidStream,
-    DuplicateStream
+    DuplicateStream,
+    LedgerIdentity,
+    Capacity
 };
 
 /** @brief Whether addRing() registered a ring, or why it refused it. */
@@ -157,6 +159,11 @@ public:
             throw;
         }
         return AuditRingRegistration::Registered;
+    }
+
+    /** @brief Publish a host-side configuration refusal without registering or accessing a ring. */
+    void reportConfigurationError(AuditDrainStatus issue) noexcept {
+        health.recordConfigurationError(issue);
     }
 
     /** @brief Replace the audit sink; null means an observable missing-sink configuration. */
