@@ -102,7 +102,7 @@
       "status": "open",
       "issue": 116,
       "owner": "Ambroise Leclerc",
-      "closure": "Composition et arrêt/reprise revus ; sync, tick, ancrage et rétention hors fonctions métier ; limites de durabilité explicites. Premier service piloté par l’hôte livré pour FileAudit : drain avec budget par anneau, tick, tentatives d’ancrage, pertes et arrêt borné. La composition applicative complète, les politiques de reprise/rétention, les bornes temporelles et la qualification de #116 restent ouvertes ; docs/audit-service.md."
+      "closure": "Pilotage logiciel centralisé livré en #116 : budgets globaux avec rotation, sync/ancrage par nombre et âge, rétention explicite, reprise par réconciliation, santé agrégée, callbacks isolés et arrêt borné avec rapport dégradé. Exemples portable et fichiers ; composition réelle à deux producteurs et UID distincts. Voir docs/audit-service.md et docs/audit-service-validation.md. Revue du lot et CI de la matrice avant clôture ; qualification des budgets/profile en GAP-010 (#117), physique et acceptation finale en GAP-015 (#122). Aucune nouvelle acceptation système présumée."
     },
     {
       "id": "GAP-010",
@@ -237,7 +237,8 @@
       "implementation": [
         "include/mddlog/adapter/AuditDrain.cppm",
         "include/mddlog/sinks/AuditSink.cppm",
-        "include/mddlog/adapter/AuditService.cppm"
+        "include/mddlog/adapter/AuditService.cppm",
+        "examples/AuditApplication.cpp"
       ]
     },
     {
@@ -292,7 +293,8 @@
         "include/mddlog/adapter/AuditStore.cppm",
         "include/mddlog/adapter/AuditMedium.cppm",
         "include/mddlog/adapter/FileStorageMedium.cppm",
-        "include/mddlog/adapter/AuditService.cppm"
+        "include/mddlog/adapter/AuditService.cppm",
+        "examples/AuditApplication.cpp"
       ]
     },
     {
@@ -936,7 +938,126 @@
       "test": "tests/spec/WitnessDeployment.cpp",
       "scenario": null,
       "evidence": "docs/independent-witness-validation.md",
-      "limits": "Namespace multi-UID/processus réel et backend fichiers sur tmpfs, sans qualification physique ni acceptation finale. Le mode requis de CI refuse SKIP."
+      "limits": "Namespace multi-UID/processus réel et backend fichiers sur tmpfs : deux producteurs, budget global et fermeture confirmée/ancrée ; sans qualification physique ni acceptation finale. Le mode requis de CI refuse SKIP."
+    },
+    {
+      "id": "VER-045",
+      "title": "Budget global et rotation du service",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-global-budget",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Orchestration avec doubles et horloge contrôlée ; pas de WCET, qualification électrique ni acceptation du profil."
+    },
+    {
+      "id": "VER-046",
+      "title": "Réconciliation des réponses d’ancrage perdues",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007",
+        "CTRL-006"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-anchor-reconciliation",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Orchestration avec doubles et horloge contrôlée ; pas de WCET, qualification électrique ni acceptation du profil."
+    },
+    {
+      "id": "VER-047",
+      "title": "Ancrage inactif par âge et exposition",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007",
+        "CTRL-006"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-anchor-age",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Orchestration avec doubles et horloge contrôlée ; pas de WCET, qualification électrique ni acceptation du profil."
+    },
+    {
+      "id": "VER-048",
+      "title": "Délai souple et arrêt repris",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-stop-deadline",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Orchestration avec doubles et horloge contrôlée ; pas de WCET, qualification électrique ni acceptation du profil."
+    },
+    {
+      "id": "VER-049",
+      "title": "Validation et panne au démarrage",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-startup-failure",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Orchestration avec doubles et horloge contrôlée ; pas de WCET, qualification électrique ni acceptation du profil."
+    },
+    {
+      "id": "VER-050",
+      "title": "Callback défaillant et retour explicite du support",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-callback-recovery",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Orchestration avec doubles et horloge contrôlée ; pas de WCET, qualification électrique ni acceptation du profil."
+    },
+    {
+      "id": "VER-051",
+      "title": "Composition portable et instrumentation métier séparée",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "examples/AuditApplication.cpp",
+      "scenario": null,
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Exemple sur doubles, compilation de la matrice soumise à CI ; intégration réelle par VER-044, sans qualification physique."
+    },
+    {
+      "id": "VER-052",
+      "title": "Rétention explicite du service et reprise après plein",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-declared-retention",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Double de support borné ; pas de qualification électrique ni preuve temporelle du profil."
+    },
+    {
+      "id": "VER-053",
+      "title": "Équité face à une instance défaillante",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditServiceSpec.cpp",
+      "scenario": "audit-service-rejected-fairness",
+      "evidence": "docs/audit-service-validation.md",
+      "limits": "Double de support borné ; pas de qualification électrique ni preuve temporelle du profil."
     }
   ],
   "risks": [
@@ -1202,7 +1323,16 @@
         "VER-036",
         "VER-038",
         "VER-039",
-        "VER-040"
+        "VER-040",
+        "VER-045",
+        "VER-046",
+        "VER-047",
+        "VER-048",
+        "VER-049",
+        "VER-050",
+        "VER-051",
+        "VER-052",
+        "VER-053"
       ],
       "gaps": [
         "GAP-009"
@@ -1247,7 +1377,9 @@
         "VER-041",
         "VER-042",
         "VER-043",
-        "VER-044"
+        "VER-044",
+        "VER-046",
+        "VER-047"
       ],
       "gaps": [
         "GAP-008",
@@ -1285,7 +1417,16 @@
         "VER-038",
         "VER-039",
         "VER-040",
-        "VER-044"
+        "VER-044",
+        "VER-045",
+        "VER-046",
+        "VER-047",
+        "VER-048",
+        "VER-049",
+        "VER-050",
+        "VER-051",
+        "VER-052",
+        "VER-053"
       ],
       "gaps": [
         "GAP-007",

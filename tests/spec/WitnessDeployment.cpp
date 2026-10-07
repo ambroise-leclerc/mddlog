@@ -115,6 +115,8 @@ struct Service {
                                               "4",
                                               "device/boot-1",
                                               "device/boot-2",
+                                              "sensor/boot-1",
+                                              "sensor/boot-2",
                                               "ledger/boot-1",
                                               "ledger/boot-2",
                                               "auxiliary",
@@ -166,21 +168,27 @@ void emit(const Profile& profile, int boot) {
     StorageConfig config;
     config.segmentSize        = 8192;
     config.segmentCount       = 16;
-    config.maxProducerStreams = 1;
+    config.maxProducerStreams = 2;
     config.ledger             = LedgerConfig{.streamId = "ledger/boot-" + std::to_string(boot), .time = {}};
     config.provider           = &provider;
     mddlog::core::AuditRing<4> ring{stream};
-    auto                       service = AuditService::create(**medium, {.storage = config});
+    mddlog::core::AuditRing<4> sensor{"sensor/boot-" + std::to_string(boot)};
+    auto                       service = AuditService::create(**medium, {.storage = config, .maxAttemptsPerPoll = 1, .maxAnchorStreamsPerPoll = 1});
     require(service.has_value(), "composition");
     require((*service)->addRing(ring) == AuditServiceRegistration::Registered, "ring");
+    require((*service)->addRing(sensor) == AuditServiceRegistration::Registered, "second ring");
     const auto description = mddlog::core::AuditDescription::create({.action = "inventory.inspect"});
     const auto context     = mddlog::core::AuditContext::create({.target = "warehouse"});
     require(description && context, "context");
     mddlog::core::AuditBinding audit{ring, *description, *context};
     require(audit.record(mddlog::core::AuditPhase::Requested, mddlog::core::RawTime::unavailable()).wasAdmitted(), "admission");
-    require((*service)->poll().handedOff == 1, "hand off");
+    mddlog::core::AuditBinding sensorAudit{sensor, *description, *context};
+    require(sensorAudit.record(mddlog::core::AuditPhase::Requested, mddlog::core::RawTime::unavailable()).wasAdmitted(), "second admission");
+    require((*service)->poll().handedOff == 1, "global hand off budget");
+    require((*service)->health().delivery.pendingInRings == 1, "budget leaves explicit backlog");
     const auto stopped = (*service)->stop();
-    require(stopped.closed, "journal closed");
+    require(stopped.closed && stopped.health.delivery.handedOff == 2 && stopped.health.unconfirmed == 0 && stopped.health.unanchored == 0,
+            "both streams durably closed and anchored");
     const auto anchored = provider.latest(stream);
     require(std::holds_alternative<Anchor>(anchored) && std::get<Anchor>(anchored).position == 1, "real anchored record");
 }

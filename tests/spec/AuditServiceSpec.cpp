@@ -114,6 +114,12 @@ const speclab::Register idle{"Inactive streams reach their sync age and unavaila
                                                const auto confirmed = service.health();
                                                checks.expect(confirmed.storage.streams.at(0).durablePosition == 1, "idle age sync");
                                                checks.expect(confirmed.storage.counters.anchorsUnavailable == 1, "unavailability visible");
+                                               for (int cycle = 0; cycle < 8; ++cycle) {
+                                                   now += 10ms;
+                                                   (void)service.poll();
+                                               }
+                                               checks.expect(service.health().unanchored == 1 && service.health().delivery.reportedLosses == 0,
+                                                             "prolonged outage preserves confirmed exposure");
                                                provider.setAvailable(true);
                                                (void)service.poll();
                                                checks.expect(std::holds_alternative<AnchorAbsent>(provider.latest("idle")), "retry respects period");
@@ -250,4 +256,316 @@ const speclab::Register observers{
                   })
             .Execute();
     }};
+
+class LostAnswerProvider final : public AnchorProvider {
+public:
+    InMemoryAnchorProvider authority{"independent"};
+    bool                   loseAnswer = true;
+    std::size_t            advances   = 0;
+    std::function<void()>  beforeAdvance;
+    AdvanceAnswer          advance(const AnchorClaim& claim) override {
+        if (beforeAdvance)
+            beforeAdvance();
+        ++advances;
+        auto result = authority.advance(claim);
+        return std::exchange(loseAnswer, false) ? AdvanceAnswer{ProviderUnavailable{}} : result;
+    }
+    RetireAnswer retire(std::string_view identity, std::uint64_t position) override {
+        return authority.retire(identity, position);
+    }
+    LatestAnswer latest(std::string_view identity) override {
+        return authority.latest(identity);
+    }
+    StreamsAnswer streams() override {
+        return authority.streams();
+    }
+};
+
+const speclab::Register globalBudget{
+    "Service global budget rotates between producers including rejected attempts",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-global-budget")
+            .Then("one attempt does not starve the next ring",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      AuditRing<1>          first{"first"}, second{"second"}, excess{"third"};
+                      LostAnswerProvider    provider;
+                      auto                  config = storageConfig();
+                      config.provider              = &provider;
+                      auto made                    = AuditService::create(medium, {.storage = config, .maxAttemptsPerPoll = 1, .maxAnchorStreamsPerPoll = 1});
+                      checks.expect(made.has_value(), "created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(first) == AuditServiceRegistration::Registered, "first");
+                      checks.expect(service.addRing(second) == AuditServiceRegistration::Registered, "second");
+                      checks.expect(service.addRing(excess) == AuditServiceRegistration::Capacity, "bounded enrollment");
+                      checks.expect(first.tryRecord(request()).wasAdmitted() && second.tryRecord(request()).wasAdmitted(), "admitted");
+                      checks.expect(!first.tryRecord(request()).wasAdmitted(), "saturation visible");
+                      const auto one = service.poll();
+                      checks.expect(one.attempted == 1 && one.handedOff == 1, "global cap");
+                      checks.expect(service.poll().handedOff == 1 && second.acknowledgedCount() == 1, "rotation");
+                      checks.expect(service.health().storage.streams.at(1).anchoredPosition == 1 && service.health().unanchored == 1,
+                                    "uncertain first anchor does not starve the next stream");
+                      const auto health = service.health();
+                      checks.expect(health.delivery.admitted == 2 && health.delivery.ringFullRefusals == 1, "independent admission counters");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register reconciliation{
+    "Service reconciles a lost witness answer without replaying the accepted claim",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-anchor-reconciliation")
+            .Then("latest resolves uncertainty and a new claim advances normally",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      LostAnswerProvider    provider;
+                      auto                  now    = std::chrono::steady_clock::time_point{};
+                      auto                  config = storageConfig();
+                      config.provider              = &provider;
+                      config.clock                 = [&now] {
+                          return now;
+                      };
+                      AuditRing<2> ring{"lost-answer"};
+                      auto         made = AuditService::create(medium, {.storage = config, .anchorPeriod = 10ms});
+                      checks.expect(made.has_value(), "created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered && ring.tryRecord(request()).wasAdmitted(),
+                                    "registered and admitted");
+                      (void)service.poll();
+                      checks.expect(service.health().unanchored == 1, "uncertain answer remains exposed");
+                      now += 10ms;
+                      (void)service.poll();
+                      checks.expect(provider.advances == 1 && service.health().unanchored == 0, "authenticated reconciliation without replay");
+                      checks.expect(service.health().storage.integrity.empty(), "no false divergence");
+                      checks.expect(ring.tryRecord(request()).wasAdmitted(), "new event");
+                      now += 10ms;
+                      (void)service.poll();
+                      checks.expect(provider.advances == 2 && service.health().storage.streams.at(0).anchoredPosition == 2, "new claim accepted");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register ageAnchor{
+    "Service anchors below its count threshold when an idle age expires",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-anchor-age")
+            .Then("exposure is published until the configured age",
+                  [] {
+                      speclab::core::Checks  checks;
+                      InMemoryStorageMedium  medium{24};
+                      InMemoryAnchorProvider provider{"witness"};
+                      auto                   now    = std::chrono::steady_clock::time_point{};
+                      auto                   config = storageConfig();
+                      config.provider               = &provider;
+                      config.clock                  = [&now] {
+                          return now;
+                      };
+                      AuditRing<1> ring{"age"};
+                      auto         made = AuditService::create(medium, {.storage = config, .anchorRecordBound = 10, .anchorAgeBound = 20ms});
+                      checks.expect(made.has_value(), "created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered && ring.tryRecord(request()).wasAdmitted(), "enrolled");
+                      (void)service.poll();
+                      checks.expect(service.health().unanchored == 1 && service.health().storage.streams.at(0).unanchoredSince.has_value(),
+                                    "window starts at confirmation");
+                      now += 20ms;
+                      (void)service.poll();
+                      checks.expect(service.health().unanchored == 0 && !service.health().storage.streams.at(0).unanchoredSince, "idle age accepted");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register deadlines{"Service shutdown reports a slow operation and preserves rejected backlog", "unit", [] {
+                                      return speclab::Test("audit-service-stop-deadline")
+                                          .Then("a soft deadline cannot cancel a synchronous phase",
+                                                [] {
+                                                    speclab::core::Checks checks;
+                                                    InMemoryStorageMedium medium{24};
+                                                    auto                  now = std::chrono::steady_clock::time_point{};
+                                                    LostAnswerProvider    provider;
+                                                    provider.loseAnswer    = false;
+                                                    provider.beforeAdvance = [&now] {
+                                                        now += 10ms;
+                                                    };
+                                                    auto config     = storageConfig();
+                                                    config.provider = &provider;
+                                                    config.clock    = [&now] {
+                                                        return now;
+                                                    };
+                                                    AuditRing<1> ring{"deadline"};
+                                                    auto         made = AuditService::create(medium, {.storage = config});
+                                                    checks.expect(made.has_value(), "created");
+                                                    checks.raise();
+                                                    auto& service = **made;
+                                                    checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered
+                                                                      && ring.tryRecord(request()).wasAdmitted(),
+                                                                  "enrolled");
+                                                    const auto stopped = service.stop(AuditStopOptions{.maxDrainPasses = 1, .timeBudget = 1ms});
+                                                    checks.expect(!stopped.closed && stopped.status == AuditStopStatus::DeadlineExceeded
+                                                                      && stopped.health.delivery.pendingInRings == 0 && stopped.health.delivery.handedOff == 1,
+                                                                  "slow call overruns deadline without losing the handed-off event");
+                                                    checks.expect(service.stop().closed, "unbounded-time retry closes");
+                                                    checks.raise();
+                                                })
+                                          .Execute();
+                                  }};
+
+
+const speclab::Register startupFailure{
+    "Service rejects failed ledger startup and undeclared retention",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-startup-failure")
+            .Then("startup causes are readable before producers are bound",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      auto                  config = storageConfig();
+                      auto                  made   = AuditService::create(medium, {.storage = config, .capacityPolicy = AuditCapacityPolicy::RelieveDeclared});
+                      checks.expect(!made && made.error().issue == AuditServiceConfigError::InvalidRetention, "no implicit retention");
+                      config.ledger = LedgerConfig{.streamId = "ledger/failed-boot", .time = {}};
+                      medium.inject({.operation = InMemoryStorageMedium::Operation::Sync, .ordinal = 1, .effect = InMemoryStorageMedium::Effect::Fail});
+                      made = AuditService::create(medium, {.storage = config});
+                      checks.expect(!made && made.error().issue == AuditServiceConfigError::StartupFailed
+                                        && made.error().startupCause == StorageIssue::SyncFailed,
+                                    "failed ledger distinguished from bad parameters");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register callbackFailure{
+    "Service isolates callback failure and requires fresh enrollment after storage repair",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-callback-recovery")
+            .Then("health survives a throwing callback and failed streams never resume",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      medium.inject({.operation = InMemoryStorageMedium::Operation::Sync, .ordinal = 1, .effect = InMemoryStorageMedium::Effect::Fail});
+                      AuditRing<2> ring{"before-repair"};
+                      auto         config = storageConfig();
+                      config.reportLoss   = [](std::uint64_t) {
+                          throw std::runtime_error{"host callback"};
+                      };
+                      auto made = AuditService::create(medium, {.storage = config});
+                      checks.expect(made.has_value(), "created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered && ring.tryRecord(request()).wasAdmitted(), "enrolled");
+                      checks.expect(service.poll().handedOff == 1, "callback cannot turn append into ring retry");
+                      checks.expect(service.health().callbackFailures == 1 && service.health().delivery.reportedLosses == 1, "loss independent of callback");
+                      checks.expect(ring.tryRecord(request()).wasAdmitted(), "next queued");
+                      for (int count = 0; count < 8; ++count)
+                          (void)service.poll();
+                      checks.expect(service.health().delivery.pendingInRings == 1 && !service.stop().closed,
+                                    "failed identity stays failed after fault disappears");
+                      AuditRing<1> fresh{"after-repair"};
+                      auto         repaired = AuditService::create(medium, {.storage = storageConfig()});
+                      checks.expect(repaired.has_value(), "host explicitly recomposes on repaired medium");
+                      checks.raise();
+                      checks.expect((*repaired)->addRing(fresh) == AuditServiceRegistration::Registered && fresh.tryRecord(request()).wasAdmitted(),
+                                    "fresh enrollment");
+                      checks.expect((*repaired)->stop().health.unconfirmed == 0 && service.health().delivery.pendingInRings == 1,
+                                    "new service cannot erase old backlog");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+
+const speclab::Register declaredRetention{
+    "Service relieves full storage only under explicit retention permissions",
+    "integration",
+    [] {
+        return speclab::Test("audit-service-declared-retention")
+            .Then("default capacity keeps backlog while declared rotation resumes it",
+                  [] {
+                      speclab::core::Checks checks;
+                      for (const auto policy : {AuditCapacityPolicy::KeepPending, AuditCapacityPolicy::RelieveDeclared}) {
+                          InMemoryStorageMedium  medium{24};
+                          InMemoryAnchorProvider provider{"witness"};
+                          auto                   now    = std::chrono::steady_clock::time_point{};
+                          auto                   config = storageConfig();
+                          config.ledger                 = LedgerConfig{.streamId = "ledger/session", .time = {}};
+                          config.retention.rotate       = true;
+                          config.provider               = &provider;
+                          config.clock                  = [&now] {
+                              return now;
+                          };
+                          AuditRing<1> ring{"capacity"};
+                          auto         made = AuditService::create(medium, {.storage = config, .capacityPolicy = policy, .anchorPeriod = 1ns});
+                          checks.expect(made.has_value(), "created");
+                          checks.raise();
+                          auto& service = **made;
+                          checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered, "enrolled");
+                          bool full = false;
+                          for (std::size_t count = 0; count < 1000 && !full; ++count) {
+                              checks.expect(ring.tryRecord(request()).wasAdmitted(), "queued before capacity failure");
+                              now += 1ns;
+                              full = service.poll().handedOff == 0;
+                          }
+                          checks.expect(full && service.health().delivery.pendingInRings == 1, "full storage preserves event");
+                          now               += 1ns;
+                          const auto retried = service.poll();
+                          const auto health  = service.health();
+                          if (policy == AuditCapacityPolicy::KeepPending) {
+                              checks.expect(retried.handedOff == 0 && health.storage.counters.segmentsReclaimed == 0,
+                                            "standing storage permission alone does not enable service retention");
+                          } else {
+                              checks.expect(retried.handedOff == 1 && health.storage.counters.trimsRecorded > 0
+                                                && health.storage.counters.segmentsReclaimed > 0,
+                                            "durable trim permits resumption");
+                          }
+                          checks.expect(health.delivery.reportedLosses == 0, "no unreported loss");
+                      }
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register failedFairness{
+    "Service global budget counts rejected attempts without starving healthy producers",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-rejected-fairness")
+            .Then("a failed first stream cannot monopolize the global budget",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      medium.inject({.operation = InMemoryStorageMedium::Operation::Sync, .ordinal = 1, .effect = InMemoryStorageMedium::Effect::Fail});
+                      AuditRing<2> failed{"failed"}, healthy{"healthy"};
+                      auto         made = AuditService::create(medium, {.storage = storageConfig(), .maxAttemptsPerPoll = 1});
+                      checks.expect(made.has_value(), "created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(failed) == AuditServiceRegistration::Registered
+                                        && service.addRing(healthy) == AuditServiceRegistration::Registered,
+                                    "enrolled");
+                      checks.expect(failed.tryRecord(request()).wasAdmitted(), "first queued");
+                      (void)service.poll();
+                      checks.expect(failed.tryRecord(request()).wasAdmitted() && healthy.tryRecord(request()).wasAdmitted(), "both queue after first failure");
+                      const auto healthyTurn = service.poll();
+                      checks.expect(healthyTurn.attempted == 1 && healthyTurn.handedOff == 1 && healthy.acknowledgedCount() == 1, "healthy turn");
+                      const auto failedTurn = service.poll();
+                      checks.expect(failedTurn.attempted == 1 && failedTurn.handedOff == 0 && failed.admittedCount() - failed.acknowledgedCount() == 1,
+                                    "rejection consumes attempt without acknowledging");
+                      checks.expect(healthy.tryRecord(request()).wasAdmitted() && service.poll().handedOff == 1, "healthy next turn");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
 }  // namespace

@@ -84,6 +84,7 @@ La v0.1.0 livrait un cœur de journalisation borné, sans allocation (ADR-001). 
 | API d'audit publique (`mddlog::mddlog`) | `SimpleLogger::logAudit(AuditInput)` et `Log::logAudit(AuditInput)` renvoient le résultat d'admission après `setAuditRing()` | L'anneau lié doit survivre à sa liaison ; `Log::shutdown()` efface la liaison |
 | Transmission d'audit (`mddlog::mddlog`) | `AuditSinkAdapter` transmet à un `AuditSink`, publie sa santé et acquitte ce qui a été accepté | Un seul thread consommateur ; l'acceptation par un sink n'est pas un stockage durable |
 | Persistance d'audit (`mddlog::mddlog`) | `PersistingAuditSink` stocke, confirme durablement, tient un registre, fait tourner et retient ; `LogVerifier` rend un verdict par flux | La durabilité dépend du support ; la détection d'altération dépend d'un ancrage indépendant ; rien n'est signé |
+| Pilotage d’audit (`mddlog::mddlog`) | `AuditService` compose drain avec budgets et rotation, sync/ancrage inactif, rétention déclarée, santé et arrêt borné | Un consommateur ; délais souples, quiescence et qualification du support restent à l’hôte ([contrat](docs/audit-service.md)) |
 | Intégration applicative (`mddlog::mddlog`) | `SinkRegistry`, `TransportConsumer` et `TextLogger` | `TextLogger` rend et rappelle de façon synchrone, avec allocation |
 | Adaptateur de diagnostic (`mddlog::mddlog`) | `SimpleLogger`, `LogRecord`, `ConsoleSink` et la façade `Log` | Sa file asynchrone alloue et n'est pas bornée : ce n'est pas le chemin gouverné |
 

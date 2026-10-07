@@ -22,3 +22,10 @@ conserve `AuditBinding` et son résultat d'admission. Le rapport d'arrêt distin
 cycle de vie, backlog et confirmation ; la relecture n'est pas annoncée comme durabilité
 qualifiée. Cette revue de code reste limitée au lot #114/#116, avec acceptation du
 profil matériel et évaluation applicative toujours ouvertes.
+
+
+La composition #116 ajoute `AuditApplication` (VER-051), portable, et la composition
+réelle à deux producteurs (VER-044). `inspect(AuditBinding&)` conserve l’émission et
+son résultat ; réglages, budgets, rétention et arrêt sont au point de composition.
+Les rapports distinguent backlog, confirmation, ancrage et dépassement du délai souple.
+Cette revue d’ergonomie du code ne remplace pas une évaluation applicative indépendante.

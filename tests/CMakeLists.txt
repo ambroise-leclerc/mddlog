@@ -211,3 +211,8 @@ if(TARGET mddlog_file_audit)
             $<TARGET_FILE:mddlog_file_audit>)
     set_tests_properties(examples.fileAudit.lifecycle PROPERTIES LABELS "examples;storage;integration" TIMEOUT 60)
 endif()
+
+if(TARGET mddlog_audit_application)
+    add_test(NAME audit.application COMMAND mddlog_audit_application)
+    set_tests_properties(audit.application PROPERTIES LABELS "integration")
+endif()
