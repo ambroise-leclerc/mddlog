@@ -128,12 +128,16 @@ public:
     [[nodiscard]] AuditServiceRegistration addRing(core::AuditRing<Capacity>& ring) {
         if (started)
             return AuditServiceRegistration::Started;
-        if (!ring.hasValidIdentity())
+        if (!ring.hasValidIdentity()) {
+            (void)consumer->addRing(ring);
             return AuditServiceRegistration::InvalidStream;
+        }
         if (ring.identity() == ledgerIdentity)
             return AuditServiceRegistration::LedgerIdentity;
-        if (std::ranges::find(identities, ring.identity()) != identities.end())
+        if (std::ranges::find(identities, ring.identity()) != identities.end()) {
+            (void)consumer->addRing(ring);
             return AuditServiceRegistration::DuplicateStream;
+        }
         if (registered >= streamLimit)
             return AuditServiceRegistration::Capacity;
         identities.emplace_back(ring.identity());

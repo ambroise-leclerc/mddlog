@@ -61,6 +61,7 @@ const speclab::Register fairness{"Every ring receives its budget and shutdown pr
                                                    checks.expect(service.addRing(first) == AuditServiceRegistration::Registered, "first registered");
                                                    checks.expect(service.addRing(second) == AuditServiceRegistration::Registered, "second registered");
                                                    checks.expect(service.addRing(first) == AuditServiceRegistration::DuplicateStream, "duplicate refused");
+                                                   checks.expect(service.health().delivery.configurationErrors == 1, "duplicate remains visible in health");
                                                    for (int count = 0; count < 4; ++count) {
                                                        checks.expect(first.tryRecord(request()).wasAdmitted(), "first admitted");
                                                        checks.expect(second.tryRecord(request()).wasAdmitted(), "second admitted");
