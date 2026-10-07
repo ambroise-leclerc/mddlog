@@ -1147,6 +1147,19 @@
       "scenario": null,
       "evidence": "docs/audit-resource-validation.md",
       "limits": "Trois répétitions sur le tuple déclaré ; RSS et enveloppes de régression, pas WCET. Contexte/formatage et fsync mesurés avec messages et support déclarés ; qualification indépendante en #122."
+    },
+    {
+      "id": "VER-061",
+      "title": "Allocation défaillante après un trim durable : position conservée et rejeu sans second trim",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditRetentionAllocation.cpp",
+      "scenario": null,
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Injection isolée après la confirmation du trim, avant ancrage du registre et suppression ; preuve logicielle, sans qualification physique."
     }
   ],
   "risks": [
@@ -1708,7 +1721,8 @@
         "VER-056",
         "VER-057",
         "VER-058",
-        "VER-059"
+        "VER-059",
+        "VER-061"
       ],
       "gaps": []
     }

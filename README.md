@@ -249,10 +249,11 @@ Les tests récupèrent une révision figée de [SpecLab](https://github.com/ambr
 
 mddlog est proposé sous la [Licence publique de l'Union européenne 1.2](LICENSE) ou sous conditions commerciales séparées ; voir [LICENSING.md](LICENSING.md). [CONTRIBUTING.md](CONTRIBUTING.md) décrit le processus de contribution sur invitation et les règles de revue. Pour une question ou un défaut, utilisez les [issues GitHub](https://github.com/ambroise-leclerc/mddlog/issues).
 
-Audit readers and recovery now accept centralized `AuditResourceLimits` through
-`StorageConfig::resources` and `VerifierConfig::resources`. Inventories, archive volume,
-chunks, records, historical identities and provider work have finite limits; a resource
-refusal produces an explicitly incomplete report and preserves the reader checkpoint.
-See [resource budgets](docs/audit-resource-budgets.md) and
-[measurements and validation](docs/audit-resource-validation.md). The measured Linux
-x86_64 software profile is not a WCET, MCU-support or physical durability claim.
+Les lecteurs et la reprise d’audit acceptent des limites centralisées dans
+`StorageConfig::resources` et `VerifierConfig::resources`. Les inventaires, volumes,
+chunks, records, identités historiques et appels au fournisseur sont plafonnés ;
+un refus de ressources produit un rapport explicitement incomplet et conserve
+le checkpoint du lecteur. Voir les [budgets](docs/audit-resource-budgets.md) et le
+[relevé de validation](docs/audit-resource-validation.md). Le profil logiciel Linux
+x86_64 mesuré ne constitue ni un WCET, ni une revendication MCU, ni une qualification
+physique de durabilité.

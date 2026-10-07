@@ -48,6 +48,11 @@ des chunks de 11 octets. Il s’agit de la même référence sémantique et du m
 complétés par les oracles de confirmed-prefix/SHA et campagnes #120 ; aucune preuve
 d’exhaustivité des entrées hostiles n’est revendiquée.
 
+VER-061 injecte un `bad_alloc` après la confirmation durable du trim, avant
+l’ancrage du registre et toute suppression. Le refus conserve `trimmedThrough` ;
+la nouvelle tentative reprend le trim confirmé sans écrire un second trim.
+Le slot de rapprochement est réservé avant l’écriture.
+
 ## Réserves
 
 La croissance est bornée par les limites de volume/cardinalité et les contrats
@@ -105,9 +110,9 @@ ces seuils temporels par extrapolation.
 
 ## Suites exécutées
 
-- Clang Release : **214/214 CTest**, benchmark du service inclus.
-- GCC 16.1.0 / libstdc++ Release : **213/213 CTest** (test de cache Clang absent).
-- ASan/UBSan Clang Debug : **193/193 tests (192 scénarios et benchmark du service)**, fuites activées et arrêt sur erreur.
+- Clang Release : **215/215 CTest**, benchmark du service inclus.
+- GCC 16.1.0 / libstdc++ Release : **214/214 CTest** (test de cache Clang absent).
+- ASan/UBSan Clang Debug : **194/194 tests (192 scénarios, benchmark du service et injection de rétention)**, fuites activées et arrêt sur erreur.
 - TSan Clang Debug : **12/12 tests** sélectionnés de concurrence/observateurs.
 
 Les scénarios d’allocation/exception du cœur et leurs contrôles négatifs passent

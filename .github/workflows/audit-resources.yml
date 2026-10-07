@@ -24,9 +24,9 @@ jobs:
           cmake -S . -B build-resources -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-clang21-libcxx.cmake \
             -DCMAKE_BUILD_TYPE=Release -DMDDLOG_BUILD_TESTS=ON -DMDDLOG_BUILD_EXAMPLES=OFF
-          cmake --build build-resources --target mddlog_resource_bench mddlog_host_resource_bench mddlog_service_resource_bench mddlog_specs --parallel 4
+          cmake --build build-resources --target mddlog_resource_bench mddlog_host_resource_bench mddlog_service_resource_bench mddlog_retention_allocation mddlog_specs --parallel 4
       - name: Verify hostile limits and semantic equivalence
-        run: ctest --test-dir build-resources -R 'Audit (resource|provider budgets|consumer profiles|recovery refuses)|Generated audit cuts|Audit (retention|restart)' --no-tests=error --output-on-failure
+        run: ctest --test-dir build-resources -R 'Audit (resource|provider budgets|consumer profiles|recovery refuses)|Generated audit cuts|Rotation|Retention|restart|restarts|audit.retention.allocation' --no-tests=error --output-on-failure
       - name: Measure the large corpus against the software envelope
         run: python3 scripts/run-resource-bench.py build-resources/tests/mddlog_resource_bench --count 49152 --runs 3 --host-binary build-resources/tests/mddlog_host_resource_bench --service-binary build-resources/tests/mddlog_service_resource_bench --output build-resources/resources.json
       - uses: actions/upload-artifact@v4

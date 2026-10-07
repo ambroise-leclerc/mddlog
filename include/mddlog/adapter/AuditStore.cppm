@@ -1564,149 +1564,175 @@ private:
      * The order keeps an interruption on the safe side: the trim record is durably confirmed first, then the segments go, then the provider is told. A medium
      * that cannot confirm the trim never loses a segment on its account.
      */
-    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole, std::optional<LogState>* cache) try {
-        const auto refuse = [&](RetentionOutcome outcome, std::uint64_t recordedTrim = 0) {
-            counters.retentionRefused.fetch_add(1, std::memory_order_relaxed);
-            return RetentionResult{.outcome = outcome, .trimmedThrough = recordedTrim};
-        };
-        if (ledger == nullptr || ledger->state == StreamStorageState::Failed || closed)
-            return refuse(RetentionOutcome::NoLedger);
-        if (ledger->id == target)
-            return refuse(RetentionOutcome::NotRotatable);
-        // A trim the medium can never confirm would be written again at each attempt, and a ledger's trims must increase (10.2): write none at all.
-        if (ledger->syncUnsupported)
-            return refuse(RetentionOutcome::NotConfirmed);
+    [[nodiscard]] RetentionResult retain(std::string_view target, bool whole, std::optional<LogState>* cache) {
+        std::uint64_t recordedTrim = 0;
+        try {
+            const auto refuse = [&](RetentionOutcome outcome, std::uint64_t knownTrim = 0) {
+                counters.retentionRefused.fetch_add(1, std::memory_order_relaxed);
+                return RetentionResult{.outcome = outcome, .trimmedThrough = knownTrim};
+            };
+            if (ledger == nullptr || ledger->state == StreamStorageState::Failed || closed)
+                return refuse(RetentionOutcome::NoLedger);
+            if (ledger->id == target)
+                return refuse(RetentionOutcome::NotRotatable);
+            // A trim the medium can never confirm would be written again at each attempt, and a ledger's trims must increase (10.2): write none at all.
+            if (ledger->syncUnsupported)
+                return refuse(RetentionOutcome::NotConfirmed);
 
-        std::optional<LogState>   local;
-        const LogState&           read     = current(cache != nullptr ? *cache : local);
-        const LogAnalysis&        log      = read.log;
-        const ChainStateRecovery& recovery = read.recovery;
-        if (read.log.resourceIssue() != AuditResourceIssue::None || recovery.resourceIssue != AuditResourceIssue::None) {
-            noteResourceLimit(read.log.resourceIssue() != AuditResourceIssue::None ? read.log.resourceIssue() : recovery.resourceIssue);
-            return refuse(RetentionOutcome::ResourceLimit);
-        }
-        const StreamEvaluation* ev    = log.evaluation(target);
-        const StreamImage*      image = log.image().find(target);
-        if (log.image().unreadable())
-            return refuse(RetentionOutcome::MediumUnreadable);
-        if (ev == nullptr || !ev->inImage || image == nullptr)
-            return refuse(RetentionOutcome::UnknownStream);
-        const bool ledgerTarget = log.isLedger(target);
-        if (ledgerTarget && !whole)
-            return refuse(RetentionOutcome::NotRotatable);
-        const auto live = streams.find(target);
-        if (live != streams.end()) {
-            const StreamStorageState state = live->second.state;
-            if (state == StreamStorageState::Failed || (whole && state != StreamStorageState::Closed))
-                return refuse(RetentionOutcome::StreamNotEnded);
-        }
-
-        // Retention never removes records of a stream found inconsistent (10.3).
-        if (const auto held = recovery.held.find(target); held == recovery.held.end() || !held->second.consistent) {
-            for (const IntegrityFault& found : recovery.faults) {
-                if (found.stream == target)
-                    recordFaults(std::span{&found, 1});
+            std::optional<LogState>   local;
+            const LogState&           read     = current(cache != nullptr ? *cache : local);
+            const LogAnalysis&        log      = read.log;
+            const ChainStateRecovery& recovery = read.recovery;
+            if (read.log.resourceIssue() != AuditResourceIssue::None || recovery.resourceIssue != AuditResourceIssue::None) {
+                noteResourceLimit(read.log.resourceIssue() != AuditResourceIssue::None ? read.log.resourceIssue() : recovery.resourceIssue);
+                return refuse(RetentionOutcome::ResourceLimit);
             }
-            return refuse(RetentionOutcome::StreamInconsistent);
-        }
-        if (ledgerTarget) {
-            const LedgerImage* old         = log.ledger(target);
-            const bool         streamsGone = std::ranges::none_of(old->opened, [&](const std::string& opened) {
-                return log.image().find(opened) != nullptr;
-            });
-            const bool         cited       = std::ranges::any_of(log.ledgers(), [&](const LedgerImage& other) {
-                return other.id != target && other.predecessor.has_value() && other.predecessor->target == target;
-            });
-            if (!streamsGone || !cited || holdsNeededTrim(log, *old))
-                return refuse(RetentionOutcome::LedgerStillNeeded);
-        }
+            const StreamEvaluation* ev    = log.evaluation(target);
+            const StreamImage*      image = log.image().find(target);
+            if (log.image().unreadable())
+                return refuse(RetentionOutcome::MediumUnreadable);
+            if (ev == nullptr || !ev->inImage || image == nullptr)
+                return refuse(RetentionOutcome::UnknownStream);
+            const bool ledgerTarget = log.isLedger(target);
+            if (ledgerTarget && !whole)
+                return refuse(RetentionOutcome::NotRotatable);
+            const auto live = streams.find(target);
+            if (live != streams.end()) {
+                const StreamStorageState state = live->second.state;
+                if (state == StreamStorageState::Failed || (whole && state != StreamStorageState::Closed))
+                    return refuse(RetentionOutcome::StreamNotEnded);
+            }
 
-        const auto&   segments       = image->segments;
-        std::uint64_t q              = 0;
-        bool          retire         = false;
-        std::uint64_t retirePosition = 0;
-        std::uint64_t bound          = std::numeric_limits<std::uint64_t>::max();
-        if (guarded != nullptr) {
-            const LatestAnswer answer = guarded->latest(target);
-            if (const auto* anchor = std::get_if<Anchor>(&answer)) {
-                bound          = anchor->position;
-                retire         = whole;
-                retirePosition = anchor->position;
-            } else if (std::holds_alternative<Retirement>(answer)) {
+            // Retention never removes records of a stream found inconsistent (10.3).
+            if (const auto held = recovery.held.find(target); held == recovery.held.end() || !held->second.consistent) {
+                for (const IntegrityFault& found : recovery.faults) {
+                    if (found.stream == target)
+                        recordFaults(std::span{&found, 1});
+                }
                 return refuse(RetentionOutcome::StreamInconsistent);
-            } else if (std::holds_alternative<AnchorAbsent>(answer)) {
-                if (!whole)
-                    return refuse(RetentionOutcome::NoAnchor);
-            } else if (!whole && live != streams.end() && live->second.anchored != 0) {
-                // The provider did not answer: only an anchor this adapter itself holds from its own advance may be relied on (10.4).
-                bound = live->second.anchored;
-            } else {
-                return refuse(RetentionOutcome::ProviderUnavailable);
             }
-        }
-        if (whole) {
-            q = ev->checkedThrough;
-        } else {
-            // The last record of the latest whole segment that ends at or before the bound; never the last segment, which is the open one for a live stream.
-            for (std::size_t i = 0; i + 1 < segments.size(); ++i) {
-                if (segments[i].recordCount == 0 || segments[i].lastSequence() > bound)
+            if (ledgerTarget) {
+                const LedgerImage* old         = log.ledger(target);
+                const bool         streamsGone = std::ranges::none_of(old->opened, [&](const std::string& opened) {
+                    return log.image().find(opened) != nullptr;
+                });
+                const bool         cited       = std::ranges::any_of(log.ledgers(), [&](const LedgerImage& other) {
+                    return other.id != target && other.predecessor.has_value() && other.predecessor->target == target;
+                });
+                if (!streamsGone || !cited || holdsNeededTrim(log, *old))
+                    return refuse(RetentionOutcome::LedgerStillNeeded);
+            }
+
+            const auto&   segments       = image->segments;
+            std::uint64_t q              = 0;
+            bool          retire         = false;
+            std::uint64_t retirePosition = 0;
+            std::uint64_t bound          = std::numeric_limits<std::uint64_t>::max();
+            if (guarded != nullptr) {
+                const LatestAnswer answer = guarded->latest(target);
+                if (const auto* anchor = std::get_if<Anchor>(&answer)) {
+                    bound          = anchor->position;
+                    retire         = whole;
+                    retirePosition = anchor->position;
+                } else if (std::holds_alternative<Retirement>(answer)) {
+                    return refuse(RetentionOutcome::StreamInconsistent);
+                } else if (std::holds_alternative<AnchorAbsent>(answer)) {
+                    if (!whole)
+                        return refuse(RetentionOutcome::NoAnchor);
+                } else if (!whole && live != streams.end() && live->second.anchored != 0) {
+                    // The provider did not answer: only an anchor this adapter itself holds from its own advance may be relied on (10.4).
+                    bound = live->second.anchored;
+                } else {
+                    return refuse(RetentionOutcome::ProviderUnavailable);
+                }
+            }
+            if (whole) {
+                q = ev->checkedThrough;
+            } else {
+                // The last record of the latest whole segment that ends at or before the bound; never the last segment, which is the open one for a live
+                // stream.
+                for (std::size_t i = 0; i + 1 < segments.size(); ++i) {
+                    if (segments[i].recordCount == 0 || segments[i].lastSequence() > bound)
+                        break;
+                    q = segments[i].lastSequence();
+                }
+                if (q == 0)
+                    return refuse(RetentionOutcome::NothingToTrim);
+            }
+            if (whole && q == 0 && ev->recordCount != 0)
+                return refuse(RetentionOutcome::StreamInconsistent);
+
+            RetentionResult result{.outcome = whole ? RetentionOutcome::Removed : RetentionOutcome::Trimmed, .trimmedThrough = q};
+            std::uint64_t   trimSequence = 0;
+            if (q != 0) {
+                const auto digest = ev->recomputedDigestAt(q);
+                if (!digest.has_value())
+                    return refuse(RetentionOutcome::StreamInconsistent);
+                if (const auto done = sessionTrims.find(target); done != sessionTrims.end() && done->second.first >= q) {
+                    trimSequence = done->second.second;
+                    recordedTrim = q;
+                    // A publication allocation may have failed after append but before confirmation.
+                    if (ledger->durable < trimSequence)
+                        return refuse(RetentionOutcome::NotConfirmed, q);
+                } else {
+                    // Reserve the retry state before I/O. Recording a trim must not depend on a later allocation.
+                    const auto [slot, inserted]      = sessionTrims.try_emplace(std::string{target});
+                    const std::uint64_t ledgerBefore = ledger->appended;
+                    bool                confirmed    = false;
+                    try {
+                        confirmed = writeLedger(LedgerEntry::streamTrim(target, q, *digest)) && ledgerConfirmed();
+                    } catch (const std::bad_alloc&) {
+                        if (ledger->appended != ledgerBefore) {
+                            recordedTrim = q;
+                            slot->second = {q, ledger->appended};
+                        } else if (inserted) {
+                            sessionTrims.erase(slot);
+                        }
+                        throw;
+                    }
+                    if (ledger->appended != ledgerBefore) {
+                        recordedTrim = q;
+                        slot->second = {q, ledger->appended};
+                    } else if (inserted) {
+                        sessionTrims.erase(slot);
+                    }
+                    if (!confirmed)
+                        return refuse(RetentionOutcome::NotConfirmed, recordedTrim);
+                    trimSequence = ledger->appended;
+                    counters.trimsRecorded.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            if (retire) {
+                // An interruption between the removal and the retirement leaves a retirement owed. The next start may relay it only if an anchor of the ledger
+                // covers the trim, so the ledger is anchored past it before anything is removed (7.2, condition 5).
+                (void)advanceAnchor(*ledger);
+                if (ledger->anchored < trimSequence)
+                    return refuse(RetentionOutcome::LedgerNotAnchored, q);
+            }
+
+            for (const SegmentImage& segment : segments) {
+                if (segment.recordCount != 0 && segment.lastSequence() > q)
                     break;
-                q = segments[i].lastSequence();
+                if (!callReclaim(segment.ref)) {
+                    result.outcome = RetentionOutcome::ReclaimInterrupted;
+                    break;
+                }
+                ++result.segmentsReclaimed;
             }
-            if (q == 0)
-                return refuse(RetentionOutcome::NothingToTrim);
-        }
-        if (whole && q == 0 && ev->recordCount != 0)
-            return refuse(RetentionOutcome::StreamInconsistent);
-
-        RetentionResult result{.outcome = whole ? RetentionOutcome::Removed : RetentionOutcome::Trimmed, .trimmedThrough = q};
-        std::uint64_t   trimSequence = 0;
-        if (q != 0) {
-            const auto digest = ev->recomputedDigestAt(q);
-            if (!digest.has_value())
-                return refuse(RetentionOutcome::StreamInconsistent);
-            if (const auto done = sessionTrims.find(target); done != sessionTrims.end() && done->second.first >= q) {
-                trimSequence = done->second.second;  // already recorded and confirmed this start: the ledger's trims stay increasing (10.2)
-            } else {
-                const std::uint64_t ledgerBefore = ledger->appended;
-                // A trim appended but not confirmed may still survive on the medium: the result says it was recorded.
-                if (!writeLedger(LedgerEntry::streamTrim(target, q, *digest)) || !ledgerConfirmed())
-                    return refuse(RetentionOutcome::NotConfirmed, ledger->appended != ledgerBefore ? q : 0);
-                trimSequence                      = ledger->appended;
-                sessionTrims[std::string{target}] = {q, trimSequence};
-                counters.trimsRecorded.fetch_add(1, std::memory_order_relaxed);
+            counters.segmentsReclaimed.fetch_add(result.segmentsReclaimed, std::memory_order_relaxed);
+            (void)refreshFree();
+            if (result.outcome == RetentionOutcome::Removed) {
+                counters.streamsRemoved.fetch_add(1, std::memory_order_relaxed);
+                if (retire && std::holds_alternative<AnchorStamp>(guarded->retire(target, retirePosition))) {
+                    counters.retirements.fetch_add(1, std::memory_order_relaxed);
+                    result.retired = true;
+                }
             }
+            return result;
+        } catch (const std::bad_alloc&) {
+            noteResourceLimit(AuditResourceIssue::MemoryUnavailable);
+            return {.outcome = RetentionOutcome::ResourceLimit, .trimmedThrough = recordedTrim};
         }
-        if (retire) {
-            // An interruption between the removal and the retirement leaves a retirement owed. The next start may relay it only if an anchor of the ledger
-            // covers the trim, so the ledger is anchored past it before anything is removed (7.2, condition 5).
-            (void)advanceAnchor(*ledger);
-            if (ledger->anchored < trimSequence)
-                return refuse(RetentionOutcome::LedgerNotAnchored, q);
-        }
-
-        for (const SegmentImage& segment : segments) {
-            if (segment.recordCount != 0 && segment.lastSequence() > q)
-                break;
-            if (!callReclaim(segment.ref)) {
-                result.outcome = RetentionOutcome::ReclaimInterrupted;
-                break;
-            }
-            ++result.segmentsReclaimed;
-        }
-        counters.segmentsReclaimed.fetch_add(result.segmentsReclaimed, std::memory_order_relaxed);
-        (void)refreshFree();
-        if (result.outcome == RetentionOutcome::Removed) {
-            counters.streamsRemoved.fetch_add(1, std::memory_order_relaxed);
-            if (retire && std::holds_alternative<AnchorStamp>(guarded->retire(target, retirePosition))) {
-                counters.retirements.fetch_add(1, std::memory_order_relaxed);
-                result.retired = true;
-            }
-        }
-        return result;
-    } catch (const std::bad_alloc&) {
-        noteResourceLimit(AuditResourceIssue::MemoryUnavailable);
-        return {.outcome = RetentionOutcome::ResourceLimit};
     }
 
     StorageMedium&                  medium;
@@ -1726,7 +1752,8 @@ private:
     std::unique_ptr<GuardedProvider> guarded;
     std::unique_ptr<Stream>          ledger;
     RestartReport                    restartInfo;
-    /** @brief The trims this start recorded and confirmed: the position, and where the ledger recorded it. Keeps a ledger's trims increasing (10.2). */
+    /** @brief The trims appended this start: their position and ledger sequence. Reuse still requires confirmation. Keeps a ledger's trims increasing (10.2).
+     */
     std::map<std::string, std::pair<std::uint64_t, std::uint64_t>, std::less<>> sessionTrims;
     /** @brief Identities the ledgers in the log named at start, sorted: none may start a new instance. */
     std::vector<std::string> namedByLedgers;

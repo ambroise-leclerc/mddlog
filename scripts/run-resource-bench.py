@@ -15,7 +15,7 @@ def run(binary, count, timeout):
         rss_file = Path(directory) / 'rss.txt'
         process = subprocess.run(['/usr/bin/time', '-f', '%M', '-o', str(rss_file),
                                   str(binary.resolve()), str(count)], text=True,
-                                 capture_output=True, timeout=timeout, check=True)
+                                 stdout=subprocess.PIPE, timeout=timeout, check=True)
         rows = list(csv.reader(process.stdout.splitlines()))
         if len({row[0] for row in rows}) != len(rows):
             raise ValueError('duplicate measurements')
