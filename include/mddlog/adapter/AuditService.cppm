@@ -23,7 +23,17 @@ struct AuditServiceConfig {
     std::chrono::nanoseconds anchorPeriod = std::chrono::seconds{1};
 };
 
-enum class AuditServiceConfigError : std::uint8_t { InvalidRecordBudget, InvalidAnchorPeriod, InvalidRetention, InvalidStorage, StartupFailed };
+enum class AuditServiceConfigError : std::uint8_t {
+    InvalidRecordBudget,
+    InvalidAnchorPeriod,
+    InvalidRetention,
+    InvalidStorage,
+    StartupFailed,
+    InvalidAttemptBudget,
+    InvalidAnchorStreamBudget,
+    InvalidAnchorAgeBound,
+    InvalidAnchorRecordBound
+};
 
 struct AuditServiceError {
     AuditServiceConfigError           issue        = AuditServiceConfigError::InvalidStorage;
@@ -40,6 +50,8 @@ struct AuditServiceHealth {
     std::uint64_t         unconfirmed      = 0;
     std::uint64_t         unanchored       = 0;
     std::uint64_t         callbackFailures = 0;
+    /** @brief Streams whose published positions violate anchored <= durable <= appended, including the ledger. */
+    std::uint64_t positionOrderViolations = 0;
 };
 
 enum class AuditStopStatus : std::uint8_t { Completed, Pending, DeadlineExceeded, Degraded, InvalidBudget };
@@ -76,11 +88,18 @@ struct AuditServiceStop {
 class AuditService {
 public:
     [[nodiscard]] static std::expected<std::unique_ptr<AuditService>, AuditServiceError> create(StorageMedium& medium, AuditServiceConfig config) {
-        if (config.maxRecordsPerRing == 0 || config.maxAttemptsPerPoll == 0 || config.maxAnchorStreamsPerPoll == 0)
+        if (config.maxRecordsPerRing == 0)
             return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidRecordBudget});
-        if (config.anchorPeriod <= std::chrono::nanoseconds::zero() || config.anchorAgeBound <= std::chrono::nanoseconds::zero()
-            || config.anchorRecordBound == 0)
+        if (config.maxAttemptsPerPoll == 0)
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAttemptBudget});
+        if (config.maxAnchorStreamsPerPoll == 0)
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorStreamBudget});
+        if (config.anchorPeriod <= std::chrono::nanoseconds::zero())
             return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorPeriod});
+        if (config.anchorAgeBound <= std::chrono::nanoseconds::zero())
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorAgeBound});
+        if (config.anchorRecordBound == 0)
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorRecordBound});
         if (config.capacityPolicy == AuditCapacityPolicy::RelieveDeclared
             && (!config.storage.ledger || (!config.storage.retention.rotate && !config.storage.retention.removeEnded)))
             return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidRetention});
@@ -181,10 +200,10 @@ public:
             anchorCursor      %= streams.size();
             const auto& stream = streams[anchorCursor];
             anchorCursor       = (anchorCursor + 1) % streams.size();
-            if (stream.durablePosition <= stream.anchoredPosition)
+            if (stream.anchorBlocked || stream.durablePosition <= stream.anchoredPosition)
                 continue;
-            if (stream.durablePosition - stream.anchoredPosition < anchorRecordBound
-                && (!stream.unanchoredSince || now - *stream.unanchoredSince < anchorAgeBound))
+            if (stream.durablePosition - stream.anchoredPosition < anchorRecordBound && stream.unanchoredSince
+                && now - *stream.unanchoredSince < anchorAgeBound)
                 continue;
             const auto found = anchorAttempts.find(stream.streamId);
             if (found != anchorAttempts.end() && now - found->second < anchorPeriod)
@@ -202,10 +221,12 @@ public:
         AuditServiceHealth result{.delivery = consumer->healthSnapshot(), .storage = sink->health()};
         result.callbackFailures = callbackErrors->load(std::memory_order_relaxed);
         for (const auto& stream : result.storage.streams) {
+            if (stream.hasPositionOrderViolation())
+                ++result.positionOrderViolations;
             if (stream.isLedger)
                 continue;
-            result.unconfirmed += stream.appendedPosition - stream.durablePosition;
-            result.unanchored  += stream.durablePosition - stream.anchoredPosition;
+            result.unconfirmed += stream.unconfirmedCount();
+            result.unanchored  += stream.unanchoredCount();
         }
         return result;
     }
@@ -235,13 +256,13 @@ public:
         auto snapshot = health();
         auto status   = closed ? AuditStopStatus::Completed : AuditStopStatus::Pending;
         if (closed
-            && (snapshot.unconfirmed != 0 || snapshot.unanchored != 0 || !snapshot.storage.integrity.empty() || snapshot.delivery.reportedLosses != 0
-                || std::ranges::any_of(snapshot.storage.streams, [](const auto& stream) {
+            && (snapshot.unconfirmed != 0 || snapshot.unanchored != 0 || snapshot.positionOrderViolations != 0 || !snapshot.storage.integrity.empty()
+                || snapshot.delivery.reportedLosses != 0 || std::ranges::any_of(snapshot.storage.streams, [](const auto& stream) {
                        return stream.state == StreamStorageState::Failed || stream.appendedPosition > stream.durablePosition
                               || stream.durablePosition > stream.anchoredPosition;
                    })))
             status = AuditStopStatus::Degraded;
-        if (expired())
+        if (!closed && expired())
             status = AuditStopStatus::DeadlineExceeded;
         return {.closed = closed, .health = std::move(snapshot), .status = status, .elapsed = clock() - begin};
     }

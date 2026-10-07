@@ -11,9 +11,14 @@ le logiciel vérifié ; ce relevé ne modifie pas l’acceptation de la base #12
   pertes et observateurs concurrents.
 - VER-045 : budget global, rotation et refus de saturation/enrôlement ; collisions
   avec le registre et capacité comptées en santé, sans drain des anneaux refusés.
-- VER-046 : réconciliation d’une acceptation dont la réponse est perdue, sans rejeu.
+- La rotation est aussi vérifiée sur trois anneaux partiellement drainés avec un
+  budget global d’une tentative.
+- VER-046 : réconciliation d’une acceptation dont la réponse est perdue, sans rejeu ;
+  divergence ou retraite bloque les appels ultérieurs, même après croissance du flux.
 - VER-047 : ancrage par âge sous le seuil en nombre ; fenêtre d’exposition publiée.
-- VER-048 : appel fournisseur simulé lent, dépassement du délai souple d’arrêt et reprise.
+- VER-048 : appel fournisseur simulé lent, dépassement du délai souple d’arrêt et reprise ;
+  une fermeture terminée conserve sa qualité même après dépassement du délai.
+  Les écarts de positions inversées sont bornés et leur anomalie reste explicite.
 - VER-049 : politique de rétention non déclarée et panne du registre au démarrage.
 - VER-050 : callback défaillant isolé, panne persistante d’une instance et recomposition
   explicite sur support réparé, sans effacement du backlog ancien.
@@ -56,6 +61,11 @@ invalide sans gel des inscriptions, accès au sink possédé, refus d’identit�
 et de capacité visibles en santé sans consommation des anneaux refusés. La suite
 Clang reste à **208/208** ; les **14/14 tests du service** passent aussi sous GCC et
 ASan/UBSan. Ces ajouts complètent des scénarios existants sans changer leur nombre.
+La seconde revue complète VER-045/046/048 : rotation à trois anneaux, divergence et
+retraite du témoin sans nouvelles tentatives, écarts de positions inversées et
+fermeture lente conservant `Completed`/`Degraded`. Les **208/208 CTest Clang**,
+**14/14 tests du service GCC** et **187/187 scénarios ASan/UBSan** passent après
+ces corrections. Les erreurs de budgets et seuils sont distinguées avant I/O.
 
 ## Réserves et suites
 

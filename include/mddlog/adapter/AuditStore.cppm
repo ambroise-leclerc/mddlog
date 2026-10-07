@@ -357,6 +357,18 @@ struct StreamStorageHealth {
     bool                                                 isLedger         = false;
     std::optional<std::chrono::steady_clock::time_point> unconfirmedSince;
     std::optional<std::chrono::steady_clock::time_point> unanchoredSince;
+    /** @brief A divergence prevents further anchor attempts for this stream instance. */
+    bool anchorBlocked = false;
+
+    [[nodiscard]] std::uint64_t unconfirmedCount() const noexcept {
+        return appendedPosition > durablePosition ? appendedPosition - durablePosition : 0;
+    }
+    [[nodiscard]] std::uint64_t unanchoredCount() const noexcept {
+        return durablePosition > anchoredPosition ? durablePosition - anchoredPosition : 0;
+    }
+    [[nodiscard]] bool hasPositionOrderViolation() const noexcept {
+        return appendedPosition < durablePosition || durablePosition < anchoredPosition;
+    }
 };
 
 /** @brief Counters across instances (9.6). Values read together are not a single synchronized snapshot. */
@@ -837,6 +849,7 @@ private:
         std::uint64_t                                        anchored      = 0;
         std::uint64_t                                        anchorCounter = 0;
         std::optional<AnchorClaim>                           uncertainAnchor;
+        bool                                                 anchorBlocked = false;
         std::optional<std::chrono::steady_clock::time_point> oldestUnanchored;
     };
 
@@ -977,6 +990,7 @@ private:
         entry.isLedger               = stream.isLedger;
         entry.unconfirmedSince       = stream.appended > stream.durable ? std::optional{stream.oldestUnsynced} : std::nullopt;
         entry.unanchoredSince        = stream.durable > stream.anchored ? stream.oldestUnanchored : std::nullopt;
+        entry.anchorBlocked          = stream.anchorBlocked;
         durableDigests[stream.id]    = {stream.durable, stream.durableDigest};
     }
 
@@ -1336,7 +1350,7 @@ private:
     }
 
     [[nodiscard]] bool advanceAnchor(Stream& stream) {
-        if (guarded == nullptr || stream.durable == 0 || stream.durable <= stream.anchored)
+        if (stream.anchorBlocked || guarded == nullptr || stream.durable == 0 || stream.durable <= stream.anchored)
             return false;
         if (stream.uncertainAnchor) {
             const auto latest = guarded->latest(stream.id);
@@ -1358,11 +1372,17 @@ private:
                 if (!anchor->usable() || anchor->streamId != stream.id || anchor->position >= claim.position) {
                     const IntegrityFault fault{.kind = IntegrityFaultKind::AnchorDiverged, .stream = stream.id, .position = claim.position};
                     recordFaults(std::span{&fault, 1});
+                    stream.anchorBlocked = true;
+                    stream.uncertainAnchor.reset();
+                    publish(stream);
                     return false;
                 }
             } else if (std::holds_alternative<Retirement>(latest)) {
                 const IntegrityFault fault{.kind = IntegrityFaultKind::AnchorDiverged, .stream = stream.id, .position = stream.durable};
                 recordFaults(std::span{&fault, 1});
+                stream.anchorBlocked = true;
+                stream.uncertainAnchor.reset();
+                publish(stream);
                 return false;
             }
             stream.uncertainAnchor.reset();
@@ -1381,6 +1401,8 @@ private:
             counters.anchorsRefused.fetch_add(1, std::memory_order_relaxed);
             const IntegrityFault diverged{.kind = IntegrityFaultKind::AnchorDiverged, .stream = stream.id, .position = stream.durable};
             recordFaults(std::span{&diverged, 1});
+            stream.anchorBlocked = true;
+            publish(stream);
             return false;
         }
         stream.uncertainAnchor = claim;

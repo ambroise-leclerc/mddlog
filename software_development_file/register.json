@@ -955,7 +955,7 @@
     },
     {
       "id": "VER-046",
-      "title": "Réconciliation des réponses d’ancrage perdues",
+      "title": "Réconciliation des réponses d’ancrage perdues et blocage après divergence",
       "status": "coverage-existing",
       "controls": [
         "CTRL-004",
@@ -983,7 +983,7 @@
     },
     {
       "id": "VER-048",
-      "title": "Délai souple et arrêt repris",
+      "title": "Délai souple, qualité de fermeture préservée et écarts de positions bornés",
       "status": "coverage-existing",
       "controls": [
         "CTRL-004",

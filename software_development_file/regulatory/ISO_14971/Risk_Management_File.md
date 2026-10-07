@@ -65,3 +65,7 @@ peut être dépassé par une I/O ; le rapport le constate au retour. Aucun arrê
 transforme les données en preuve durable. La quiescence, la cadence inactive et le
 traitement d’un backlog après panne restent des obligations hôte. #117 caractérise
 les budgets du profil ; #122 garde l’acceptation et la qualification physiques.
+Les inversions de positions restent des anomalies explicites malgré le bornage des
+écarts à zéro. Après divergence du témoin, l’ancrage de l’instance est bloqué pour
+éviter des tentatives et fautes répétées. Une fermeture terminée conserve son statut
+dégradé même si le délai est dépassé ; le dépassement reste mesuré dans `elapsed`.
