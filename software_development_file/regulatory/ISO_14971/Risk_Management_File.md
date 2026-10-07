@@ -56,3 +56,16 @@ politique d'accès, et accepter ce risque résiduel dans son profil. Les refus d
 avant écriture laissent l'état lisible et n'arrêtent pas le service ; les erreurs de
 stockage/barrière continuent d'arrêter l'autorité. Le coût de réécriture de l'inventaire
 et des fsync synchrones participe aussi au risque de saturation, sans WCET revendiqué.
+
+
+Le lot #116 ajoute VER-045–053 pour RISK-001/RISK-002/RISK-006/RISK-007 : budgets
+avec rotation, exposition non confirmée/non ancrée, réconciliation des réponses perdues
+et exceptions de callback isolées. La rétention exige une déclaration. Un délai souple
+peut être dépassé par une I/O ; le rapport le constate au retour. Aucun arrêt forcé ne
+transforme les données en preuve durable. La quiescence, la cadence inactive et le
+traitement d’un backlog après panne restent des obligations hôte. #117 caractérise
+les budgets du profil ; #122 garde l’acceptation et la qualification physiques.
+Les inversions de positions restent des anomalies explicites malgré le bornage des
+écarts à zéro. Après divergence du témoin, l’ancrage de l’instance est bloqué pour
+éviter des tentatives et fautes répétées. Une fermeture terminée conserve son statut
+dégradé même si le délai est dépassé ; le dépassement reste mesuré dans `elapsed`.

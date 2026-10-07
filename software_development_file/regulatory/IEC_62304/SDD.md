@@ -41,10 +41,10 @@ l'exclusion du rollback. Les règles exactes restent dans ADR-004 et les sources
 
 ## Limites de conception ouvertes
 
-Le backend fichiers Linux optionnel est implémenté avec un contrat à revoir en #114 ; aucun support physique n'est qualifié et aucun fournisseur indépendant réel n'est livré. Aucune signature ne
-prouve l'auteur. Le lecteur matérialise des données dans des conteneurs allouants : ses budgets
-restent à établir. L'hôte appelle aujourd'hui les primitives de pilotage ; #116 doit les regrouper
-hors code métier. Les suites de tests et guides de migration liés par les VER décrivent ce qui
+Le backend fichiers Linux et le témoin sous UID séparé sont implémentés ; leur profil
+physique reste à qualifier. Aucune signature ne prouve l'auteur. Le lecteur matérialise des données dans des conteneurs allouants : ses budgets
+restent à établir. AuditService regroupe les primitives de pilotage hors code métier ;
+#117 doit borner leur exploitation sur le profil retenu. Les suites de tests et guides de migration liés par les VER décrivent ce qui
 est exercé ; leur couverture n'équivaut pas à une validation applicative réelle.
 
 ## Contextes et liaisons pour la 1.0 (#113/#127–129)
@@ -110,17 +110,24 @@ Le [résultat Orin Nano](../../../docs/orin-nano-electrical-results.md) consigne
 électrique déclarée, sans inventer le tuple ni les artefacts nécessaires à sa revue.
 
 
-## Premier pilotage de référence (#114 / #116)
+## Pilotage centralisé (#116)
 
-CTRL-004/CTRL-007 incluent [AuditService](../../../docs/audit-service.md), composition
-possédant le consommateur et le sink sur un support injecté. VER-036–040 couvrent budget
-par anneau, arrêt borné, réveil inactif, ancrage et pertes indépendantes. Le callback de
-l'hôte est préservé et la capture faible évite un cycle de propriété. Le service n'ajoute
-ni thread au cœur ni politique de rétention ; les opérations externes restent synchrones.
-Les refus et backlog d'arrêt sont observables sans promotion à durabilité. La
-[préparation de clôture](../../../docs/file-storage-closure.md) identifie les preuves
-externes encore dues. Aucun nouveau composant tiers n'est lié à la bibliothèque ; DEP-010 inventorie zstd
-comme outil de revue d'archives, hors dépendances du déploiement.
+CTRL-004/CTRL-007 incluent [AuditService](../../../docs/audit-service.md), propriétaire
+du consommateur et du sink avec liaisons explicites. VER-036–040 et VER-045–053 couvrent
+budgets et rotation, synchronisation/ancrage inactif, réconciliation des réponses perdues,
+santé (dont refus de capacité et d’identité du registre sans inscription), callback
+défaillant et arrêt dégradé. La rétention n’agit que sur déclaration ;
+les inversions de positions sont signalées sans sous-dépassement des compteurs,
+une divergence bloque l’ancrage de la session, et le délai ne masque pas la qualité
+d’une fermeture terminée.
+L’adaptateur est la source des inscriptions ; le service consulte son compteur et
+ses identités. Sans témoin, une fermeture durable peut rester dégradée par absence
+d’ancrage. Le rapprochement partiel conserve une couverture et un âge prudents.
+une instance échouée ne redémarre pas silencieusement. Le délai d’arrêt est souple et
+ne borne pas un appel externe synchrone. VER-044 intègre deux producteurs, le backend
+réel et un témoin sous UID séparé. Le [relevé](../../../docs/audit-service-validation.md)
+sépare résultats logiciels, CI, budgets du profil (#117) et qualification physique (#122).
+Aucun nouveau thread producteur ni composant tiers de déploiement n’est ajouté.
 
 ## Position du lecteur persistante (#115, premier lot)
 

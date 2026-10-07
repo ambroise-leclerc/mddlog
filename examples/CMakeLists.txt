@@ -68,3 +68,9 @@ if(MDDLOG_BUILD_FILE_STORAGE)
     target_link_libraries(mddlog_file_audit PRIVATE mddlog::mddlog)
     set_target_properties(mddlog_file_audit PROPERTIES FOLDER "Examples")
 endif()
+
+# Portable centralized lifecycle; backend qualification remains a deployment decision.
+add_executable(mddlog_audit_application AuditApplication.cpp)
+target_link_libraries(mddlog_audit_application PRIVATE mddlog::mddlog)
+target_compile_features(mddlog_audit_application PRIVATE cxx_std_23)
+set_target_properties(mddlog_audit_application PROPERTIES FOLDER "Examples")

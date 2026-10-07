@@ -8,33 +8,65 @@ export import mddlog.adapter.auditstore;
 
 export namespace mddlog::adapter {
 
+enum class AuditCapacityPolicy : std::uint8_t { KeepPending, RelieveDeclared };
+
 struct AuditServiceConfig {
-    StorageConfig storage;
+    StorageConfig            storage;
+    std::size_t              anchorRecordBound = 1;
+    std::chrono::nanoseconds anchorAgeBound    = std::chrono::seconds{1};
     /** @brief Maximum records handed off from each registered ring per poll. Must be positive. */
-    std::size_t maxRecordsPerRing = 1;
-    /** @brief Period for attempts against the configured provider, including retries after unavailability. */
+    std::size_t         maxRecordsPerRing       = 1;
+    std::size_t         maxAttemptsPerPoll      = std::numeric_limits<std::size_t>::max();
+    std::size_t         maxAnchorStreamsPerPoll = std::numeric_limits<std::size_t>::max();
+    AuditCapacityPolicy capacityPolicy          = AuditCapacityPolicy::KeepPending;
+    /** @brief Minimum delay before retrying an unsuccessful anchor attempt for a stream. */
     std::chrono::nanoseconds anchorPeriod = std::chrono::seconds{1};
 };
 
-enum class AuditServiceConfigError : std::uint8_t { InvalidRecordBudget, InvalidAnchorPeriod, InvalidStorage };
-
-struct AuditServiceError {
-    AuditServiceConfigError           issue   = AuditServiceConfigError::InvalidStorage;
-    std::optional<StorageConfigError> storage = std::nullopt;
+enum class AuditServiceConfigError : std::uint8_t {
+    InvalidRecordBudget,
+    InvalidAnchorPeriod,
+    InvalidRetention,
+    InvalidStorage,
+    StartupFailed,
+    InvalidAttemptBudget,
+    InvalidAnchorStreamBudget,
+    InvalidAnchorAgeBound,
+    InvalidAnchorRecordBound
 };
 
-enum class AuditServiceRegistration : std::uint8_t { Registered, InvalidStream, DuplicateStream, Started };
+struct AuditServiceError {
+    AuditServiceConfigError           issue        = AuditServiceConfigError::InvalidStorage;
+    std::optional<StorageConfigError> storage      = std::nullopt;
+    StorageIssue                      startupCause = StorageIssue::None;
+};
+
+enum class AuditServiceRegistration : std::uint8_t { Registered, InvalidStream, DuplicateStream, Capacity, LedgerIdentity, Started };
 
 /** @brief Delivery and storage are separate snapshots, not a transaction across producer and consumer. */
 struct AuditServiceHealth {
     AuditHealthSnapshot   delivery;
     StorageHealthSnapshot storage;
+    std::uint64_t         unconfirmed      = 0;
+    std::uint64_t         unanchored       = 0;
+    std::uint64_t         callbackFailures = 0;
+    /** @brief Streams whose published positions violate anchored <= durable <= appended, including the ledger. */
+    std::uint64_t positionOrderViolations = 0;
+};
+
+enum class AuditStopStatus : std::uint8_t { Completed, Pending, DeadlineExceeded, Degraded, InvalidBudget };
+
+struct AuditStopOptions {
+    std::size_t                             maxDrainPasses = 1;
+    std::optional<std::chrono::nanoseconds> timeBudget;
 };
 
 struct AuditServiceStop {
     /** @brief Lifecycle ended. This does not promise durable confirmation or an accepted anchor. */
-    bool               closed = false;
-    AuditServiceHealth health;
+    bool                     closed = false;
+    AuditServiceHealth       health;
+    AuditStopStatus          status = AuditStopStatus::Pending;
+    std::chrono::nanoseconds elapsed{};
 };
 
 /**
@@ -43,9 +75,10 @@ struct AuditServiceStop {
  * The medium, provider and registered rings must outlive this service. Registration finishes
  * before the first poll or concurrent health observation. poll() and stop() belong to the
  * single consumer; the host calls poll() even when producers are inactive, at a cadence that
- * satisfies its age bounds. Each poll visits all rings with the same per-ring budget, ticks
- * storage and attempts eligible anchors at anchorPeriod. External calls remain synchronous:
- * the record budget is not a wall-clock bound. No thread or retention policy is introduced.
+ * satisfies its age bounds. Budgets bound attempted hand-offs and eligible anchor streams;
+ * both schedules rotate fairly. Retention runs only with explicit standing permissions.
+ * External calls remain synchronous and must supply their own timeout contract.
+ * Clocks and host callbacks run on the consumer, must not reenter it, and must outlive it.
  *
  * Before stop(), the host stops producers and establishes quiescence. A bounded drain that
  * leaves pending events does not close the sink; the host can poll or retry stop(). A failed
@@ -57,25 +90,47 @@ public:
     [[nodiscard]] static std::expected<std::unique_ptr<AuditService>, AuditServiceError> create(StorageMedium& medium, AuditServiceConfig config) {
         if (config.maxRecordsPerRing == 0)
             return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidRecordBudget});
+        if (config.maxAttemptsPerPoll == 0)
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAttemptBudget});
+        if (config.maxAnchorStreamsPerPoll == 0)
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorStreamBudget});
         if (config.anchorPeriod <= std::chrono::nanoseconds::zero())
             return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorPeriod});
+        if (config.anchorAgeBound <= std::chrono::nanoseconds::zero())
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorAgeBound});
+        if (config.anchorRecordBound == 0)
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidAnchorRecordBound});
+        if (config.capacityPolicy == AuditCapacityPolicy::RelieveDeclared
+            && (!config.storage.ledger || (!config.storage.retention.rotate && !config.storage.retention.removeEnded)))
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidRetention});
         if (!config.storage.clock)
             config.storage.clock = [] {
                 return std::chrono::steady_clock::now();
             };
-        auto                                  service  = std::unique_ptr<AuditService>(new AuditService(config));
-        const std::weak_ptr<AuditSinkAdapter> delivery = service->consumer;
-        auto                                  hostLoss = std::move(config.storage.reportLoss);
-        config.storage.reportLoss                      = [delivery, hostLoss = std::move(hostLoss)](std::uint64_t count) {
+        auto                                  service          = std::unique_ptr<AuditService>(new AuditService(config));
+        const std::weak_ptr<AuditSinkAdapter> delivery         = service->consumer;
+        const auto                            callbackFailures = service->callbackErrors;
+        auto                                  hostLoss         = std::move(config.storage.reportLoss);
+        config.storage.reportLoss                              = [delivery, callbackFailures, hostLoss = std::move(hostLoss)](std::uint64_t count) {
             if (const auto signal = delivery.lock())
                 signal->reportLoss(count);
-            if (hostLoss)
-                hostLoss(count);
+            if (hostLoss) {
+                try {
+                    hostLoss(count);
+                } catch (...) {
+                    callbackFailures->fetch_add(1, std::memory_order_relaxed);
+                }
+            }
         };
         auto made = PersistingAuditSink::create(medium, std::move(config.storage));
         if (!made)
             return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::InvalidStorage, .storage = made.error()});
-        service->sink = std::move(*made);
+        service->sink      = std::move(*made);
+        const auto initial = service->sink->health();
+        if (std::ranges::any_of(initial.streams, [](const auto& stream) {
+                return stream.state == StreamStorageState::Failed;
+            }))
+            return std::unexpected(AuditServiceError{.issue = AuditServiceConfigError::StartupFailed, .startupCause = initial.lastIssue});
         service->consumer->setSink(service->sink);
         return service;
     }
@@ -92,7 +147,24 @@ public:
     [[nodiscard]] AuditServiceRegistration addRing(core::AuditRing<Capacity>& ring) {
         if (started)
             return AuditServiceRegistration::Started;
-        switch (consumer->addRing(ring)) {
+        if (!ring.hasValidIdentity()) {
+            (void)consumer->addRing(ring);
+            return AuditServiceRegistration::InvalidStream;
+        }
+        if (ring.identity() == ledgerIdentity) {
+            consumer->reportConfigurationError(AuditDrainStatus::LedgerIdentity);
+            return AuditServiceRegistration::LedgerIdentity;
+        }
+        if (consumer->hasRegisteredStream(ring.identity())) {
+            (void)consumer->addRing(ring);
+            return AuditServiceRegistration::DuplicateStream;
+        }
+        if (consumer->registeredRingCount() >= streamLimit) {
+            consumer->reportConfigurationError(AuditDrainStatus::Capacity);
+            return AuditServiceRegistration::Capacity;
+        }
+        const auto answer = consumer->addRing(ring);
+        switch (answer) {
             case AuditRingRegistration::Registered:
                 return AuditServiceRegistration::Registered;
             case AuditRingRegistration::InvalidStream:
@@ -107,50 +179,121 @@ public:
         started = true;
         if (closed)
             return {};
-        const auto result = consumer->drainOnce(recordBudget);
+        if (capacityPolicy == AuditCapacityPolicy::RelieveDeclared)
+            (void)sink->relieve();
+        const auto result = consumer->drainOnce(recordBudget, totalBudget);
         sink->tick();
-        const auto now = clock();
-        if (!lastAnchorAttempt || now - *lastAnchorAttempt >= anchorPeriod) {
-            for (const auto& stream : sink->health().streams)
-                (void)sink->advanceAnchor(stream.streamId);
-            lastAnchorAttempt = now;
+        const auto  now      = clock();
+        const auto  streams  = sink->health().streams;
+        std::size_t attempts = 0;
+        for (std::size_t visited = 0; visited < streams.size() && attempts < anchorBudget; ++visited) {
+            anchorCursor      %= streams.size();
+            const auto& stream = streams[anchorCursor];
+            anchorCursor       = (anchorCursor + 1) % streams.size();
+            if (stream.anchorBlocked || stream.durablePosition <= stream.anchoredPosition)
+                continue;
+            if (stream.durablePosition - stream.anchoredPosition < anchorRecordBound && stream.unanchoredSince
+                && now - *stream.unanchoredSince < anchorAgeBound)
+                continue;
+            const auto found = anchorAttempts.find(stream.streamId);
+            if (found != anchorAttempts.end() && now - found->second < anchorPeriod)
+                continue;
+            if (sink->advanceAnchor(stream.streamId))
+                anchorAttempts.erase(stream.streamId);
+            else
+                anchorAttempts[stream.streamId] = now;
+            ++attempts;
         }
         return result;
     }
 
     [[nodiscard]] AuditServiceHealth health() const {
-        return {.delivery = consumer->healthSnapshot(), .storage = sink->health()};
+        AuditServiceHealth result{.delivery = consumer->healthSnapshot(), .storage = sink->health()};
+        result.callbackFailures = callbackErrors->load(std::memory_order_relaxed);
+        for (const auto& stream : result.storage.streams) {
+            if (stream.hasPositionOrderViolation())
+                ++result.positionOrderViolations;
+            if (stream.isLedger)
+                continue;
+            result.unconfirmed += stream.unconfirmedCount();
+            result.unanchored  += stream.unanchoredCount();
+        }
+        return result;
     }
 
-    /** @brief Drain at most maxDrainPasses and close only after the quiescent rings are empty. */
+    /** @brief Drain at most maxDrainPasses (0 skips draining); close only after the quiescent rings are empty. */
     [[nodiscard]] AuditServiceStop stop(std::size_t maxDrainPasses = 1) {
-        started = true;
+        return stop(AuditStopOptions{.maxDrainPasses = maxDrainPasses, .timeBudget = std::nullopt});
+    }
+
+    /** @brief Soft deadline checked between synchronous phases; an external call can exceed it. */
+    [[nodiscard]] AuditServiceStop stop(AuditStopOptions options) {
+        if (options.timeBudget && *options.timeBudget <= std::chrono::nanoseconds::zero())
+            return {.closed = closed, .health = health(), .status = AuditStopStatus::InvalidBudget};
+        started            = true;
+        const auto begin   = clock();
+        const auto expired = [&] {
+            return options.timeBudget && clock() - begin >= *options.timeBudget;
+        };
         if (!closed) {
-            for (std::size_t pass = 0; pass < maxDrainPasses && consumer->healthSnapshot().pendingInRings != 0; ++pass)
+            for (std::size_t pass = 0; pass < options.maxDrainPasses && !expired() && consumer->healthSnapshot().pendingInRings != 0; ++pass)
                 (void)poll();
-            if (consumer->healthSnapshot().pendingInRings == 0) {
+            if (!expired() && consumer->healthSnapshot().pendingInRings == 0) {
                 sink->close();
                 closed = true;
             }
         }
-        return {.closed = closed, .health = health()};
+        auto snapshot = health();
+        auto status   = closed ? AuditStopStatus::Completed : AuditStopStatus::Pending;
+        if (closed
+            && (snapshot.unconfirmed != 0 || snapshot.unanchored != 0 || snapshot.positionOrderViolations != 0 || !snapshot.storage.integrity.empty()
+                || snapshot.delivery.reportedLosses != 0 || std::ranges::any_of(snapshot.storage.streams, [](const auto& stream) {
+                       return stream.state == StreamStorageState::Failed || stream.appendedPosition > stream.durablePosition
+                              || stream.durablePosition > stream.anchoredPosition;
+                   })))
+            status = AuditStopStatus::Degraded;
+        if (!closed && expired())
+            status = AuditStopStatus::DeadlineExceeded;
+        return {.closed = closed, .health = std::move(snapshot), .status = status, .elapsed = clock() - begin};
+    }
+
+    /** @brief Low-level consumer access. The reference is valid only during the service lifetime. */
+    [[nodiscard]] PersistingAuditSink& storageSink() noexcept {
+        return *sink;
     }
 
 private:
     explicit AuditService(const AuditServiceConfig& config)
         : consumer(std::make_shared<AuditSinkAdapter>()),
           recordBudget(config.maxRecordsPerRing),
+          totalBudget(config.maxAttemptsPerPoll),
+          anchorBudget(config.maxAnchorStreamsPerPoll),
+          streamLimit(config.storage.maxProducerStreams),
+          ledgerIdentity(config.storage.ledger ? config.storage.ledger->streamId : ""),
+          capacityPolicy(config.capacityPolicy),
+          anchorRecordBound(config.anchorRecordBound),
+          anchorAgeBound(config.anchorAgeBound),
           anchorPeriod(config.anchorPeriod),
           clock(config.storage.clock) {}
 
-    std::shared_ptr<AuditSinkAdapter>                      consumer;
-    std::shared_ptr<PersistingAuditSink>                   sink;
-    std::size_t                                            recordBudget;
-    std::chrono::nanoseconds                               anchorPeriod;
-    std::function<std::chrono::steady_clock::time_point()> clock;
-    std::optional<std::chrono::steady_clock::time_point>   lastAnchorAttempt;
-    bool                                                   started = false;
-    bool                                                   closed  = false;
+    std::shared_ptr<AuditSinkAdapter>                            consumer;
+    std::shared_ptr<PersistingAuditSink>                         sink;
+    std::size_t                                                  recordBudget;
+    std::size_t                                                  totalBudget;
+    std::size_t                                                  anchorBudget;
+    std::size_t                                                  streamLimit;
+    std::string                                                  ledgerIdentity;
+    AuditCapacityPolicy                                          capacityPolicy;
+    std::size_t                                                  anchorCursor = 0;
+    std::map<std::string, std::chrono::steady_clock::time_point> anchorAttempts;
+    std::shared_ptr<std::atomic<std::uint64_t>>                  callbackErrors = std::make_shared<std::atomic<std::uint64_t>>(0);
+    std::size_t                                                  anchorRecordBound;
+    std::chrono::nanoseconds                                     anchorAgeBound;
+    std::chrono::nanoseconds                                     anchorPeriod;
+    std::function<std::chrono::steady_clock::time_point()>       clock;
+
+    bool started = false;
+    bool closed  = false;
 };
 
 }  // namespace mddlog::adapter

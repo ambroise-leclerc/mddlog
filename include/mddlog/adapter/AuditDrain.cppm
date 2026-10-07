@@ -17,7 +17,9 @@ enum class AuditDrainStatus : std::uint8_t {
     SinkThrew,
     AcknowledgementFailed,
     InvalidStream,
-    DuplicateStream
+    DuplicateStream,
+    LedgerIdentity,
+    Capacity
 };
 
 /** @brief Whether addRing() registered a ring, or why it refused it. */
@@ -26,6 +28,7 @@ enum class AuditRingRegistration : std::uint8_t { Registered, InvalidStream, Dup
 struct AuditDrainResult {
     std::size_t      handedOff = 0;
     AuditDrainStatus status    = AuditDrainStatus::Completed;
+    std::size_t      attempted = 0;
 };
 
 /** @brief Atomic counters; values read together are not a single synchronized snapshot. */
@@ -37,6 +40,8 @@ struct AuditHealthSnapshot {
     std::uint64_t    takenUnacknowledged = 0;
     std::uint64_t    pendingInRings      = 0;
     AuditDrainStatus lastIssue           = AuditDrainStatus::Completed;
+    std::uint64_t    admitted            = 0;
+    std::uint64_t    ringFullRefusals    = 0;
 };
 
 /**
@@ -141,7 +146,7 @@ public:
             health.recordConfigurationError(AuditDrainStatus::InvalidStream);
             return AuditRingRegistration::InvalidStream;
         }
-        if (std::ranges::find(streamIds, ring.identity()) != streamIds.end()) {
+        if (hasRegisteredStream(ring.identity())) {
             health.recordConfigurationError(AuditDrainStatus::DuplicateStream);
             return AuditRingRegistration::DuplicateStream;
         }
@@ -154,6 +159,19 @@ public:
             throw;
         }
         return AuditRingRegistration::Registered;
+    }
+
+    /** @brief Registration metadata queries belong to the single consumer, like addRing(). */
+    [[nodiscard]] bool hasRegisteredStream(std::string_view identity) const noexcept {
+        return std::ranges::find(streamIds, identity) != streamIds.end();
+    }
+    [[nodiscard]] std::size_t registeredRingCount() const noexcept {
+        return ringList.size();
+    }
+
+    /** @brief Publish a host-side configuration refusal without registering or accessing a ring. */
+    void reportConfigurationError(AuditDrainStatus issue) noexcept {
+        health.recordConfigurationError(issue);
     }
 
     /** @brief Replace the audit sink; null means an observable missing-sink configuration. */
@@ -176,8 +194,9 @@ private:
                                     const auto view = ring.drain();
                                     if (view.empty())
                                         break;
-                                    const core::AuditEvent& event    = view.first().empty() ? view.second().front() : view.first().front();
-                                    bool                    accepted = false;
+                                    const core::AuditEvent& event = view.first().empty() ? view.second().front() : view.first().front();
+                                    ++result.attempted;
+                                    bool accepted = false;
                                     try {
                                         accepted = auditSink.accept(event);
                                     } catch (...) {
@@ -220,12 +239,19 @@ private:
                                 const auto read  = ring.acknowledgedCount();
                                 const auto write = ring.admittedCount();
                                 return write >= read ? write - read : std::uint64_t{0};
+                            },
+                            [&ring] {
+                                return ring.admittedCount();
+                            },
+                            [&ring] {
+                                return ring.refusalCount();
                             }});
     }
 
 public:
     /** @brief Attempt one bounded snapshot per ring and acknowledge only accepted events. */
-    [[nodiscard]] AuditDrainResult drainOnce(std::size_t maxRecordsPerRing = std::numeric_limits<std::size_t>::max()) {
+    [[nodiscard]] AuditDrainResult drainOnce(std::size_t maxRecordsPerRing = std::numeric_limits<std::size_t>::max(),
+                                             std::size_t maxAttempts       = std::numeric_limits<std::size_t>::max()) {
         if (!sink) {
             health.recordConfigurationError(AuditDrainStatus::MissingSink);
             return {.status = AuditDrainStatus::MissingSink};
@@ -235,8 +261,11 @@ public:
             return {.status = AuditDrainStatus::DisabledSink};
         }
         AuditDrainResult total;
-        for (auto& source : ringList) {
-            const auto one   = source.drain(*sink, health, maxRecordsPerRing);
+        for (std::size_t visited = 0; visited < ringList.size() && total.attempted < maxAttempts; ++visited) {
+            auto& source     = ringList[nextRing];
+            nextRing         = (nextRing + 1) % ringList.size();
+            const auto one   = source.drain(*sink, health, std::min(maxRecordsPerRing, maxAttempts - total.attempted));
+            total.attempted += one.attempted;
             total.handedOff += one.handedOff;
             if (total.status == AuditDrainStatus::Completed)
                 total.status = one.status;
@@ -248,7 +277,12 @@ public:
         std::uint64_t pending = 0;
         for (const auto& source : ringList)
             pending += source.pending();
-        return health.snapshot(pending);
+        auto result = health.snapshot(pending);
+        for (const auto& source : ringList) {
+            result.admitted         += source.admitted();
+            result.ringFullRefusals += source.refusals();
+        }
+        return result;
     }
 
     /** @brief Independent channel for a sink or host to report a discovered post-hand-off loss. */
@@ -260,8 +294,11 @@ private:
     struct RingSource {
         std::function<AuditDrainResult(sinks::AuditSink&, AuditHealth&, std::size_t)> drain;
         std::function<std::uint64_t()>                                                pending;
+        std::function<std::uint64_t()>                                                admitted;
+        std::function<std::uint64_t()>                                                refusals;
     };
 
+    std::size_t              nextRing = 0;
     std::vector<RingSource>  ringList;
     std::vector<std::string> streamIds;
     sinks::AuditSinkPtr      sink;
