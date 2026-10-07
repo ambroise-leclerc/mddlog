@@ -120,14 +120,15 @@ int main() try {
     }
     if (!(*made)->closeStream(stream))
         return 4;
-    medium.arm             = true;
-    const auto interrupted = (*made)->removeStream(stream);
+    const auto refusedBefore = (*made)->health().counters.retentionRefused;
+    medium.arm               = true;
+    const auto interrupted   = (*made)->removeStream(stream);
     if (rejectedAllocations.load() != 1 || interrupted.outcome != RetentionOutcome::ResourceLimit || interrupted.trimmedThrough == 0
-        || interrupted.segmentsReclaimed != 0 || trimCount(medium) != 1)
+        || interrupted.segmentsReclaimed != 0 || trimCount(medium) != 1 || (*made)->health().counters.retentionRefused != refusedBefore + 1)
         return 5;
     const auto retried = (*made)->removeStream(stream);
     if (retried.outcome != RetentionOutcome::Removed || retried.trimmedThrough != interrupted.trimmedThrough || retried.segmentsReclaimed == 0
-        || trimCount(medium) != 1)
+        || trimCount(medium) != 1 || (*made)->health().counters.retentionRefused != refusedBefore + 1)
         return 6;
     (*made)->close();
     return 0;

@@ -51,7 +51,8 @@ d’exhaustivité des entrées hostiles n’est revendiquée.
 VER-061 injecte un `bad_alloc` après la confirmation durable du trim, avant
 l’ancrage du registre et toute suppression. Le refus conserve `trimmedThrough` ;
 la nouvelle tentative reprend le trim confirmé sans écrire un second trim.
-Le slot de rapprochement est réservé avant l’écriture.
+Le slot de rapprochement est réservé avant l’écriture ; le refus mémoire incrémente
+`retentionRefused` une fois et la reprise réussie ne l’incrémente pas.
 
 ## Réserves
 

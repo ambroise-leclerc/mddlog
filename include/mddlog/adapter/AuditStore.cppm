@@ -1742,6 +1742,7 @@ private:
             }
             return result;
         } catch (const std::bad_alloc&) {
+            counters.retentionRefused.fetch_add(1, std::memory_order_relaxed);
             noteResourceLimit(AuditResourceIssue::MemoryUnavailable);
             return {.outcome = RetentionOutcome::ResourceLimit, .trimmedThrough = recordedTrim};
         }
