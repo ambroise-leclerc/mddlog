@@ -26,6 +26,9 @@ les observations concurrentes. Aucune désinscription dynamique n’est proposé
 Les refus d’identité invalide, dupliquée ou réservée au registre, ainsi que les refus
 de capacité, incrémentent `delivery.configurationErrors` et publient leur raison dans
 `lastIssue`. Ils n’inscrivent pas l’anneau et ne consomment pas de place producteur.
+L’adaptateur détient seul les inscriptions : le service consulte
+`hasRegisteredStream()` et `registeredRingCount()` pour les doublons et la limite.
+Ces requêtes de métadonnées appartiennent au consommateur unique.
 
 Le callback de pertes s’exécute sur le consommateur. Il ne doit pas réentrer dans le
 service ; ses captures doivent lui survivre. Ses exceptions sont isolées et comptées
@@ -60,8 +63,18 @@ inconnu : le flux est éligible immédiatement, même sous le seuil en nombre.
 Après une réponse perdue ou indisponible, le sink interroge `latest()` avant tout
 rejeu. Une ancre utilisable correspondant exactement à la revendication incertaine
 confirme l’ancrage ; une absence ou une position antérieure autorise une nouvelle
-tentative. Une divergence ou un retrait demeure une faute d’intégrité. Un refus
-explicite de `advance()` conserve son sens ADR-004 et ne devient pas un succès.
+tentative. Une divergence ou un retrait demeure une faute d’intégrité.
+La position d’une ancre plus ancienne n’est pas importée en santé : son digest n’a
+pas été rapproché du préfixe local. L’exposition reste donc conservatrice jusqu’à
+un rapprochement exact ou une nouvelle acceptation. `LatestAnswer` comporte
+actuellement quatre variants : ancre, retraite, absence et indisponibilité.
+Seules une ancre utilisable plus ancienne ou une `AnchorAbsent` explicite autorisent
+le rejeu ; une réponse non reconnue conserverait la revendication incertaine.
+La date `unanchoredSince` reste la plus ancienne date d’exposition connue tant
+qu’un écart subsiste, même après rapprochement partiel. Elle peut donc provoquer
+un ancrage anticipé ; elle n’est pas une date exacte du premier événement encore
+non ancré. La santé n’expose plus cette date quand l’écart est entièrement couvert.
+Un refus explicite de `advance()` conserve son sens ADR-004 et ne devient pas un succès.
 Une divergence bloque les tentatives suivantes pour cette instance, y compris à
 la fermeture ; `anchorBlocked` et la faute d’intégrité restent publiés. Une reprise
 exige une réconciliation explicite de l’hôte et une nouvelle session. Les fautes
@@ -100,16 +113,30 @@ la masquer par un compteur d’exposition non signé immense. Le sink publie les
 positions qu’il a confirmées et ancrées ; une ancre distante divergente ne les remplace pas.
 
 Après cessation et quiescence des producteurs, `stop(maxDrainPasses)` ou
-`stop(AuditStopOptions)` réalise les passages autorisés puis sync/close et ancrage
-quand les anneaux sont vides. Le rapport distingue `Completed`, `Pending`,
+`stop(AuditStopOptions)` réalise les passages autorisés puis demande la fermeture
+au sink quand les anneaux sont vides. Le sink synchronise les flux ; avec un registre,
+il tente aussi leurs ancrages et celui du registre. Sans registre, sa fermeture réalise
+un flush ; les positions confirmées à ce moment peuvent donc rester non ancrées,
+même avec un fournisseur configuré. Le rapport distingue `Completed`, `Pending`,
 `DeadlineExceeded`, `Degraded` et `InvalidBudget`. `closed` signifie fin du cycle de
 vie, indépendamment de la durabilité et de l’ancrage. Le backlog reste explicite et
 un arrêt partiel peut être réessayé. Une fermeture dégradée n’efface aucune perte. Son statut tient aussi compte des
 positions non confirmées ou non ancrées du registre, même sans événement producteur.
+Sans fournisseur d’ancrage, les positions durables non ancrées restent exposées et
+une fermeture propre avec de telles positions est `Degraded`. Ce statut exprime
+une preuve d’audit incomplète ; il ne signifie pas nécessairement une panne du support.
+`unconfirmed`, les pertes et les fautes permettent de distinguer ces situations.
+Un service vide sans registre ni données peut se fermer avec `Completed` sans témoin.
 Un appel sur un service fermé ne réexécute pas les I/O.
 `DeadlineExceeded` s’applique seulement à un arrêt encore ouvert. Une fermeture
 terminée conserve `Completed` ou `Degraded`, même si une phase synchrone lente
 dépasse le délai ; `elapsed` permet à l’hôte de constater ce dépassement.
+Si le délai expire après la dernière passe, même avec des anneaux désormais vides,
+la fermeture n’est pas commencée. Elle peut encore exiger une synchronisation et
+des appels au témoin ; un nouvel appel `stop()` sans ce délai peut la terminer.
+`stop(0)` sélectionne la surcharge en nombre de passages et ne tente aucun drain.
+Des événements en attente donnent `Pending` ; avec des anneaux vides, la fermeture
+est tentée. Zéro passage est autorisé, contrairement à un budget temporel nul.
 
 La limite temporelle est **souple**, vérifiée entre passages et avant fermeture.
 Un `sync`, une rétention ou un appel fournisseur synchrone peut la dépasser ; le

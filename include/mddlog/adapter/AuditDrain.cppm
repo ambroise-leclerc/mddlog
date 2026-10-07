@@ -146,7 +146,7 @@ public:
             health.recordConfigurationError(AuditDrainStatus::InvalidStream);
             return AuditRingRegistration::InvalidStream;
         }
-        if (std::ranges::find(streamIds, ring.identity()) != streamIds.end()) {
+        if (hasRegisteredStream(ring.identity())) {
             health.recordConfigurationError(AuditDrainStatus::DuplicateStream);
             return AuditRingRegistration::DuplicateStream;
         }
@@ -159,6 +159,14 @@ public:
             throw;
         }
         return AuditRingRegistration::Registered;
+    }
+
+    /** @brief Registration metadata queries belong to the single consumer, like addRing(). */
+    [[nodiscard]] bool hasRegisteredStream(std::string_view identity) const noexcept {
+        return std::ranges::find(streamIds, identity) != streamIds.end();
+    }
+    [[nodiscard]] std::size_t registeredRingCount() const noexcept {
+        return ringList.size();
     }
 
     /** @brief Publish a host-side configuration refusal without registering or accessing a ring. */

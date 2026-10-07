@@ -91,12 +91,19 @@ const speclab::Register fairness{"Every ring receives its budget and shutdown pr
                                                                      && service.storageSink().health().streams.size() == before.storage.streams.size(),
                                                                  "low-level access observes the service-owned storage");
                                                    checks.expect(before.delivery.pendingInRings == 6 && before.delivery.handedOff == 2, "backlog observable");
+                                                   const auto noDrain = service.stop(0);
+                                                   checks.expect(!noDrain.closed && noDrain.status == AuditStopStatus::Pending
+                                                                     && noDrain.health.delivery.pendingInRings == 6 && noDrain.health.delivery.handedOff == 2,
+                                                                 "stop(0) does not drain a pending backlog");
                                                    checks.expect(service.addRing(first) == AuditServiceRegistration::Started, "registration frozen");
                                                    const auto partial = service.stop(1);
                                                    checks.expect(!partial.closed && partial.health.delivery.pendingInRings == 4,
                                                                  "bounded stop leaves sink open");
                                                    const auto ended = service.stop(2);
                                                    checks.expect(ended.closed && ended.health.delivery.pendingInRings == 0, "retry drains remaining events");
+                                                   checks.expect(ended.status == AuditStopStatus::Degraded && ended.health.unconfirmed == 0
+                                                                     && ended.health.unanchored == 8 && ended.health.storage.integrity.empty(),
+                                                                 "clean durable close without a witness exposes incomplete anchoring");
                                                    checks.expect(ended.health.delivery.handedOff == 8 && ended.health.delivery.reportedLosses == 0,
                                                                  "no silent loss");
                                                    const auto repeated = service.stop();
@@ -302,13 +309,16 @@ const speclab::Register observers{
 class LostAnswerProvider final : public AnchorProvider {
 public:
     InMemoryAnchorProvider authority{"independent"};
-    bool                   loseAnswer = true;
-    std::size_t            advances   = 0;
+    bool                   loseAnswer               = true;
+    bool                   unavailableBeforeAdvance = false;
+    std::size_t            advances                 = 0;
     std::function<void()>  beforeAdvance;
     AdvanceAnswer          advance(const AnchorClaim& claim) override {
         if (beforeAdvance)
             beforeAdvance();
         ++advances;
+        if (unavailableBeforeAdvance)
+            return ProviderUnavailable{};
         auto result = authority.advance(claim);
         return std::exchange(loseAnswer, false) ? AdvanceAnswer{ProviderUnavailable{}} : result;
     }
@@ -346,6 +356,7 @@ const speclab::Register globalBudget{
                       auto& service = **made;
                       checks.expect(service.addRing(first) == AuditServiceRegistration::Registered, "first");
                       checks.expect(service.addRing(second) == AuditServiceRegistration::Registered, "second");
+                      checks.expect(service.addRing(first) == AuditServiceRegistration::DuplicateStream, "duplicate remains distinguished at capacity");
                       checks.expect(service.addRing(excess) == AuditServiceRegistration::Capacity, "bounded enrollment");
                       checks.expect(first.tryRecord(request()).wasAdmitted() && second.tryRecord(request()).wasAdmitted(), "admitted");
                       checks.expect(!first.tryRecord(request()).wasAdmitted(), "saturation visible");
@@ -518,6 +529,88 @@ const speclab::Register reconciliation{
                                         "no repeated calls or fault growth after divergence, including close");
                           checks.raise();
                       }
+                  })
+            .Then("absence and an older anchor permit retry without claiming partial verified coverage",
+                  [] {
+                      for (const bool olderAnchor : {false, true}) {
+                          speclab::core::Checks checks;
+                          InMemoryStorageMedium medium{24};
+                          LostAnswerProvider    provider;
+                          provider.loseAnswer               = false;
+                          provider.unavailableBeforeAdvance = true;
+                          auto now                          = std::chrono::steady_clock::time_point{};
+                          auto config                       = storageConfig();
+                          config.provider                   = &provider;
+                          config.clock                      = [&now] {
+                              return now;
+                          };
+                          AuditRing<2> ring{"older-or-absent"};
+                          auto         made = AuditService::create(medium, {.storage = config, .anchorPeriod = 10ms});
+                          checks.expect(made.has_value(), "created");
+                          checks.raise();
+                          auto& service = **made;
+                          checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered && ring.tryRecord(request()).wasAdmitted(), "enrolled");
+                          (void)service.poll();
+                          const auto firstClaim  = service.storageSink().durableClaim(ring.identity());
+                          const auto exposureAge = service.health().storage.streams.at(0).unanchoredSince;
+                          checks.expect(firstClaim.has_value() && exposureAge.has_value(), "confirmed first position exposed");
+                          checks.raise();
+                          checks.expect(ring.tryRecord(request()).wasAdmitted(), "second event");
+                          now += 10ms;
+                          (void)service.poll();
+                          checks.expect(provider.advances == 2 && provider.latestCalls == 1, "absence permits the second claim attempt");
+                          if (olderAnchor)
+                              checks.expect(std::holds_alternative<AnchorStamp>(provider.authority.advance(*firstClaim)), "witness now holds an older anchor");
+                          now += 10ms;
+                          (void)service.poll();
+                          const auto conservative = service.health();
+                          checks.expect(provider.advances == 3 && provider.latestCalls == 2, "reconciliation allows retry");
+                          checks.expect(conservative.unanchored == 2 && conservative.storage.streams.at(0).anchoredPosition == 0
+                                            && conservative.storage.streams.at(0).unanchoredSince == exposureAge,
+                                        "unverified older prefix does not reduce exposure or reset its age");
+                          checks.expect(conservative.storage.integrity.empty() && !conservative.storage.streams.at(0).anchorBlocked,
+                                        "absence and older anchor are not divergence");
+                          provider.unavailableBeforeAdvance = false;
+                          now                              += 10ms;
+                          (void)service.poll();
+                          const auto accepted = service.health();
+                          checks.expect(accepted.unanchored == 0 && accepted.storage.streams.at(0).anchoredPosition == 2
+                                            && !accepted.storage.streams.at(0).unanchoredSince,
+                                        "full acceptance confirms coverage and clears exposure age");
+                          checks.raise();
+                      }
+                  })
+            .Then("partial reconciliation preserves the earliest exposure age conservatively",
+                  [] {
+                      speclab::core::Checks checks;
+                      InMemoryStorageMedium medium{24};
+                      LostAnswerProvider    provider;
+                      auto                  now    = std::chrono::steady_clock::time_point{};
+                      auto                  config = storageConfig();
+                      config.provider              = &provider;
+                      config.clock                 = [&now] {
+                          return now;
+                      };
+                      AuditRing<2> ring{"partial-reconciliation"};
+                      auto         made = AuditService::create(medium, {.storage = config, .anchorPeriod = 10ms});
+                      checks.expect(made.has_value(), "created");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered && ring.tryRecord(request()).wasAdmitted(), "enrolled");
+                      (void)service.poll();
+                      const auto exposureAge = service.health().storage.streams.at(0).unanchoredSince;
+                      checks.expect(exposureAge.has_value(), "first exposure age known");
+                      checks.expect(ring.tryRecord(request()).wasAdmitted(), "second event");
+                      now += 10ms;
+                      (void)service.poll();
+                      const auto partial = service.health();
+                      checks.expect(partial.unanchored == 1 && partial.storage.streams.at(0).anchoredPosition == 1
+                                        && partial.storage.streams.at(0).unanchoredSince == exposureAge,
+                                    "matching first claim leaves an older conservative timestamp for the second record");
+                      (void)service.poll();
+                      checks.expect(service.health().unanchored == 0 && !service.health().storage.streams.at(0).unanchoredSince,
+                                    "next successful claim clears the age");
+                      checks.raise();
                   })
             .Execute();
     }};

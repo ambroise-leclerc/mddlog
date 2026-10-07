@@ -1377,12 +1377,19 @@ private:
                     publish(stream);
                     return false;
                 }
+                // An older anchor permits a retry, but its digest has not been matched to this
+                // local prefix. Keep the last locally verified anchored position and exposure age.
             } else if (std::holds_alternative<Retirement>(latest)) {
                 const IntegrityFault fault{.kind = IntegrityFaultKind::AnchorDiverged, .stream = stream.id, .position = stream.durable};
                 recordFaults(std::span{&fault, 1});
                 stream.anchorBlocked = true;
                 stream.uncertainAnchor.reset();
                 publish(stream);
+                return false;
+            } else if (!std::holds_alternative<AnchorAbsent>(latest)) {
+                // Only explicit absence or an older usable anchor permits replay. Keep uncertainty
+                // for an unrecognized answer if LatestAnswer is extended in the future.
+                counters.anchorsUnavailable.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
             stream.uncertainAnchor.reset();

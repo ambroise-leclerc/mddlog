@@ -955,7 +955,7 @@
     },
     {
       "id": "VER-046",
-      "title": "Réconciliation des réponses d’ancrage perdues et blocage après divergence",
+      "title": "Réconciliation des réponses d’ancrage, couverture prudente et blocage après divergence",
       "status": "coverage-existing",
       "controls": [
         "CTRL-004",

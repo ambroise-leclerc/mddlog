@@ -155,27 +155,17 @@ public:
             consumer->reportConfigurationError(AuditDrainStatus::LedgerIdentity);
             return AuditServiceRegistration::LedgerIdentity;
         }
-        if (std::ranges::find(identities, ring.identity()) != identities.end()) {
+        if (consumer->hasRegisteredStream(ring.identity())) {
             (void)consumer->addRing(ring);
             return AuditServiceRegistration::DuplicateStream;
         }
-        if (registered >= streamLimit) {
+        if (consumer->registeredRingCount() >= streamLimit) {
             consumer->reportConfigurationError(AuditDrainStatus::Capacity);
             return AuditServiceRegistration::Capacity;
         }
-        identities.emplace_back(ring.identity());
-        AuditRingRegistration answer = AuditRingRegistration::InvalidStream;
-        try {
-            answer = consumer->addRing(ring);
-        } catch (...) {
-            identities.pop_back();
-            throw;
-        }
-        if (answer != AuditRingRegistration::Registered)
-            identities.pop_back();
+        const auto answer = consumer->addRing(ring);
         switch (answer) {
             case AuditRingRegistration::Registered:
-                ++registered;
                 return AuditServiceRegistration::Registered;
             case AuditRingRegistration::InvalidStream:
                 return AuditServiceRegistration::InvalidStream;
@@ -231,7 +221,7 @@ public:
         return result;
     }
 
-    /** @brief Drain at most maxDrainPasses and close only after the quiescent rings are empty. */
+    /** @brief Drain at most maxDrainPasses (0 skips draining); close only after the quiescent rings are empty. */
     [[nodiscard]] AuditServiceStop stop(std::size_t maxDrainPasses = 1) {
         return stop(AuditStopOptions{.maxDrainPasses = maxDrainPasses, .timeBudget = std::nullopt});
     }
@@ -292,8 +282,6 @@ private:
     std::size_t                                                  totalBudget;
     std::size_t                                                  anchorBudget;
     std::size_t                                                  streamLimit;
-    std::size_t                                                  registered = 0;
-    std::vector<std::string>                                     identities;
     std::string                                                  ledgerIdentity;
     AuditCapacityPolicy                                          capacityPolicy;
     std::size_t                                                  anchorCursor = 0;

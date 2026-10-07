@@ -120,6 +120,9 @@ défaillant et arrêt dégradé. La rétention n’agit que sur déclaration ;
 les inversions de positions sont signalées sans sous-dépassement des compteurs,
 une divergence bloque l’ancrage de la session, et le délai ne masque pas la qualité
 d’une fermeture terminée.
+L’adaptateur est la source des inscriptions ; le service consulte son compteur et
+ses identités. Sans témoin, une fermeture durable peut rester dégradée par absence
+d’ancrage. Le rapprochement partiel conserve une couverture et un âge prudents.
 une instance échouée ne redémarre pas silencieusement. Le délai d’arrêt est souple et
 ne borne pas un appel externe synchrone. VER-044 intègre deux producteurs, le backend
 réel et un témoin sous UID séparé. Le [relevé](../../../docs/audit-service-validation.md)

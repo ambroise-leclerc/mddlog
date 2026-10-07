@@ -9,12 +9,16 @@ le logiciel vérifié ; ce relevé ne modifie pas l’acceptation de la base #12
 - VER-036–040 : contrats conservés, drain/arrêt (dont budget invalide), accès au stockage,
   flux inactif, support non qualifié,
   pertes et observateurs concurrents.
+  L’arrêt sans témoin conserve l’exposition non ancrée et `Degraded` ; `stop(0)`
+  laisse un backlog intact, sans fermer.
 - VER-045 : budget global, rotation et refus de saturation/enrôlement ; collisions
   avec le registre et capacité comptées en santé, sans drain des anneaux refusés.
 - La rotation est aussi vérifiée sur trois anneaux partiellement drainés avec un
   budget global d’une tentative.
 - VER-046 : réconciliation d’une acceptation dont la réponse est perdue, sans rejeu ;
   divergence ou retraite bloque les appels ultérieurs, même après croissance du flux.
+  Absence et ancre plus ancienne autorisent un rejeu sans réduire la couverture
+  publiée non vérifiée ; un rapprochement partiel conserve l’âge d’exposition prudent.
 - VER-047 : ancrage par âge sous le seuil en nombre ; fenêtre d’exposition publiée.
 - VER-048 : appel fournisseur simulé lent, dépassement du délai souple d’arrêt et reprise ;
   une fermeture terminée conserve sa qualité même après dépassement du délai.
@@ -66,6 +70,11 @@ retraite du témoin sans nouvelles tentatives, écarts de positions inversées e
 fermeture lente conservant `Completed`/`Degraded`. Les **208/208 CTest Clang**,
 **14/14 tests du service GCC** et **187/187 scénarios ASan/UBSan** passent après
 ces corrections. Les erreurs de budgets et seuils sont distinguées avant I/O.
+La revue des cas conservateurs complète VER-036/046 : fermeture sans témoin,
+`stop(0)`, ancre plus ancienne ou absente et âge conservé après rapprochement
+partiel. Après suppression de l’état d’inscription dupliqué dans le service,
+les **208/208 CTest Clang**, **14/14 tests du service GCC** et
+**187/187 scénarios ASan/UBSan** passent encore.
 
 ## Réserves et suites
 
