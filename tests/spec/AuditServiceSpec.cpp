@@ -290,7 +290,9 @@ const speclab::Register globalBudget{
                   [] {
                       speclab::core::Checks checks;
                       InMemoryStorageMedium medium{24};
-                      AuditRing<1>          first{"first"}, second{"second"}, excess{"third"};
+                      AuditRing<1>          first{"first"};
+                      AuditRing<1>          second{"second"};
+                      AuditRing<1>          excess{"third"};
                       LostAnswerProvider    provider;
                       auto                  config = storageConfig();
                       config.provider              = &provider;
@@ -546,7 +548,8 @@ const speclab::Register failedFairness{
                       speclab::core::Checks checks;
                       InMemoryStorageMedium medium{24};
                       medium.inject({.operation = InMemoryStorageMedium::Operation::Sync, .ordinal = 1, .effect = InMemoryStorageMedium::Effect::Fail});
-                      AuditRing<2> failed{"failed"}, healthy{"healthy"};
+                      AuditRing<2> failed{"failed"};
+                      AuditRing<2> healthy{"healthy"};
                       auto         made = AuditService::create(medium, {.storage = storageConfig(), .maxAttemptsPerPoll = 1});
                       checks.expect(made.has_value(), "created");
                       checks.raise();
