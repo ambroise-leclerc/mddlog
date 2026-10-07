@@ -171,3 +171,10 @@ Le [relevé](../../../docs/audit-resource-validation.md) sépare croissance born
 RSS et temps mesurés ; pas d’allocateur à quota ni de preuve WCET. Les backends
 personnalisés bornent leurs allocations internes selon leur contrat. La politique
 diagnostique sous surcharge de REQ-012 reste dans GAP-011 ; aucune revendication MCU.
+
+
+Le lot de clôture #116 complète VER-059/VER-060 : observateurs permis sous profils
+explicites, mesure des passes/arrêt sous saturation et retour du témoin, et refus
+de ressources conservé dans `Degraded` après fermeture. Le dernier critère logiciel
+de GAP-009 dispose ainsi de sa preuve de budget ; revue/fusion restent distinctes
+de la qualification et de l’acceptation système de GAP-015.

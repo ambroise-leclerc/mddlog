@@ -256,7 +256,11 @@ const speclab::Register observers{
                       speclab::core::Checks checks;
                       InMemoryStorageMedium medium{24};
                       AuditRing<16>         ring{"concurrent"};
-                      auto                  made = AuditService::create(medium, {.storage = storageConfig()});
+                      auto                  config        = storageConfig();
+                      config.resources.maxStreams         = 2;
+                      config.resources.maxRecords         = 64;
+                      config.resources.maxIntegrityFaults = 2;
+                      auto made                           = AuditService::create(medium, {.storage = config});
                       checks.expect(made.has_value(), "service created");
                       checks.raise();
                       auto& service = **made;
@@ -279,6 +283,18 @@ const speclab::Register observers{
                       std::thread             observer([&] {
                           while (observing.load(std::memory_order_acquire)) {
                               const auto health = service.health();
+                              if (health.storage.streams.size() > config.resources.maxStreams
+                                  || health.storage.integrity.size() > config.resources.maxIntegrityFaults
+                                  || health.storage.resourceIssue != AuditResourceIssue::None)
+                                  invalidSnapshot.store(true, std::memory_order_relaxed);
+                              (void)service.storageSink().health();
+                              const auto claim = service.storageSink().durableClaim(ring.identity());
+                              if (claim && claim->position > service.storageSink().durablePosition(ring.identity()))
+                                  invalidSnapshot.store(true, std::memory_order_relaxed);
+                              const auto acknowledged = ring.acknowledgedCount();
+                              if (acknowledged > ring.admittedCount())
+                                  invalidSnapshot.store(true, std::memory_order_relaxed);
+                              (void)ring.refusalCount();
                               for (const auto& stream : health.storage.streams) {
                                   if (stream.durablePosition > stream.appendedPosition)
                                       invalidSnapshot.store(true, std::memory_order_relaxed);
@@ -879,4 +895,43 @@ const speclab::Register failedFairness{
             .Execute();
     }};
 
+}  // namespace
+
+namespace {
+const speclab::Register resourceStop{
+    "Service shutdown preserves a resource refusal even when every stored record is anchored",
+    "unit",
+    [] {
+        return speclab::Test("audit-service-resource-stop")
+            .Then("advanced consumer use cannot turn an exhausted history into Completed",
+                  [] {
+                      speclab::core::Checks  checks;
+                      InMemoryStorageMedium  medium{24};
+                      InMemoryAnchorProvider provider{"witness"};
+                      AuditRing<2>           ring{"producer/1"};
+                      auto                   config = storageConfig();
+                      config.provider               = &provider;
+                      config.maxProducerStreams     = 1;
+                      config.resources.maxStreams   = 2;
+                      config.ledger                 = LedgerConfig{.streamId = "ledger/1"};
+                      auto made                     = AuditService::create(medium, {.storage = config});
+                      checks.expect(made.has_value(), "service starts inside profile");
+                      checks.raise();
+                      auto& service = **made;
+                      checks.expect(service.addRing(ring) == AuditServiceRegistration::Registered && ring.tryRecord(request()).wasAdmitted(), "one producer");
+                      (void)service.poll();
+                      checks.expect(service.storageSink().closeStream(ring.identity()), "ended producer remains in history");
+                      mddlog::core::AuditEvent beyond;
+                      checks.expect(beyond.assign(request(), "producer/2", 1).wasAdmitted(), "low-level fixture event");
+                      checks.expect(!service.storageSink().accept(beyond), "new historical identity refused");
+                      const auto stopped = service.stop();
+                      checks.expect(stopped.closed && stopped.status == AuditStopStatus::Degraded
+                                        && stopped.health.storage.resourceIssue == AuditResourceIssue::Streams,
+                                    "resource refusal retained in stop quality");
+                      checks.expect(stopped.health.delivery.pendingInRings == 0 && stopped.health.unconfirmed == 0 && stopped.health.unanchored == 0,
+                                    "resource cause remains distinguishable from backlog or missing confirmation");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 }  // namespace

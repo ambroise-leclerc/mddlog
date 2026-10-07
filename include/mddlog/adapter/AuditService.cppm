@@ -246,8 +246,9 @@ public:
         auto snapshot = health();
         auto status   = closed ? AuditStopStatus::Completed : AuditStopStatus::Pending;
         if (closed
-            && (snapshot.unconfirmed != 0 || snapshot.unanchored != 0 || snapshot.positionOrderViolations != 0 || !snapshot.storage.integrity.empty()
-                || snapshot.delivery.reportedLosses != 0 || std::ranges::any_of(snapshot.storage.streams, [](const auto& stream) {
+            && (snapshot.storage.resourceIssue != AuditResourceIssue::None || snapshot.unconfirmed != 0 || snapshot.unanchored != 0
+                || snapshot.positionOrderViolations != 0 || !snapshot.storage.integrity.empty() || snapshot.delivery.reportedLosses != 0
+                || std::ranges::any_of(snapshot.storage.streams, [](const auto& stream) {
                        return stream.state == StreamStorageState::Failed || stream.appendedPosition > stream.durablePosition
                               || stream.durablePosition > stream.anchoredPosition;
                    })))
