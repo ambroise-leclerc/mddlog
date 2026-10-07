@@ -154,3 +154,20 @@ UID et des processus distincts avec AuditService, backend réel et checkpoint du
 Le protocole v1 borne les frames/inventaires, sans budget temporel de fsync ; le
 profil et ses réserves sont dans la campagne. GAP-008 reste ouvert pour acceptation
 et qualification physique, pas pour une implémentation du service encore absente.
+
+## Ressources déclarées (#117)
+
+REQ-017 et CTRL-016 ajoutent `AuditResourceLimits` aux configurations de stockage
+et de vérification. Le [profil et contrat](../../../docs/audit-resource-budgets.md)
+distingue volume, cardinalités, chunks, travail par lecture et nombre d’appels au témoin.
+Les métadonnées sont contrôlées avant la première lecture de données ; le fournisseur
+et le checkpoint sont contrôlés avant croissance des inventaires du lecteur.
+Le rapport interrompu expose son motif et écarte les verdicts partiels ; le checkpoint
+candidat n’est publié qu’après une passe sans refus de ressources. La reprise ne
+transforme pas un historique hors profil en origin, et la rétention ne supprime rien
+sur cette base. Les défauts demeurent finis et configurables dans l’adaptateur.
+VER-054–059 portent limites, mémoire, historique et équivalence du corpus existant.
+Le [relevé](../../../docs/audit-resource-validation.md) sépare croissance bornée,
+RSS et temps mesurés ; pas d’allocateur à quota ni de preuve WCET. Les backends
+personnalisés bornent leurs allocations internes selon leur contrat. La politique
+diagnostique sous surcharge de REQ-012 reste dans GAP-011 ; aucune revendication MCU.

@@ -6,6 +6,7 @@
  */
 #ifndef MDDLOG_TESTS_FRAMEWORK_AUDITLOGRIG_HPP
 #define MDDLOG_TESTS_FRAMEWORK_AUDITLOGRIG_HPP
+#include "AuditReportComparison.hpp"
 
 namespace mddlog::spec::auditlog {
 
@@ -149,8 +150,13 @@ struct Rig {
 
 /** @brief A reader's full report, with a fresh retained position unless one is given. */
 [[nodiscard]] inline LogReport readLog(Rig& rig, RetainedPosition& retained) {
-    LogVerifier verifier{rig.medium, rig.provider, retained};
-    return verifier.verify();
+    RetainedPosition candidate = retained;
+    const auto       report    = LogVerifier{rig.medium, rig.provider, retained}.verify();
+    VerifierConfig   chunked;
+    chunked.resources.readChunkBytes = 17;
+    const auto comparison            = LogVerifier{rig.medium, rig.provider.inner, candidate, chunked}.verify();
+    compareAuditReports(report, comparison);
+    return report;
 }
 [[nodiscard]] inline LogReport readLog(Rig& rig) {
     RetainedPosition retained;

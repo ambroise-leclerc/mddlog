@@ -3,6 +3,7 @@
 export module mddlog.adapter.auditanchor;
 
 import std;
+export import mddlog.adapter.auditresources;
 import mddlog.core.auditevent;
 export import mddlog.adapter.sha256;
 export import mddlog.adapter.auditcanonical;
@@ -126,6 +127,100 @@ public:
     [[nodiscard]] virtual RetireAnswer  retire(std::string_view streamId, std::uint64_t position) = 0;
     [[nodiscard]] virtual LatestAnswer  latest(std::string_view streamId)                         = 0;
     [[nodiscard]] virtual StreamsAnswer streams()                                                 = 0;
+};
+
+/** @brief Bounds read-side provider work and the inventories accepted from a provider. */
+class ResourceAnchorProvider final : public AnchorProvider {
+public:
+    explicit ResourceAnchorProvider(AnchorProvider& source, AuditResourceLimits declared = {}) : inner(&source), limits(declared) {
+        if (!limits.valid())
+            error = AuditResourceIssue::InvalidLimits;
+    }
+    [[nodiscard]] AdvanceAnswer advance(const AnchorClaim& claim) override {
+        return inner->advance(claim);
+    }
+    [[nodiscard]] RetireAnswer retire(std::string_view id, std::uint64_t position) override {
+        return inner->retire(id, position);
+    }
+    [[nodiscard]] LatestAnswer latest(std::string_view id) override {
+        if (id.size() > limits.maxProviderTextBytes) {
+            error = AuditResourceIssue::ProviderTextBytes;
+            return ProviderUnavailable{};
+        }
+        if (!allowCall())
+            return ProviderUnavailable{};
+        try {
+            auto          answer = inner->latest(id);
+            const Anchor* anchor = std::get_if<Anchor>(&answer);
+            if (const auto* retirement = std::get_if<Retirement>(&answer))
+                anchor = &retirement->finalAnchor;
+            if (anchor != nullptr && !boundedText(*anchor))
+                return ProviderUnavailable{};
+            return answer;
+        } catch (const std::bad_alloc&) {
+            error = AuditResourceIssue::MemoryUnavailable;
+            return ProviderUnavailable{};
+        }
+    }
+    [[nodiscard]] StreamsAnswer streams() override {
+        if (!allowCall())
+            return ProviderUnavailable{};
+        try {
+            auto answer = inner->streams();
+            if (const auto* listing = std::get_if<ProviderListing>(&answer); listing != nullptr && listing->entries.size() > limits.maxProviderEntries) {
+                error = AuditResourceIssue::ProviderEntries;
+                return ProviderUnavailable{};
+            }
+            if (const auto* listing = std::get_if<ProviderListing>(&answer)) {
+                if (listing->providerId.size() > limits.maxProviderTextBytes) {
+                    error = AuditResourceIssue::ProviderTextBytes;
+                    return ProviderUnavailable{};
+                }
+                for (const auto& entry : listing->entries) {
+                    const Anchor& anchor = std::holds_alternative<Anchor>(entry) ? std::get<Anchor>(entry) : std::get<Retirement>(entry).finalAnchor;
+                    if (!boundedText(anchor))
+                        return ProviderUnavailable{};
+                }
+            }
+            return answer;
+        } catch (const std::bad_alloc&) {
+            error = AuditResourceIssue::MemoryUnavailable;
+            return ProviderUnavailable{};
+        }
+    }
+    void resetBudget() noexcept {
+        count = 0;
+        error = limits.valid() ? AuditResourceIssue::None : AuditResourceIssue::InvalidLimits;
+    }
+    [[nodiscard]] AuditResourceIssue resourceIssue() const noexcept {
+        return error;
+    }
+    [[nodiscard]] std::size_t calls() const noexcept {
+        return count;
+    }
+
+private:
+    bool boundedText(const Anchor& anchor) noexcept {
+        if (anchor.streamId.size() > limits.maxProviderTextBytes || anchor.providerId.size() > limits.maxProviderTextBytes) {
+            error = AuditResourceIssue::ProviderTextBytes;
+            return false;
+        }
+        return true;
+    }
+    bool allowCall() noexcept {
+        if (error != AuditResourceIssue::None)
+            return false;
+        if (count == limits.maxProviderCalls) {
+            error = AuditResourceIssue::ProviderCalls;
+            return false;
+        }
+        ++count;
+        return true;
+    }
+    AnchorProvider*     inner;
+    AuditResourceLimits limits;
+    AuditResourceIssue  error = AuditResourceIssue::None;
+    std::size_t         count = 0;
 };
 
 /**

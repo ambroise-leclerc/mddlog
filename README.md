@@ -213,7 +213,7 @@ pour le dispositif et son profil réel.
 - **Livré (v0.2.0) :** admission d'audit bornée, séquence par flux, refus explicite et transmission avec santé ([ADR-002](docs/adr/ADR-002-regulatory-audit-event-model.md) ; épique [#9](https://github.com/ambroise-leclerc/mddlog/issues/9)).
 - **Livré (v0.2.0) :** registre de sinks synchronisé, consommateur de transport borné et journal texte, avec WebFront comme consommateur de référence ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md) ; épique [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Livré (v0.2.0), preuves en revue :** confirmation durable sur un support éligible, détection d'altération relative à un ancrage indépendant, redémarrage, rotation et rétention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md) ; épique [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). L'acceptation de ces preuves est une décision de revue distincte.
-- **Livré (v0.3.0) :** contextes et liaisons de diagnostic/audit, filtrage paresseux et usages vérifiés ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). L’intégration du composant local est acceptée ; application indépendante #122, budgets #117, robustesse #120 et gel #121 restent ouverts.
+- **Livré (v0.3.0) :** contextes et liaisons de diagnostic/audit, filtrage paresseux et usages vérifiés ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). L’intégration du composant local est acceptée ; application indépendante #122, robustesse #120 et gel #121 restent ouverts ; les [budgets logiciels #117](docs/audit-resource-budgets.md) sont proposés pour revue.
 - **Implémenté, en revue (#114) :** support fichiers Linux optionnel, suite commune de conformité et exemple de réouverture. Qualification matérielle, campagnes de coupure et clôture de #114 restent ouvertes ([contrat](docs/file-storage.md)).
 - **Différé :** signature et gestion des clés, format d'export ([ADR-004, décision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
@@ -248,3 +248,12 @@ Les tests récupèrent une révision figée de [SpecLab](https://github.com/ambr
 ## Licence et participation
 
 mddlog est proposé sous la [Licence publique de l'Union européenne 1.2](LICENSE) ou sous conditions commerciales séparées ; voir [LICENSING.md](LICENSING.md). [CONTRIBUTING.md](CONTRIBUTING.md) décrit le processus de contribution sur invitation et les règles de revue. Pour une question ou un défaut, utilisez les [issues GitHub](https://github.com/ambroise-leclerc/mddlog/issues).
+
+Les lecteurs et la reprise d’audit acceptent des limites centralisées dans
+`StorageConfig::resources` et `VerifierConfig::resources`. Les inventaires, volumes,
+chunks, records, identités historiques et appels au fournisseur sont plafonnés ;
+un refus de ressources produit un rapport explicitement incomplet et conserve
+le checkpoint du lecteur. Voir les [budgets](docs/audit-resource-budgets.md) et le
+[relevé de validation](docs/audit-resource-validation.md). Le profil logiciel Linux
+x86_64 mesuré ne constitue ni un WCET, ni une revendication MCU, ni une qualification
+physique de durabilité.

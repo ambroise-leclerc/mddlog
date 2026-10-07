@@ -63,3 +63,10 @@ par flux/autorité. La propriété privée du state du service et du lecteur s'e
 VER-044 ; l'interface du producteur et la séparation du cœur ne changent pas. La garde
 persiste au-delà des redémarrages indépendants ; la qualification/acceptation du profil
 cible demeure dans GAP-008/#122.
+
+Le lot #117 borne les lecteurs avec REQ-017/CTRL-016 et VER-054–059 : inventaire avant
+lectures, chunks, volumes et cardinalités finis, budget fournisseur global et checkpoint
+candidat. Le [profil Linux x86_64](../../../docs/audit-resource-budgets.md) conserve
+une image plafonnée du journal ; il ne garantit pas une mémoire constante ou un WCET.
+Les autres plateformes doivent mesurer leur propre profil avant de revendiquer ces
+budgets. La qualification indépendante reste en GAP-015.

@@ -187,6 +187,10 @@ struct LogReport {
     std::vector<BoundaryNote> notes;
     /** @brief The medium could not be listed or a segment could not be read: records may be missing for that reason alone. */
     bool mediumUnreadable = false;
+    /** @brief A resource refusal discards partial verdicts and leaves the checkpoint unchanged. */
+    AuditResourceIssue resourceIssue = AuditResourceIssue::None;
+    AuditResourceUsage resourceUsage;
+    std::size_t        providerCalls = 0;
 
     [[nodiscard]] const StreamBoundaryReport* find(std::string_view id) const {
         const auto found = std::ranges::find_if(streams, [&](const StreamBoundaryReport& item) {
@@ -222,25 +226,64 @@ struct LogReport {
  */
 class LogVerifier {
 public:
+    ~LogVerifier()                             = default;
+    LogVerifier(const LogVerifier&)            = delete;
+    LogVerifier& operator=(const LogVerifier&) = delete;
+    LogVerifier(LogVerifier&&)                 = delete;
+    LogVerifier& operator=(LogVerifier&&)      = delete;
+
     LogVerifier(StorageMedium& storage, AnchorProvider& anchorProvider, RetainedPosition& retainedPosition, VerifierConfig verifierConfig = {}) noexcept
-        : medium(&storage), provider(&anchorProvider), retained(&retainedPosition), config(verifierConfig) {}
+        : boundedProvider(anchorProvider, verifierConfig.resources), medium(&storage), retained(&retainedPosition), config(verifierConfig) {}
 
     [[nodiscard]] LogReport verify() {
-        const LogAnalysis log = LogAnalysis::read(*medium);
-        LogReport         out;
-        out.mediumUnreadable = log.image().unreadable();
-        AnchorVerifier anchors{*provider, *retained, config};
-
-        for (const auto& [id, ev] : log.streams())
-            out.streams.push_back(verifyOne(log, ev, anchors, out.notes));
-
-        std::vector<std::string> accounted;
-        for (const auto& [id, ev] : log.streams())
-            accounted.push_back(id);
-        out.unlisted = anchors.verifyUnlisted(accounted);
-
-        boundaries(log, out);
-        return out;
+        LogReport out;
+        boundedProvider.resetBudget();
+        try {
+            const LogAnalysis log = LogAnalysis::read(*medium, config.resources);
+            out.resourceIssue     = log.resourceIssue();
+            out.resourceUsage     = log.image().resourceUsage();
+            out.mediumUnreadable  = log.image().unreadable();
+            if (out.resourceIssue != AuditResourceIssue::None)
+                return out;
+            if (retained->allAnchors().size() > config.resources.maxProviderEntries || retained->allHeads().size() > config.resources.maxProviderEntries) {
+                out.resourceIssue = AuditResourceIssue::ProviderEntries;
+                return out;
+            }
+            const auto textBounded = [&](const auto& entry) {
+                return entry.first.size() <= config.resources.maxProviderTextBytes;
+            };
+            if (!std::ranges::all_of(retained->allHeads(), textBounded) || !std::ranges::all_of(retained->allAnchors(), textBounded)) {
+                out.resourceIssue = AuditResourceIssue::ProviderTextBytes;
+                return out;
+            }
+            RetainedPosition candidate = *retained;
+            AnchorVerifier   anchors   = AnchorVerifier::withSharedBudget(boundedProvider, candidate, config);
+            for (const auto& [id, ev] : log.streams())
+                out.streams.push_back(verifyOne(log, ev, anchors, out.notes));
+            std::vector<std::string> accounted;
+            for (const auto& [id, ev] : log.streams())
+                accounted.push_back(id);
+            out.unlisted = anchors.verifyUnlisted(accounted);
+            boundaries(log, out);
+            out.providerCalls = boundedProvider.calls();
+            out.resourceIssue = boundedProvider.resourceIssue();
+            if (out.resourceIssue == AuditResourceIssue::None)
+                out.resourceIssue = anchors.resourceIssue();
+            if (out.resourceIssue != AuditResourceIssue::None) {
+                out.streams.clear();
+                out.unlisted.clear();
+                out.notes.clear();
+                return out;
+            }
+            *retained = std::move(candidate);
+            return out;
+        } catch (const std::bad_alloc&) {
+            out.streams.clear();
+            out.unlisted.clear();
+            out.notes.clear();
+            out.resourceIssue = AuditResourceIssue::MemoryUnavailable;
+            return out;
+        }
     }
 
 private:
@@ -379,7 +422,7 @@ private:
      * trim: the stream is Incomplete, never Retired on the strength of a rotation's trim.
      */
     [[nodiscard]] StreamReport removed(const LogAnalysis& log, const StreamEvaluation& ev, AnchorVerifier& anchors, std::vector<BoundaryNote>& notes) {
-        const LatestAnswer latest = provider->latest(ev.id);
+        const LatestAnswer latest = boundedProvider.latest(ev.id);
         const TrimRecord   trim   = ev.trim.value_or(TrimRecord{});
         const auto         note   = [&](BoundaryKind kind, std::uint64_t position, std::uint64_t second) {
             notes.push_back(makeBoundaryNote(kind, ev.id, position, second, trim.ledger, trim.ledgerSequence));
@@ -507,7 +550,7 @@ private:
                 return ev->trim.value_or(TrimRecord{}).digest == *citation.digest ? matched : notReproduced;
             return ev->checkedThrough < *citation.position ? notReproduced : notCheckable;
         }
-        if (const auto latest = provider->latest(citation.target); const auto* retirement = std::get_if<Retirement>(&latest)) {
+        if (const auto latest = boundedProvider.latest(citation.target); const auto* retirement = std::get_if<Retirement>(&latest)) {
             const Anchor& finalAnchor = retirement->finalAnchor;
             return finalAnchor.position == *citation.position && finalAnchor.digest == *citation.digest ? matched : notReproduced;
         }
@@ -533,10 +576,10 @@ private:
         out.notes.push_back(note);
     }
 
-    StorageMedium*    medium;
-    AnchorProvider*   provider;
-    RetainedPosition* retained;
-    VerifierConfig    config;
+    ResourceAnchorProvider boundedProvider;
+    StorageMedium*         medium;
+    RetainedPosition*      retained;
+    VerifierConfig         config;
 };
 
 }  // namespace mddlog::adapter

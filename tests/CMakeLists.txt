@@ -114,6 +114,7 @@ add_executable(mddlog_specs
     spec/AuditGeneratedRecoverySpec.cpp
     spec/AuditScenarioSpec.cpp
     spec/AuditDrainSpec.cpp
+    spec/AuditResourceSpec.cpp
     spec/AuditServiceSpec.cpp
     spec/AuditCanonicalSpec.cpp
     spec/AuditAnchorSpec.cpp
@@ -216,3 +217,27 @@ if(TARGET mddlog_audit_application)
     add_test(NAME audit.application COMMAND mddlog_audit_application)
     set_tests_properties(audit.application PROPERTIES LABELS "integration")
 endif()
+
+# Reproducible corpus and resource measurements (#117), also usable against v0.2.
+add_executable(mddlog_resource_bench bench/AuditResourcesBench.cpp)
+target_link_libraries(mddlog_resource_bench PRIVATE mddlog::mddlog)
+set_target_properties(mddlog_resource_bench PROPERTIES CXX_MODULE_STD ON)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(mddlog_host_resource_bench bench/AuditHostResourcesBench.cpp)
+    target_link_libraries(mddlog_host_resource_bench PRIVATE mddlog::mddlog)
+    set_target_properties(mddlog_host_resource_bench PROPERTIES CXX_MODULE_STD ON)
+endif()
+add_executable(mddlog_service_resource_bench bench/AuditServiceResourcesBench.cpp)
+target_link_libraries(mddlog_service_resource_bench PRIVATE mddlog::mddlog)
+set_target_properties(mddlog_service_resource_bench PROPERTIES CXX_MODULE_STD ON)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_test(NAME audit.service.resourceProfile COMMAND mddlog_service_resource_bench)
+    set_tests_properties(audit.service.resourceProfile PROPERTIES LABELS "integration" TIMEOUT 60)
+endif()
+# Keep replacement allocation functions out of the shared scenario runner.
+add_executable(mddlog_retention_allocation spec/AuditRetentionAllocation.cpp)
+target_link_libraries(mddlog_retention_allocation PRIVATE mddlog::mddlog)
+set_target_properties(mddlog_retention_allocation PROPERTIES CXX_MODULE_STD ON)
+add_test(NAME audit.retention.allocation COMMAND mddlog_retention_allocation)
+set_tests_properties(audit.retention.allocation PROPERTIES LABELS "storage;integration" TIMEOUT 30)

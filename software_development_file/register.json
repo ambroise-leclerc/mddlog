@@ -110,7 +110,7 @@
       "status": "open",
       "issue": 117,
       "owner": "Ambroise Leclerc",
-      "closure": "Budgets fixés sur le profil puis mesurés sous charge, y compris archive et reprise."
+      "closure": "Limites de lecture/reprise/rétention, refus explicites, checkpoint candidat et plafonds d’historique implémentés en #117. Profil Linux x86_64 Clang/libc++ 21 Release et comparaison v0.2 : docs/audit-resource-budgets.md et docs/audit-resource-validation.md, VER-054–059. Livré pour revue ; clôture après revue/CI du lot, sans nouvelle acceptation système ou WCET. Pilotage observé et budgets complétés dans le lot de clôture #116 ; qualification applicative indépendante en #122."
     },
     {
       "id": "GAP-011",
@@ -394,6 +394,21 @@
       ],
       "implementation": [
         "include/mddlog/adapter/Logger.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-016",
+      "title": "Inventaires et travail de lecture plafonnés, refus explicites et checkpoint candidat",
+      "status": "implemented",
+      "design": [
+        "docs/audit-resource-budgets.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditResources.cppm",
+        "include/mddlog/adapter/AuditMedium.cppm",
+        "include/mddlog/adapter/AuditLog.cppm",
+        "include/mddlog/adapter/AuditLogVerifier.cppm",
+        "include/mddlog/adapter/AuditStore.cppm"
       ]
     }
   ],
@@ -1058,6 +1073,117 @@
       "scenario": "audit-service-rejected-fairness",
       "evidence": "docs/audit-service-validation.md",
       "limits": "Double de support borné ; pas de qualification électrique ni preuve temporelle du profil."
+    },
+    {
+      "id": "VER-054",
+      "title": "Métadonnées hostiles refusées avant lecture",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-inventory",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Profil logiciel Linux x86_64 ; limites avant croissance des structures détenues par le lecteur. Allocations internes des backends personnalisés sous contrat hôte ; aucune preuve WCET ou physique."
+    },
+    {
+      "id": "VER-055",
+      "title": "Chunks et limites exactes sans promotion de verdict",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-chunks-records",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Profil logiciel Linux x86_64 ; limites avant croissance des structures détenues par le lecteur. Allocations internes des backends personnalisés sous contrat hôte ; aucune preuve WCET ou physique."
+    },
+    {
+      "id": "VER-056",
+      "title": "Budget fournisseur et checkpoint inchangé",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-provider-checkpoint",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Profil logiciel Linux x86_64 ; limites avant croissance des structures détenues par le lecteur. Allocations internes des backends personnalisés sous contrat hôte ; aucune preuve WCET ou physique."
+    },
+    {
+      "id": "VER-057",
+      "title": "Historique fermé et reprise sans nouvel origin hors profil",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-consumer-history",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Profil logiciel Linux x86_64 ; limites avant croissance des structures détenues par le lecteur. Allocations internes des backends personnalisés sous contrat hôte ; aucune preuve WCET ou physique."
+    },
+    {
+      "id": "VER-058",
+      "title": "Reprise avec registre de fautes plafonné",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-fault-budget",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Profil logiciel Linux x86_64 ; limites avant croissance des structures détenues par le lecteur. Allocations internes des backends personnalisés sous contrat hôte ; aucune preuve WCET ou physique."
+    },
+    {
+      "id": "VER-059",
+      "title": "Mesures reproductibles v0.2 et profil ressources, équivalence sur le corpus de reprise/rétention",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016",
+        "CTRL-004",
+        "CTRL-007"
+      ],
+      "test": "scripts/run-resource-bench.py",
+      "scenario": null,
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Trois répétitions sur le tuple déclaré ; RSS et enveloppes de régression, pas WCET. Contexte/formatage et fsync mesurés avec messages et support déclarés ; qualification indépendante en #122."
+    },
+    {
+      "id": "VER-061",
+      "title": "Allocation défaillante après un trim durable : position conservée et rejeu sans second trim",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016",
+        "CTRL-007"
+      ],
+      "test": "tests/spec/AuditRetentionAllocation.cpp",
+      "scenario": null,
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Injection isolée après la confirmation du trim, avant ancrage du registre et suppression ; preuve logicielle, sans qualification physique."
+    },
+    {
+      "id": "VER-062",
+      "title": "Vérificateurs non transférables, budget partagé unique et remise à zéro des lots autonomes",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-verifier-lifetime-budget",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Assertions de type et doubles logiciels ; aucun délai externe maximal ou qualification physique déduit."
+    },
+    {
+      "id": "VER-063",
+      "title": "Refus de session au démarrage sans diagnostic de segment illisible fabriqué",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-startup-refusal",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Assertions de type et doubles logiciels ; aucun délai externe maximal ou qualification physique déduit."
     }
   ],
   "risks": [
@@ -1165,7 +1291,8 @@
       "controls": [
         "CTRL-003",
         "CTRL-009",
-        "CTRL-010"
+        "CTRL-010",
+        "CTRL-016"
       ],
       "gaps": [
         "GAP-010",
@@ -1523,13 +1650,17 @@
     },
     {
       "id": "REQ-012",
-      "text": "La lecture d’archives et le diagnostic SimpleLogger sous surcharge respectent des budgets mémoire et temporels mesurés sur le profil retenu.",
+      "text": "Les budgets de lecture d’archives de REQ-017 sont implémentés ; le diagnostic SimpleLogger sous surcharge reste à borner et mesurer sur le profil retenu en #118.",
       "status": "planned",
       "risks": [
         "RISK-007"
       ],
-      "controls": [],
-      "verifications": [],
+      "controls": [
+        "CTRL-016"
+      ],
+      "verifications": [
+        "VER-059"
+      ],
       "gaps": [
         "GAP-010",
         "GAP-011"
@@ -1597,6 +1728,29 @@
       "gaps": [
         "GAP-017"
       ]
+    },
+    {
+      "id": "REQ-017",
+      "text": "La lecture, reprise et rétention de l’audit utilisent des limites positives de volume, cardinalité et travail ; un dépassement ou refus mémoire reste incomplet et ne fait pas avancer le checkpoint. Les budgets du profil déclaré sont mesurés sans promesse WCET.",
+      "status": "implemented",
+      "risks": [
+        "RISK-007"
+      ],
+      "controls": [
+        "CTRL-016"
+      ],
+      "verifications": [
+        "VER-054",
+        "VER-055",
+        "VER-056",
+        "VER-057",
+        "VER-058",
+        "VER-059",
+        "VER-061",
+        "VER-062",
+        "VER-063"
+      ],
+      "gaps": []
     }
   ],
   "dependencies": [
