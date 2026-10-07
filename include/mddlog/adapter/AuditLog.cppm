@@ -597,6 +597,10 @@ public:
         if (out.pictured.resourceIssue() != AuditResourceIssue::None)
             return out;
         try {
+            const auto refuse = [&] {
+                out.analysisIssue = AuditResourceIssue::Streams;
+                return std::move(out);
+            };
             out.readLedgers();
             std::set<std::string, std::less<>> identities;
             const auto                         remember = [&](std::string_view identity) {
@@ -608,36 +612,24 @@ public:
                 return true;
             };
             for (const auto& [id, stream] : out.pictured.streams()) {
-                if (!remember(id)) {
-                    out.analysisIssue = AuditResourceIssue::Streams;
-                    return out;
-                }
+                if (!remember(id))
+                    return refuse();
             }
             for (const auto& ledger : out.ledgerList) {
-                if (ledger.predecessor && !remember(ledger.predecessor->target)) {
-                    out.analysisIssue = AuditResourceIssue::Streams;
-                    return out;
-                }
+                if (ledger.predecessor && !remember(ledger.predecessor->target))
+                    return refuse();
                 for (const auto& id : ledger.opened)
-                    if (!remember(id)) {
-                        out.analysisIssue = AuditResourceIssue::Streams;
-                        return out;
-                    }
+                    if (!remember(id))
+                        return refuse();
                 for (const auto& citation : ledger.recovered)
-                    if (!remember(citation.target)) {
-                        out.analysisIssue = AuditResourceIssue::Streams;
-                        return out;
-                    }
+                    if (!remember(citation.target))
+                        return refuse();
                 for (const auto& trim : ledger.trims)
-                    if (!remember(trim.stream)) {
-                        out.analysisIssue = AuditResourceIssue::Streams;
-                        return out;
-                    }
+                    if (!remember(trim.stream))
+                        return refuse();
                 for (const auto& [id, close] : ledger.closes)
-                    if (!remember(id)) {
-                        out.analysisIssue = AuditResourceIssue::Streams;
-                        return out;
-                    }
+                    if (!remember(id))
+                        return refuse();
             }
             out.evaluate();
         } catch (const std::bad_alloc&) {

@@ -226,12 +226,14 @@ struct LogReport {
  */
 class LogVerifier {
 public:
+    ~LogVerifier()                             = default;
+    LogVerifier(const LogVerifier&)            = delete;
+    LogVerifier& operator=(const LogVerifier&) = delete;
+    LogVerifier(LogVerifier&&)                 = delete;
+    LogVerifier& operator=(LogVerifier&&)      = delete;
+
     LogVerifier(StorageMedium& storage, AnchorProvider& anchorProvider, RetainedPosition& retainedPosition, VerifierConfig verifierConfig = {}) noexcept
-        : boundedProvider(anchorProvider, verifierConfig.resources),
-          medium(&storage),
-          provider(&boundedProvider),
-          retained(&retainedPosition),
-          config(verifierConfig) {}
+        : boundedProvider(anchorProvider, verifierConfig.resources), medium(&storage), retained(&retainedPosition), config(verifierConfig) {}
 
     [[nodiscard]] LogReport verify() {
         LogReport out;
@@ -255,7 +257,7 @@ public:
                 return out;
             }
             RetainedPosition candidate = *retained;
-            AnchorVerifier   anchors{*provider, candidate, config};
+            AnchorVerifier   anchors   = AnchorVerifier::withSharedBudget(boundedProvider, candidate, config);
             for (const auto& [id, ev] : log.streams())
                 out.streams.push_back(verifyOne(log, ev, anchors, out.notes));
             std::vector<std::string> accounted;
@@ -420,7 +422,7 @@ private:
      * trim: the stream is Incomplete, never Retired on the strength of a rotation's trim.
      */
     [[nodiscard]] StreamReport removed(const LogAnalysis& log, const StreamEvaluation& ev, AnchorVerifier& anchors, std::vector<BoundaryNote>& notes) {
-        const LatestAnswer latest = provider->latest(ev.id);
+        const LatestAnswer latest = boundedProvider.latest(ev.id);
         const TrimRecord   trim   = ev.trim.value_or(TrimRecord{});
         const auto         note   = [&](BoundaryKind kind, std::uint64_t position, std::uint64_t second) {
             notes.push_back(makeBoundaryNote(kind, ev.id, position, second, trim.ledger, trim.ledgerSequence));
@@ -548,7 +550,7 @@ private:
                 return ev->trim.value_or(TrimRecord{}).digest == *citation.digest ? matched : notReproduced;
             return ev->checkedThrough < *citation.position ? notReproduced : notCheckable;
         }
-        if (const auto latest = provider->latest(citation.target); const auto* retirement = std::get_if<Retirement>(&latest)) {
+        if (const auto latest = boundedProvider.latest(citation.target); const auto* retirement = std::get_if<Retirement>(&latest)) {
             const Anchor& finalAnchor = retirement->finalAnchor;
             return finalAnchor.position == *citation.position && finalAnchor.digest == *citation.digest ? matched : notReproduced;
         }
@@ -576,7 +578,6 @@ private:
 
     ResourceAnchorProvider boundedProvider;
     StorageMedium*         medium;
-    AnchorProvider*        provider;
     RetainedPosition*      retained;
     VerifierConfig         config;
 };

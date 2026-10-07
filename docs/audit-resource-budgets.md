@@ -150,3 +150,26 @@ Le harness de rétention/reprise compare les rapports entiers avec des chunks de
 17 octets ; les 64 graines de coupure #120 ajoutent ceux de 11 octets. Verdicts,
 causes, plages, notes de frontières et régions résiduelles doivent rester égaux.
 Le fuzzing et l’oracle indépendant du programme #120 restent complémentaires.
+
+
+## Budget du fournisseur et durée de vie des vérificateurs
+
+`maxProviderCalls` compte uniquement les lectures `latest()` et `streams()`.
+`advance()` et `retire()` sont délégués sans consommer ni appliquer ce budget ;
+leurs politiques et délais relèvent du consommateur et du contrat du fournisseur.
+
+Un `LogVerifier::verify()` remet son budget à zéro puis le partage avec les
+vérifications de streams, l’inventaire non présent et les frontières : une seule
+enveloppe compte les appels effectifs au fournisseur. `LogReport::providerCalls`
+rapporte ce total, y compris avant un refus.
+
+Un `AnchorVerifier` autonome conserve un budget cumulé pour le lot composé de
+`verify()` et `verifyUnlisted()`. Appeler `resetBudget()` avant un nouveau lot
+indépendant ; cette opération efface aussi le refus de ressources et l’état
+transitoire du lot. `withSharedBudget()` emprunte explicitement un budget externe
+dont les limites correspondent à `config.resources` ; ce budget doit lui survivre.
+La copie et le déplacement des deux vérificateurs sont explicitement interdits,
+comme ils l’étaient déjà implicitement via `AnchorProvider`. Ils ne conservent
+aucun pointeur vers un de leurs propres membres. Une construction en place dans
+un `std::optional` reste possible. Les références au support, au fournisseur et
+au checkpoint demeurent empruntées et doivent leur survivre.

@@ -1160,6 +1160,30 @@
       "scenario": null,
       "evidence": "docs/audit-resource-validation.md",
       "limits": "Injection isolée après la confirmation du trim, avant ancrage du registre et suppression ; preuve logicielle, sans qualification physique."
+    },
+    {
+      "id": "VER-062",
+      "title": "Vérificateurs non transférables, budget partagé unique et remise à zéro des lots autonomes",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-verifier-lifetime-budget",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Assertions de type et doubles logiciels ; aucun délai externe maximal ou qualification physique déduit."
+    },
+    {
+      "id": "VER-063",
+      "title": "Refus de session au démarrage sans diagnostic de segment illisible fabriqué",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-016"
+      ],
+      "test": "tests/spec/AuditResourceSpec.cpp",
+      "scenario": "audit-resource-startup-refusal",
+      "evidence": "docs/audit-resource-validation.md",
+      "limits": "Assertions de type et doubles logiciels ; aucun délai externe maximal ou qualification physique déduit."
     }
   ],
   "risks": [
@@ -1722,7 +1746,9 @@
         "VER-057",
         "VER-058",
         "VER-059",
-        "VER-061"
+        "VER-061",
+        "VER-062",
+        "VER-063"
       ],
       "gaps": []
     }

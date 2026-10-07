@@ -110,9 +110,9 @@ ces seuils temporels par extrapolation.
 
 ## Suites exécutées
 
-- Clang Release : **215/215 CTest**, benchmark du service inclus.
-- GCC 16.1.0 / libstdc++ Release : **214/214 CTest** (test de cache Clang absent).
-- ASan/UBSan Clang Debug : **194/194 tests (192 scénarios, benchmark du service et injection de rétention)**, fuites activées et arrêt sur erreur.
+- Clang Release : **217/217 CTest**, benchmark du service inclus.
+- GCC 16.1.0 / libstdc++ Release : **216/216 CTest** (test de cache Clang absent).
+- ASan/UBSan Clang Debug : **196/196 tests (194 scénarios, benchmark du service et injection de rétention)**, fuites activées et arrêt sur erreur.
 - TSan Clang Debug : **12/12 tests** sélectionnés de concurrence/observateurs.
 
 Les scénarios d’allocation/exception du cœur et leurs contrôles négatifs passent
@@ -168,3 +168,24 @@ trois unités couvrant les scénarios/headers, trois benchmarks et l’exemple f
 Les corrections de l’analyse ont été reprises sur les unités concernées ;
 les shards CI couvrent le périmètre entier, benchmarks inclus. Format LLVM 21 :
 107 fichiers contrôlés ; vérificateur du dossier et **59 tests documentaires** passés.
+
+
+## Revue des vérificateurs et des refus de session
+
+VER-062 interdit explicitement les quatre opérations de copie/déplacement sur
+`AnchorVerifier` et `LogVerifier`, avec assertions de type. Elles étaient déjà
+implicitement supprimées par `AnchorProvider` ; les vérificateurs n’utilisent
+plus de pointeur vers leur propre enveloppe. La construction en place dans un
+`optional` et le retour prvalue du vérificateur à budget partagé sont exercés.
+Les lots autonomes d’`AnchorVerifier` sont remis à zéro explicitement ; les lots
+complets de `LogVerifier` le sont automatiquement. Les tests comparent les cinq
+lectures réellement reçues par un fournisseur à `providerCalls`, puis refusent
+la cinquième avec un budget de quatre sans publier le checkpoint candidat.
+
+VER-063 dépasse le budget de lecture dans la passe des préfixes puis dans celle
+des derniers segments. Le contrôle s’arrête à la première erreur de session,
+sans finding `UnreadableSegment`. Un préambule réellement invalide découvert
+avant le refus reste dans les findings, distinct du refus de ressources.
+La seconde passe de `readStoredStream` ne rescanne que les buffers immuables déjà
+validés et plafonnés dans la première passe. Le budget fournisseur est en lecture
+seulement ; `advance`/`retire` conservent leur contrat d’exploitation.

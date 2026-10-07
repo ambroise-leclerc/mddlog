@@ -299,9 +299,31 @@ struct StreamReport {
  */
 class AnchorVerifier {
 public:
+    ~AnchorVerifier()                                = default;
+    AnchorVerifier(const AnchorVerifier&)            = delete;
+    AnchorVerifier& operator=(const AnchorVerifier&) = delete;
+    AnchorVerifier(AnchorVerifier&&)                 = delete;
+    AnchorVerifier& operator=(AnchorVerifier&&)      = delete;
+
     /** @brief Holds references: the provider and the retained position must outlive the verifier. */
     AnchorVerifier(AnchorProvider& anchorProvider, RetainedPosition& retainedPosition, VerifierConfig verifierConfig = {}) noexcept
-        : boundedProvider(anchorProvider, verifierConfig.resources), provider(&boundedProvider), retained(&retainedPosition), config(verifierConfig) {}
+        : boundedProvider(std::in_place_type<ResourceAnchorProvider>, anchorProvider, verifierConfig.resources),
+          retained(&retainedPosition),
+          config(verifierConfig) {}
+
+    /** @brief Share a caller-owned batch budget instead of wrapping it again. Its limits must match config.resources; it must outlive this verifier. */
+    [[nodiscard]] static AnchorVerifier
+    withSharedBudget(ResourceAnchorProvider& anchorBudget, RetainedPosition& retainedPosition, VerifierConfig verifierConfig = {}) noexcept {
+        return {std::ref(anchorBudget), retainedPosition, verifierConfig};
+    }
+
+    /** @brief Begin an independent verification batch. verify() and verifyUnlisted() otherwise share the current batch's cumulative read budget. */
+    void resetBudget() noexcept {
+        budgetedProvider().resetBudget();
+        localIssue = AuditResourceIssue::None;
+        listedHead.reset();
+        listedRetired = false;
+    }
 
     /** @brief Verify one stream instance whose records are given in storage order. An empty span means the log holds none. */
     [[nodiscard]] StreamReport
@@ -330,10 +352,10 @@ public:
         if (!chain.valid())
             return finish(report, Verdict::CannotVerify, VerdictCause::InvalidStreamIdentity);
 
-        const LatestAnswer  latest  = provider->latest(streamId);
-        const StreamsAnswer listing = provider->streams();
+        const LatestAnswer  latest  = budgetedProvider().latest(streamId);
+        const StreamsAnswer listing = budgetedProvider().streams();
         const auto          before  = retained->anchor(streamId);
-        if (boundedProvider.resourceIssue() != AuditResourceIssue::None)
+        if (budgetedProvider().resourceIssue() != AuditResourceIssue::None)
             return resourceRefusal(report);
         listedHead.reset();
         if (const auto* all = std::get_if<ProviderListing>(&listing))
@@ -470,7 +492,7 @@ public:
             localIssue = AuditResourceIssue::ProviderEntries;
             return {};
         }
-        if (const auto listing = provider->streams(); const auto* all = std::get_if<ProviderListing>(&listing)) {
+        if (const auto listing = budgetedProvider().streams(); const auto* all = std::get_if<ProviderListing>(&listing)) {
             for (const StreamEntry& entry : all->entries)
                 known.insert(entryAnchor(entry).streamId);
         }
@@ -486,7 +508,7 @@ public:
     }
 
     [[nodiscard]] AuditResourceIssue resourceIssue() const noexcept {
-        return localIssue != AuditResourceIssue::None ? localIssue : boundedProvider.resourceIssue();
+        return localIssue != AuditResourceIssue::None ? localIssue : budgetedProvider().resourceIssue();
     }
     /**
      * @brief The expected sequence of the first record that does not follow, when a header or a segment index breaks the continuity (9.5).
@@ -507,8 +529,22 @@ public:
     }
 
 private:
+    AnchorVerifier(std::reference_wrapper<ResourceAnchorProvider> anchorBudget, RetainedPosition& retainedPosition, VerifierConfig verifierConfig) noexcept
+        : boundedProvider(anchorBudget), retained(&retainedPosition), config(verifierConfig) {}
+
+    [[nodiscard]] ResourceAnchorProvider& budgetedProvider() noexcept {
+        if (auto* owned = std::get_if<ResourceAnchorProvider>(&boundedProvider))
+            return *owned;
+        return std::get<std::reference_wrapper<ResourceAnchorProvider>>(boundedProvider).get();
+    }
+    [[nodiscard]] const ResourceAnchorProvider& budgetedProvider() const noexcept {
+        if (const auto* owned = std::get_if<ResourceAnchorProvider>(&boundedProvider))
+            return *owned;
+        return std::get<std::reference_wrapper<ResourceAnchorProvider>>(boundedProvider).get();
+    }
+
     [[nodiscard]] StreamReport resourceRefusal(StreamReport& report, AuditResourceIssue issue = AuditResourceIssue::None) {
-        localIssue     = issue != AuditResourceIssue::None ? issue : boundedProvider.resourceIssue();
+        localIssue     = issue != AuditResourceIssue::None ? issue : budgetedProvider().resourceIssue();
         report.verdict = Verdict::CannotVerify;
         report.cause   = VerdictCause::ResourceLimit;
         return report;
@@ -609,11 +645,10 @@ private:
         return report;
     }
 
-    AuditResourceIssue     localIssue = AuditResourceIssue::None;
-    ResourceAnchorProvider boundedProvider;
-    AnchorProvider*        provider;
-    RetainedPosition*      retained;
-    VerifierConfig         config;
+    AuditResourceIssue                                                                   localIssue = AuditResourceIssue::None;
+    std::variant<ResourceAnchorProvider, std::reference_wrapper<ResourceAnchorProvider>> boundedProvider;
+    RetainedPosition*                                                                    retained;
+    VerifierConfig                                                                       config;
     /** @brief The provider head seen by the verification in progress, raised into the retained position on a clean result. */
     std::optional<std::pair<std::string, std::uint64_t>> listedHead;
     /** @brief Whether latest() returned a retirement in the verification in progress, whatever became of the records. */

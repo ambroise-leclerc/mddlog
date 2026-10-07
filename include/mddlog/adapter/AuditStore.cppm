@@ -194,6 +194,11 @@ struct RecoveryReport {
         for (const auto& info : *listing) {
             ++report.segmentsExamined;
             const auto prefix = session.read(medium, {.segment = info.segment, .size = std::min<std::uint64_t>(info.size, maxSegmentOpeningSize)});
+            if (session.issue() != AuditResourceIssue::None) {
+                report.mediumReadable = false;
+                report.resourceIssue  = session.issue();
+                return report;
+            }
             if (!prefix) {
                 report.findings.push_back(unlocatedFinding(RecoveryFindingKind::UnreadableSegment, info.segment));
                 continue;
@@ -235,6 +240,11 @@ struct RecoveryReport {
             }
             const Held& last = held.back();
             const auto  all  = session.read(medium, {.segment = last.segment, .size = last.size});
+            if (session.issue() != AuditResourceIssue::None) {
+                report.mediumReadable = false;
+                report.resourceIssue  = session.issue();
+                return report;
+            }
             if (!all) {
                 report.findings.push_back(
                     {.kind = RecoveryFindingKind::UnreadableSegment, .segment = last.segment, .streamId = streamId, .segmentIndex = last.index});
@@ -382,6 +392,8 @@ private:
             }
         }
         std::ranges::sort(found, {}, &Found::index);
+        // These immutable owned buffers passed the first scan and its aggregate record bound;
+        // rescanning rebuilds spans without accepting any additional bytes or records.
         for (const auto& item : found) {
             const SegmentScan scan = scanSegment(out.buffers[item.buffer]);
             out.indices.push_back(item.index);

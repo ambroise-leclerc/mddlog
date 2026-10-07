@@ -38,6 +38,26 @@ public:
     }
 };
 
+class CountingProvider final : public AnchorProvider {
+public:
+    InMemoryAnchorProvider inner{"witness"};
+    std::size_t            reads = 0;
+    AdvanceAnswer          advance(const AnchorClaim& claim) override {
+        return inner.advance(claim);
+    }
+    RetireAnswer retire(std::string_view id, std::uint64_t position) override {
+        return inner.retire(id, position);
+    }
+    LatestAnswer latest(std::string_view id) override {
+        ++reads;
+        return inner.latest(id);
+    }
+    StreamsAnswer streams() override {
+        ++reads;
+        return inner.streams();
+    }
+};
+
 void populate(ObservedMedium& medium, std::string_view id, std::size_t records = 3) {
     const auto opening = encodeSegmentOpening(id, 0, 1);
     const auto held    = medium.open({.streamId = id, .segmentIndex = 0, .firstSequence = 1, .bytes = opening});
@@ -271,4 +291,117 @@ const speclab::Register faultBudget{
                   })
             .Execute();
     }};
+}  // namespace
+
+namespace {
+static_assert(!std::is_copy_constructible_v<AnchorVerifier> && !std::is_copy_assignable_v<AnchorVerifier>);
+static_assert(!std::is_move_constructible_v<AnchorVerifier> && !std::is_move_assignable_v<AnchorVerifier>);
+static_assert(!std::is_copy_constructible_v<LogVerifier> && !std::is_copy_assignable_v<LogVerifier>);
+static_assert(!std::is_move_constructible_v<LogVerifier> && !std::is_move_assignable_v<LogVerifier>);
+
+const speclab::Register verifierLifetime{
+    "Audit resource verifier ownership and independent batches preserve their provider budget",
+    "unit",
+    [] {
+        return speclab::Test("audit-resource-verifier-lifetime-budget")
+            .Then("nontransferable verifiers construct in place and standalone batches reset explicitly",
+                  [] {
+                      speclab::core::Checks checks;
+                      ObservedMedium        medium;
+                      populate(medium, "stream/1");
+                      populate(medium, "stream/2");
+                      CountingProvider provider;
+                      for (const std::string_view id : {"stream/1", "stream/2"}) {
+                          const auto held = readStoredStream(medium, id);
+                          checks.expect(std::holds_alternative<AnchorStamp>(provider.advance(makeAnchorClaim(id, 3, held.records().back().digest))),
+                                        "anchored fixture");
+                      }
+                      const auto       held = readStoredStream(medium, "stream/1");
+                      RetainedPosition retained;
+                      VerifierConfig   config;
+                      config.resources.maxProviderCalls = 2;
+                      std::optional<AnchorVerifier> owned{std::in_place, provider, retained, config};
+                      const auto                    verifyStream = [&](AnchorVerifier& verifier) {
+                          return verifier.verify("stream/1", held.records(), {}, held.layout());
+                      };
+                      checks.expect(verifyStream(*owned).verdict == Verdict::Anchored, "constructs in optional without transfer");
+                      checks.expect(verifyStream(*owned).cause == VerdictCause::ResourceLimit && owned->resourceIssue() == AuditResourceIssue::ProviderCalls,
+                                    "one batch shares its call budget");
+                      owned->resetBudget();
+                      checks.expect(owned->resourceIssue() == AuditResourceIssue::None && verifyStream(*owned).verdict == Verdict::Anchored,
+                                    "fresh standalone batch clears refusal and call count");
+                      ResourceAnchorProvider batch{provider, config.resources};
+                      auto                   shared       = AnchorVerifier::withSharedBudget(batch, retained, config);
+                      const auto             beforeShared = provider.reads;
+                      checks.expect(verifyStream(shared).verdict == Verdict::Anchored && batch.calls() == 2 && provider.reads - beforeShared == 2,
+                                    "shared wrapper counts actual reads");
+                      checks.expect(verifyStream(shared).cause == VerdictCause::ResourceLimit && batch.calls() == 2, "shared budget caps the entire batch");
+                      shared.resetBudget();
+                      checks.expect(batch.calls() == 0 && verifyStream(shared).verdict == Verdict::Anchored, "reset reaches the shared envelope");
+
+                      config.resources.maxProviderCalls = 5;
+                      std::optional<LogVerifier> whole{std::in_place, medium, provider, retained, config};
+                      const auto                 verifyLog = [&](LogVerifier& verifier) {
+                          const auto before = provider.reads;
+                          const auto report = verifier.verify();
+                          checks.expect(report.resourceIssue == AuditResourceIssue::None && report.streams.size() == 2 && report.providerCalls == 5
+                                            && provider.reads - before == report.providerCalls,
+                                        "one shared envelope counts actual reads across the complete log");
+                          checks.expect(std::ranges::all_of(report.streams,
+                                                            [](const auto& stream) {
+                                                                return stream.report.verdict == Verdict::Anchored;
+                                                            }),
+                                        "anchored log remains complete");
+                      };
+                      verifyLog(*whole);
+                      verifyLog(*whole);
+                      RetainedPosition untouched;
+                      config.resources.maxProviderCalls = 4;
+                      const auto before                 = provider.reads;
+                      const auto refused                = LogVerifier{medium, provider, untouched, config}.verify();
+                      checks.expect(refused.resourceIssue == AuditResourceIssue::ProviderCalls && refused.providerCalls == 4 && provider.reads - before == 4
+                                        && untouched.empty(),
+                                    "global call refusal never commits a partial checkpoint");
+                      checks.raise();
+                  })
+            .Execute();
+    }};
+
+const speclab::Register startupRefusal{"Audit resource startup refuses a session limit without inventing unreadable segments", "unit", [] {
+                                           return speclab::Test("audit-resource-startup-refusal")
+                                               .Then("prefix and final-segment passes stop immediately and retain only actual findings",
+                                                     [] {
+                                                         speclab::core::Checks checks;
+                                                         ObservedMedium        medium;
+                                                         populate(medium, "stream/1");
+                                                         populate(medium, "stream/2");
+                                                         AuditResourceLimits limits;
+                                                         limits.maxReadBytes = 1;
+                                                         const auto prefix   = checkMediumAtStart(medium, limits);
+                                                         checks.expect(prefix.resourceIssue == AuditResourceIssue::ReadBytes && !prefix.mediumReadable
+                                                                           && prefix.findings.empty() && prefix.segmentsExamined == 1 && medium.reads == 0,
+                                                                       "a budget refusal is not an unreadable segment");
+                                                         limits.maxReadBytes  = 0;
+                                                         const auto inventory = medium.segments();
+                                                         for (const auto& info : *inventory)
+                                                             limits.maxReadBytes += std::min<std::uint64_t>(info.size, maxSegmentOpeningSize);
+                                                         const auto final = checkMediumAtStart(medium, limits);
+                                                         checks.expect(final.resourceIssue == AuditResourceIssue::ReadBytes && final.findings.empty()
+                                                                           && medium.reads == 2,
+                                                                       "final pass stops on its first budget refusal");
+                                                         ObservedMedium                    malformed;
+                                                         const std::array<std::uint8_t, 1> invalid{0};
+                                                         checks.expect(malformed.open({.streamId = "bad", .bytes = invalid}).status == OpenStatus::Opened,
+                                                                       "malformed fixture");
+                                                         populate(malformed, "good");
+                                                         limits.maxReadBytes = 1;
+                                                         const auto actual   = checkMediumAtStart(malformed, limits);
+                                                         checks.expect(actual.resourceIssue == AuditResourceIssue::ReadBytes && actual.findings.size() == 1
+                                                                           && actual.findings.front().kind == RecoveryFindingKind::NoValidPreamble
+                                                                           && malformed.reads == 1,
+                                                                       "genuine prior finding remains distinct from refusal");
+                                                         checks.raise();
+                                                     })
+                                               .Execute();
+                                       }};
 }  // namespace
