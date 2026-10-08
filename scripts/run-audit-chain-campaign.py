@@ -150,6 +150,8 @@ def main():
     parser.add_argument('--deployment-worker', type=Path)
     parser.add_argument('--witness-service', type=Path)
     parser.add_argument('--deployment-repetitions', type=int, default=1)
+    parser.add_argument('--deployment-sudo', action='store_true',
+                        help='elevate only the separate-authority deployment subprocess with noninteractive sudo')
     parser.add_argument('--tools-cli', type=Path)
     parser.add_argument('--tool-reference', type=Path)
     args = parser.parse_args()
@@ -157,7 +159,8 @@ def main():
             or not 3 <= args.boots <= 24 or not 32 <= args.records <= 64
             or not 1 <= args.outage <= 1000 or not 1 <= args.timeout <= 600):
         parser.error('profile exceeds bounded campaign limits')
-    if (bool(args.deployment_worker) != bool(args.witness_service)
+    if (args.deployment_sudo and not args.deployment_worker
+            or bool(args.deployment_worker) != bool(args.witness_service)
             or bool(args.tools_cli) != bool(args.tool_reference)
             or not 1 <= args.deployment_repetitions <= 32):
         parser.error('integration binaries must be supplied in pairs; repetitions must be 1..32')
@@ -178,7 +181,10 @@ def main():
         repository = Path(__file__).resolve().parents[1]
         report['source_sha256'] = {name: hashlib.sha256((repository / name).read_bytes()).hexdigest()
                                    for name in ('scripts/run-audit-chain-campaign.py', 'scripts/run-audit-robustness.py',
-                                                'tests/spec/AuditChainCampaign.cpp')}
+                                                'tests/spec/AuditChainCampaign.cpp', 'scripts/run-witness-deployment.py',
+                                                'scripts/run-audit-tools.py',
+                                                'tests/archives/audit-export/GenerateV02.cpp',
+                                                'tests/archives/audit-export/GenerateV03.cpp')}
         report['build'] = robustness.build_metadata(worker)
         report['binary_sha256'] = hashlib.sha256(worker.read_bytes()).hexdigest()
         for seed in range(args.seed, args.seed + args.seeds):
@@ -199,6 +205,8 @@ def main():
                 command = ['python3', str(scripts / 'run-witness-deployment.py'),
                            '--worker', str(args.deployment_worker.resolve()),
                            '--service', str(args.witness_service.resolve()), '--require-isolation']
+                if args.deployment_sudo:
+                    command = ['sudo', '--non-interactive', '--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS', *command]
                 result['commands'].append(command)
                 robustness.run_logged(command, directory / f'deployment-{index}.log', 75)
             result['status'] = 'PASS'

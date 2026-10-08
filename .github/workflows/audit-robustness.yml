@@ -22,7 +22,7 @@ jobs:
   readers:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.campaign == 'volume' && 'File storage ENOSPC (Clang 21)' || 'Audit readers fuzzing and coverage (Clang 21)' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 300
     env:
       VOLUME_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.campaign == 'volume' }}
     steps:
@@ -67,18 +67,19 @@ jobs:
             -R 'AuditRing (follows|concurrent)|Generated audit cuts|Idle asynchronous|^audit.chain-campaign$|^audit.tools' \
             --repeat until-fail:10 --no-tests=error --output-on-failure --timeout 150
       - name: Run prolonged real-chain histories and separate-authority regressions
+        timeout-minutes: 110
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.campaign != 'volume')
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: |
           sudo usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root
-          sudo --preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS python3 scripts/run-audit-chain-campaign.py \
+          python3 scripts/run-audit-chain-campaign.py \
             --worker "$PWD/build-robustness/tests/mddlog_audit_chain_campaign" \
             --output "$PWD/build-robustness/chain-long" \
             --seeds 32 --boots 24 --records 64 --outage 1000 --timeout 120 \
             --deployment-worker "$PWD/build-robustness/tests/mddlog_witness_deployment" \
-            --witness-service "$PWD/build-robustness/examples/mddlog_witness" --deployment-repetitions 32 \
+            --witness-service "$PWD/build-robustness/examples/mddlog_witness" --deployment-repetitions 32 --deployment-sudo \
             --tools-cli "$PWD/build-robustness/mddlog-audit" \
             --tool-reference "$PWD/build-robustness/tests/mddlog_audit_tool_reference"
       - name: Run bounded readers fuzzing and independent digest oracle
@@ -114,9 +115,6 @@ jobs:
         run: |
           if [ -d build-robustness/storage-full-volume ]; then
             sudo chown -R "$(id -u):$(id -g)" build-robustness/storage-full-volume
-          fi
-          if [ -d build-robustness/chain-long ]; then
-            sudo chown -R "$(id -u):$(id -g)" build-robustness/chain-long
           fi
       - name: Archive logs, corpus, reduced failures and coverage
         if: always()

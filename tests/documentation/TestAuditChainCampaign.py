@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SOURCE = Path(__file__).resolve().parents[2] / 'scripts/run-audit-chain-campaign.py'
 SPEC = importlib.util.spec_from_file_location('chain_campaign', SOURCE)
@@ -99,6 +100,36 @@ class AuditChainCampaignTest(unittest.TestCase):
         report = json.loads(Path(json.loads(result.stdout)['report']).read_text())
         self.assertEqual(report['status'], 'FAIL')
         self.assertEqual(report['histories'][0]['status'], 'FAIL')
+
+    def test_denied_deployment_elevation_fails_after_unprivileged_history(self):
+        worker = self.root / 'worker'
+        worker.write_bytes(b'test binary')
+        commands = []
+
+        def run_logged(command, log, timeout):
+            commands.append(command)
+            if command[0] == str(worker):
+                trace = Path(command[1]) / 'trace.jsonl'
+                trace.write_text(''.join(json.dumps(item) + '\n' for item in self.trace()))
+                return
+            raise subprocess.CalledProcessError(1, command, 'sudo denied')
+
+        arguments = [str(SOURCE), '--worker', str(worker), '--output', str(self.root / 'results'),
+                     '--seeds', '1', '--deployment-worker', str(worker),
+                     '--witness-service', str(worker), '--deployment-sudo']
+        with mock.patch.object(sys, 'argv', arguments), \
+                mock.patch.object(CAMPAIGN.robustness, 'run_logged', side_effect=run_logged):
+            self.assertEqual(CAMPAIGN.main(), 1)
+        report = json.loads(next((self.root / 'results').glob('run-*/report.json')).read_text())
+        self.assertEqual(commands[0][0], str(worker))
+        self.assertEqual(commands[1][:3], ['sudo', '--non-interactive',
+                                        '--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS'])
+        self.assertEqual(report['histories'][0]['status'], 'PASS')
+        self.assertEqual(report['deployment']['status'], 'FAIL')
+        self.assertEqual(report['status'], 'FAIL')
+        for name in ('scripts/run-audit-tools.py', 'tests/archives/audit-export/GenerateV03.cpp'):
+            self.assertEqual(report['source_sha256'][name],
+                             hashlib.sha256((SOURCE.parents[1] / name).read_bytes()).hexdigest())
 
     def test_false_digest_corrupt_input_missing_recovery_and_premature_completion(self):
         for corruption in ('digest', 'input', 'recovery', 'completion', 'bound', 'fault', 'loss'):

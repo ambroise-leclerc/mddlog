@@ -60,6 +60,7 @@ int main() {
                                  anchor.canonicalVersion,
                                  anchor.anchorFormat);
     }
-    std::cout << "]}\n";
+    std::cout << "],\"producerRevision\":\"073761b7a6d5ed29ed87bc37c85967db72386d3c\","
+                 "\"producerStream\":\"v03/producer\",\"eventCount\":5}\n";
     return std::cout ? 0 : 1;
 }

@@ -280,3 +280,25 @@ de référence et 14 848 / 928 records relus restent concordants. Ce contrôle r
 captures existantes ; il ne constitue pas une nouvelle campagne du worker inchangé.
 Rapport local : `build-clang/120-review-oracle.json`, SHA-256 de l’oracle corrigé
 `890fd3673250496e61aedf4d93535ac51c4dac63a084b29f3a8c49a3177b26a6`.
+
+### Revue du périmètre CI et de la provenance (#120)
+
+Le générateur v0.3 émet désormais lui-même producerRevision, producerStream et
+eventCount ; la procédure exacte du README a été rejouée sur la release figée
+`073761b7a6d5ed29ed87bc37c85967db72386d3c`. La reconstruction et le générateur
+compilés/liés avec Clang/libc++ 21.1.8 produisent le même JSON octet pour octet et
+la même empreinte `0852b676669ab7570753c61b139d16524b7e4ec1ce8c721116c73585052761e2`.
+
+Le profil CI élève seulement run-witness-deployment.py, conserve le superviseur,
+les workers de chaîne et les CLI sous l’utilisateur du runner, et relève le budget
+de l’étape à 110 minutes et celui du job à 300 minutes. Le calcul des plafonds et
+la limite des admissions observées via la trace figurent dans audit-chain-campaign.md.
+Les bornes worker/superviseur exigent maintenant toutes deux au moins trois boots.
+Les empreintes des sources incluent les scripts d’intégration et les deux générateurs.
+
+Validation locale de ce correctif : trois CTests de chaîne/archives, formatage des
+119 fichiers et contrôle du dossier réussis. Un nouveau contrôle négatif exige
+FAIL si l’élévation du déploiement est refusée ; il vérifie aussi que l’histoire
+précédente reste sans sudo et que les sources supplémentaires sont hachées.
+L’exécution CI prolongée sur la branche sera consignée dans la PR avec son SHA
+et ses artefacts ; cette configuration ne constitue pas encore sa réussite.

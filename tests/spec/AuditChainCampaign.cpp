@@ -91,7 +91,7 @@ private:
     AnchorProvider& inner;
 };
 
-/** @brief Arm the real directory-barrier failure only once unlink is actually attempted. */
+/** @brief Arm the directory-barrier failure at reclaim; other pure virtual operations delegate to the real medium. */
 class FaultMedium final : public StorageMedium {
 public:
     FaultMedium(StorageMedium& target, FaultCalls& systemCalls) : inner(target), calls(systemCalls) {}
@@ -346,7 +346,7 @@ int main(int argc, char** argv) {
         const auto boots   = static_cast<unsigned>(std::stoul(args[3]));
         const auto records = static_cast<unsigned>(std::stoul(args[4]));
         const auto outage  = static_cast<unsigned>(std::stoul(args[5]));
-        require(seed > 0 && boots >= 2 && boots <= 24 && records >= 32 && records <= 64 && outage >= 1 && outage <= 1000, "campaign budget");
+        require(seed > 0 && boots >= 3 && boots <= 24 && records >= 32 && records <= 64 && outage >= 1 && outage <= 1000, "campaign budget");
         campaign(args[1], seed, boots, records, outage);
         std::println("PASS seed={} boots={} records={} outage={}", seed, boots, records, outage);
         return 0;

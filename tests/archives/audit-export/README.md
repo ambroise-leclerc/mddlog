@@ -36,12 +36,28 @@ segment bytes and anchors; it does not provide hardware durability or an authent
 external witness. It emits five events with a closed producer and ledger. Formats remain
 canonical/layout/anchor version 1.
 
-Repeat the v0.2 generation procedure with revision
-`073761b7a6d5ed29ed87bc37c85967db72386d3c`, GenerateV03.cpp and target `generate_archive`.
-Add these provenance fields to the generated JSON before comparison: producerRevision
-with that SHA, producerStream `v03/producer`, eventCount `5`. Serialize with Python
-`json.dumps(value, separators=(',', ':')) + '\n'`. The fixture is rebuilt by the old
-library, never by re-encoding its events with the current library.
+Reproduce from the repository root with the same Clang/libc++ tuple (CMake 4.2.3
+or a compatible version supporting `import std`). The generator emits every provenance
+field; no JSON editing or current-library encoding is needed:
+
+```bash
+archive_dir=$(mktemp -d /tmp/mddlog-v03-XXXXXXXX)
+git archive 073761b7a6d5ed29ed87bc37c85967db72386d3c | tar -x -C "$archive_dir"
+cp tests/archives/audit-export/GenerateV03.cpp "$archive_dir/GenerateV03.cpp"
+cat >> "$archive_dir/CMakeLists.txt" <<'CMAKE'
+add_executable(generate_archive GenerateV03.cpp)
+target_link_libraries(generate_archive PRIVATE mddlog::mddlog)
+CMAKE
+cmake --preset ninja-clang -S "$archive_dir" \
+  -DMDDLOG_BUILD_EXAMPLES=OFF -DMDDLOG_BUILD_TESTS=OFF
+cmake --build "$archive_dir/build-clang" --target generate_archive --parallel 4
+"$archive_dir/build-clang/generate_archive" > "$archive_dir/v0.3.0.json"
+sha256sum "$archive_dir/v0.3.0.json"
+cmp tests/archives/audit-export/v0.3.0.json "$archive_dir/v0.3.0.json"
+```
+
+This external consumer is deliberately absent from the current release's CMake targets:
+compiling it against the current library would not reproduce old-release evidence.
 
 Fixture SHA-256: `0852b676669ab7570753c61b139d16524b7e4ec1ce8c721116c73585052761e2`.
 Generator binary SHA-256 for this local tuple:

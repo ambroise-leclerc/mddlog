@@ -93,7 +93,15 @@ puis 1 000 polls sans fournisseur ; 512 segments de 4 Kio et reads de 4 Kio, JSO
 de 16 Mio par histoire. Délai de 60 s par worker court, 120 s demandé en long,
 maximum configurable 600 s. Le superviseur partagé borne les logs à 2 Mio et tue/récolte
 le groupe en cas d’échec ou timeout. Les intégrations sont bornées à 75 s par invocation.
-Le job CI garde son délai global de 90 minutes ; un timeout ne vaut pas succès.
+L’étape CI prolongée dispose de 110 minutes : 32 × 120 s pour les histoires,
+32 × 75 s pour les déploiements et deux × 75 s pour les archives représentent
+6 390 s (106,5 minutes), soit 3,5 minutes pour les métadonnées et la supervision.
+Le job dispose de 300 minutes, afin de couvrir aussi les builds, scénarios courts,
+fuzzing (jusqu’à 60 minutes), stockage et collecte ; un timeout ne vaut pas succès.
+Le superviseur, les workers de chaîne et les CLI tournent sous l’utilisateur du runner.
+En CI, `--deployment-sudo` élève uniquement les invocations de
+`run-witness-deployment.py` avec sudo non interactif ; la plage subuid/subgid de root
+est préparée séparément. Les traces et rapports de chaîne restent propriété du runner.
 
 Chaque histoire conserve trace, fichiers et logs ; report.json contient commandes,
 seeds, profils, révision/worktree, empreintes des sources/worker/traces/corpus et versions.
@@ -108,7 +116,11 @@ longue sont distincts ; leur configuration ne constitue pas un résultat exécut
 
 Les résultats locaux du 8 octobre 2026 sont consignés dans le
 [rapport de robustesse](audit-robustness-results.md). VER-070–072 enrichissent GAP-003/013,
-qui restent ouverts pour revue et conservation des preuves. Les campagnes ne prouvent
+qui restent ouverts pour revue et conservation des preuves. Les requêtes `detail`,
+admissions et compteurs observés proviennent de la trace du worker ; l’oracle contrôle
+leur cohérence avec sa file abstraite et avec les octets et digests stockés. Il ne
+constitue pas une observation indépendante de l’admission : une trace et des octets
+mensongers mais cohérents pourraient échapper au contrôle. Les campagnes ne prouvent
 ni chaque interleaving, ni l’endurance physique du stockage, ni l’indépendance du témoin
 du profil sous un seul UID. La campagne multi-UID répète VER-044 sans attribuer ses
 permissions aux histoires injectées sous un seul UID. Le suivi libc++/TSan antérieur,
