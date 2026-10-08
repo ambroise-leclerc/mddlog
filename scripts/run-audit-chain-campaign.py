@@ -128,6 +128,7 @@ def verify_trace(path, boots, records):
             raise AssertionError(f'unknown trace operation: {operation}')
     if (not complete or len(streams) != boots or faults != {'append', 'sync', 'reclaim'}
             or any(not stream['fault'] or not stream['fault_health'] for stream in streams.values())
+            or any(not stream['recovery_started'] for stream in streams.values())
             or any(stream.get('recovered', 0) < records for stream in streams.values())):
         raise AssertionError('required boots, faults or recovered prefix not exercised')
     return {'status': 'PASS', 'streams': len(streams), 'baseline_records': boots * records,

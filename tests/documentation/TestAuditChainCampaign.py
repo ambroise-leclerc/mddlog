@@ -56,6 +56,16 @@ class AuditChainCampaignTest(unittest.TestCase):
         self.assertEqual(result['baseline_records'], 96)
         self.assertEqual(result['recovered_records'], 72)
 
+    def test_recovery_is_required_even_when_trim_boundary_equals_records(self):
+        # The worker performs an extra recovery boot, including for its last producer.
+        for stream in ('producer/0', 'producer/1', 'producer/2'):
+            with self.subTest(stream=stream):
+                events = self.trace()
+                next(item for item in events if item['op'] == 'fault' and item['stream'] == stream)['through'] = 32
+                events = [item for item in events if not (item['op'] == 'recovered' and item['stream'] == stream)]
+                with self.assertRaisesRegex(AssertionError, 'recovered prefix not exercised'):
+                    self.verify(events)
+
     def test_contract_vector_and_detail_truncation(self):
         # Fixed contract bytes: version, stream length/name, sequence, category, phase, unavailable time.
         value = CAMPAIGN.canonical('p', 1, '')

@@ -262,3 +262,21 @@ AuditLogVerifier 58/192, AuditStore 55/650. Les chemins non couverts restent pr�
 et visibles dans coverage.json/coverage.txt ; en particulier le fuzzing de lecteurs ne
 prouve pas les branches de mutation et de rétention du sink. Les campagnes de chaîne
 les exercent séparément sans additionner leurs résultats à ces pourcentages.
+
+### Complément après revue de PR #146
+
+La revue a révélé un faux positif du superviseur : une borne `through == records`
+initialisait le compteur de reprise à sa valeur attendue sans exiger de record relu.
+Le cas a été reproduit sur un flux initial et le flux final ; la régression couvre les
+trois producteurs du profil court. L’oracle exige maintenant `recovery_started` pour
+chaque flux, sans exception finale : le worker exécute déjà un boot de récupération
+supplémentaire pour ce dernier. La ponctuation du passage décrivant cette reprise est
+également corrigée.
+
+65 tests documentaires et les trois CTests de chaîne/outils passent après ce correctif.
+Les 32 histoires Release et les huit histoires ASan/UBSan précédentes ont été revalidées
+par le nouvel oracle : leurs hashes de trace sont inchangés, les 49 152 / 3 072 records
+de référence et 14 848 / 928 records relus restent concordants. Ce contrôle revalide les
+captures existantes ; il ne constitue pas une nouvelle campagne du worker inchangé.
+Rapport local : `build-clang/120-review-oracle.json`, SHA-256 de l’oracle corrigé
+`890fd3673250496e61aedf4d93535ac51c4dac63a084b29f3a8c49a3177b26a6`.

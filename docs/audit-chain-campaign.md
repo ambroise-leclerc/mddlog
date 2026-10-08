@@ -46,8 +46,9 @@ de l’histoire entière, même quand un préfixe physique a été supprimé.
 Après un EIO d’append, le suffixe incomplet n’est jamais exigé ; après un EIO de sync,
 l’événement entièrement écrit peut être relu mais n’agrandit pas l’anchor confirmé.
 Après un reclaim interrompu, certains segments du trim peuvent rester : leur chevauchement
-est permis, tout trou dans le suffixe confirmé est refusé. Un boot supplémentaire vérifie
-aussi le dernier préfixe. Le lecteur recharge son checkpoint avant le rollback combiné ;
+est permis, tout trou dans le suffixe confirmé est refusé. Une relecture effective est
+obligatoire pour chaque flux, même si la borne du trim égale le nombre d’événements.
+Un boot supplémentaire vérifie aussi le dernier préfixe. Le lecteur recharge son checkpoint avant le rollback combiné.
 Le compteur takenUnacknowledged désigne une partie des événements encore présents dans
 l’anneau : il ne s’additionne pas à pendingInRings. Après une faute terminale, transmis +
 pending doit égaler les admissions, et chaque transmission dépassant le préfixe durable
