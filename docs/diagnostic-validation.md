@@ -120,7 +120,31 @@ python3 scripts/run-witness-deployment.py \
 
 Les tentatives d’analyse pendant régénération des BMIs ont été invalidées après plantage
 d’outil ; la campagne statique finale ci-dessus a été relancée sur les modules figés.
-Aucun résultat de ces tentatives n’est utilisé comme réussite. Aucune nouvelle campagne
-TSan/ASan/UBSan, macOS ou MSVC n’est revendiquée ; ces profils restent à la CI et à #120.
+Aucun résultat de ces tentatives n’est utilisé comme réussite. Cette campagne locale ne revendique pas de résultat sanitizer ou de plateforme supplémentaire ;
+les résultats CI distincts sont consignés ci-dessous, sans clore le suivi historique #120.
 La revue et l’acceptation de GAP-011 restent à consigner par le mainteneur ; les preuves
 locales n’acceptent pas les budgets et les obligations hôte d’un dispositif.
+
+## Revue PR et extension de couverture
+
+La CI de la PR #144 à `b000f522960cf8ac89ad14340ddcaab280607543` a réussi les
+builds/tests Linux Clang/GCC, Windows MSVC et macOS arm64, ASan/UBSan Clang et GCC,
+fuzzing, profil de ressources et les six lots clang-tidy. Le job TSan ciblé a également
+réussi, mais sa sélection couvrait les anneaux, observateurs, registre et service, pas
+les nouveaux tests diagnostiques : ce résultat ne valide pas leur concurrence.
+[Résultats](https://github.com/ambroise-leclerc/mddlog/pull/144/checks).
+
+La revue ajoute `diagnostic.bounded.sync-refusals` : sink synchrone engagé, refus de taille,
+saturation et fermeture sans attendre sa libération, puis drainage. Les tests façade
+couvrent `initialize(name, {})`, `shutdownChecked()` réentrant et flush vérifiés après
+arrêt sans initialisation. Les injections d’allocation vérifient désormais `InternalFailure`
+avant admission du record et de la commande de flush. Treize scénarios diagnostiques
+remplacent les douze du lot initial. Le filtre TSan inclut maintenant `diagnostic.*` ;
+son résultat doit être constaté sur la nouvelle révision avant d’être revendiqué.
+
+Après les corrections de revue : builds complets Release Clang 21 et GCC 16 réussis,
+230/230 et 229/229 CTest hors `witness.deployment`, treize scénarios diagnostiques
+passés sous GCC 16 TSan Debug (`halt_on_error=1`, aucune suppression),
+59/59 tests documentaires, vérificateur du dossier et formatage LLVM 21 réussis.
+Le résultat du témoin isolé du lot initial reste distinct ; aucune nouvelle campagne
+électrique ou qualification hôte n’est déduite de ces contrôles.

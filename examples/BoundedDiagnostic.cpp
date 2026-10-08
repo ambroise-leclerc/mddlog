@@ -12,7 +12,7 @@ void runOperation() {
 
 // NOLINTNEXTLINE(bugprone-exception-escape): example initialization errors terminate the process.
 int main() {
-    mddlog::Log::initialize("pump", {.messageCapacity = 64, .flushCapacity = 2, .maxRecordBytes = 256, .sinkCapacity = 4});
+    mddlog::Log::initializeWithConfig("pump", {.messageCapacity = 64, .flushCapacity = 2, .maxRecordBytes = 256, .sinkCapacity = 4});
     runOperation();
     const auto result = mddlog::Log::flushFor(std::chrono::milliseconds(100));
     const auto health = mddlog::Log::health();

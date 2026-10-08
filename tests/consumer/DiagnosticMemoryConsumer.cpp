@@ -92,17 +92,19 @@ int main() {
     const auto failure      = synchronous.flushChecked();
     const bool flushFailure = failure.status == mddlog::DiagnosticStatus::InternalFailure && failure.sinks.empty()
                               && synchronous.health().internalFailures == 1;
-    bool propagated = false;
     failNextAllocation.store(true);
-    try {
-        synchronous.info(payload);
-    } catch (const std::bad_alloc&) {
-        propagated = true;
-    }
-    const bool admissionUnchanged = propagated && synchronous.health().admitted == 0 && synchronous.health().messages == 0;
+    const auto admissionFailure   = synchronous.tryLog(mddlog::LogLevel::Info, payload);
+    const bool admissionUnchanged = admissionFailure == mddlog::DiagnosticStatus::InternalFailure && synchronous.health().internalFailures == 2
+                                    && synchronous.health().admitted == 0 && synchronous.health().messages == 0;
+    mddlog::SimpleLogger asynchronous("command-allocation");
+    failNextAllocation.store(true);
+    const auto commandFailure   = asynchronous.flushChecked();
+    const bool commandUnchanged = commandFailure.status == mddlog::DiagnosticStatus::InternalFailure && asynchronous.health().internalFailures == 1
+                                  && asynchronous.health().flushAdmitted == 0 && asynchronous.health().flushes == 0 && asynchronous.health().flushRefused == 1;
+    (void)asynchronous.shutdown();
     // Failure during the final flush is also explicit and cannot strand shutdown.
     failNextAllocation.store(true);
     const auto stopFailure     = synchronous.shutdown();
     const bool shutdownFailure = stopFailure.status == mddlog::DiagnosticStatus::InternalFailure && synchronous.health().shutdownComplete;
-    return bounded && flushFailure && admissionUnchanged && shutdownFailure ? 0 : 1;
+    return bounded && flushFailure && admissionUnchanged && commandUnchanged && shutdownFailure ? 0 : 1;
 }

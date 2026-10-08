@@ -1225,7 +1225,7 @@
       "test": "tests/consumer/BoundedDiagnosticConsumer.cpp",
       "scenario": null,
       "evidence": "docs/diagnostic-validation.md",
-      "limits": "Sinks hôte à durée bornée ; concurrence ciblée, pas tous les interleavings ni interruption hôte."
+      "limits": "Sinks hôte à durée bornée ; refus synchrones avant attente, façade sans réinitialisation et concurrence diagnostique sous TSan ciblé ; pas tous les interleavings ni interruption hôte."
     },
     {
       "id": "VER-065",
@@ -1237,7 +1237,7 @@
       "test": "tests/consumer/DiagnosticMemoryConsumer.cpp",
       "scenario": null,
       "evidence": "docs/diagnostic-validation.md",
-      "limits": "Un million de refus avec drain immobile ; allocations C++ ordinaires, pas RSS global, allocations sinks ou qualification temps réel."
+      "limits": "Un million de refus avec drain immobile et injections d’échecs de préparation record/flush ; allocations C++ ordinaires, pas RSS global, allocations sinks ou qualification temps réel."
     }
   ],
   "risks": [

@@ -424,29 +424,48 @@ private:
             ++counters.reentrant;
             return DiagnosticStatus::Reentrant;
         }
-        std::unique_lock deliveryLock(deliveryMutex, std::defer_lock);
-        if (!asyncLogging)
-            deliveryLock.lock();
-        // Hold admission while constructing: concurrent producers cannot accumulate allocated
-        // records outside the budget. Disabled, closed, oversized and saturated calls allocate none.
-        std::unique_lock lock(queueMutex);
-        if (counters.closing) {
-            ++counters.stopped;
-            return DiagnosticStatus::Stopped;
-        }
-        std::size_t remaining = config.maxRecordBytes;
-        for (auto field : fields) {
-            if (field.size() > remaining) {
-                ++counters.oversized;
-                return DiagnosticStatus::Oversized;
+        // Check refusals before waiting for synchronous delivery, then recheck admission
+        // after serialization: shutdown may close admission while this caller waits.
+        const auto refusal = [&]() -> std::optional<DiagnosticStatus> {
+            if (counters.closing) {
+                ++counters.stopped;
+                return DiagnosticStatus::Stopped;
             }
-            remaining -= field.size();
+            std::size_t remaining = config.maxRecordBytes;
+            for (auto field : fields) {
+                if (field.size() > remaining) {
+                    ++counters.oversized;
+                    return DiagnosticStatus::Oversized;
+                }
+                remaining -= field.size();
+            }
+            if (counters.messages == config.messageCapacity) {
+                ++counters.saturated;
+                return DiagnosticStatus::Saturated;
+            }
+            return std::nullopt;
+        };
+        std::unique_lock deliveryLock(deliveryMutex, std::defer_lock);
+        if (!asyncLogging) {
+            {
+                std::scoped_lock lock(queueMutex);
+                if (auto status = refusal())
+                    return *status;
+            }
+            deliveryLock.lock();
         }
-        if (counters.messages == config.messageCapacity) {
-            ++counters.saturated;
-            return DiagnosticStatus::Saturated;
+        // Construct under admission so producers cannot accumulate records outside the budget.
+        std::unique_lock lock(queueMutex);
+        if (auto status = refusal())
+            return *status;
+        std::optional<LogRecord> prepared;
+        try {
+            prepared.emplace(factory());
+        } catch (...) {
+            ++counters.internalFailures;
+            return DiagnosticStatus::InternalFailure;
         }
-        auto record = factory();
+        auto& record = *prepared;
         ++counters.admitted;
         ++counters.messages;
         counters.messageHighWater = std::max(counters.messageHighWater, counters.messages);
@@ -569,7 +588,13 @@ private:
             completion->condition.wait(lock, [&] {
                 return completion->done;
             });
-        return completion->result;
+        try {
+            return completion->result;
+        } catch (...) {
+            std::scoped_lock healthLock(queueMutex);
+            ++counters.internalFailures;
+            return {.status = DiagnosticStatus::InternalFailure, .sinks = {}};
+        }
     }
 
     DiagnosticFlushResult flushImpl(std::optional<std::chrono::milliseconds> timeout) {
@@ -580,22 +605,36 @@ private:
         }
         if (timeout && !asyncLogging)
             return {.status = DiagnosticStatus::Unsupported, .sinks = {}};
+        const auto refusal = [&]() -> std::optional<DiagnosticStatus> {
+            if (counters.closing || counters.flushes == config.flushCapacity) {
+                ++counters.flushRefused;
+                return counters.closing ? DiagnosticStatus::Stopped : DiagnosticStatus::Saturated;
+            }
+            return std::nullopt;
+        };
         std::unique_lock deliveryLock(deliveryMutex, std::defer_lock);
-        if (!asyncLogging)
+        if (!asyncLogging) {
+            {
+                std::scoped_lock lock(queueMutex);
+                if (auto status = refusal())
+                    return {.status = *status, .sinks = {}};
+            }
             deliveryLock.lock();
+        }
         std::shared_ptr<Completion> completion;
         {
             std::scoped_lock lock(queueMutex);
-            if (counters.closing) {
-                ++counters.flushRefused;
-                return {.status = DiagnosticStatus::Stopped, .sinks = {}};
+            if (auto status = refusal())
+                return {.status = *status, .sinks = {}};
+            if (asyncLogging) {
+                try {
+                    completion = std::make_shared<Completion>();
+                } catch (...) {
+                    ++counters.internalFailures;
+                    ++counters.flushRefused;
+                    return {.status = DiagnosticStatus::InternalFailure, .sinks = {}};
+                }
             }
-            if (counters.flushes == config.flushCapacity) {
-                ++counters.flushRefused;
-                return {.status = DiagnosticStatus::Saturated, .sinks = {}};
-            }
-            if (asyncLogging)
-                completion = std::make_shared<Completion>();
             ++counters.flushAdmitted;
             ++counters.flushes;
             counters.flushHighWater = std::max(counters.flushHighWater, counters.flushes);

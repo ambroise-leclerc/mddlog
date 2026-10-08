@@ -186,6 +186,10 @@ Refus immédiat mesuré à tous les niveaux, commandes FIFO et état réservé u
 La santé ne dépend d’aucun sink ; erreurs de flush séparées des pertes d’écriture, résultats
 par sink, expiration sans annulation. Les snapshots sont possédés et les appels de sinks
 sans verrou de registre ; retrait non quiescent, diagnostics/flush/arrêt réentrants refusés.
+Le mode synchrone vérifie les refus avant attente de livraison puis revérifie sous admission ;
+ses callbacks sont sérialisés sous deliveryMutex. Les erreurs de préparation renvoient
+InternalFailure sans admission. Log::shutdownChecked rend le refus réentrant observable ;
+les flush vérifiés ne réinitialisent pas une instance absente.
 [Contrat](../../../docs/diagnostic-budgets.md), [migration](../../../docs/migration/bounded-diagnostics.md)
 et VER-064/065 remplacent la limite de file non bornée ci-dessus pour SimpleLogger.
 REQ-012 reste planned pour la qualification globale du profil ; GAP-011 reste ouvert pour

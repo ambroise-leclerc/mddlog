@@ -121,10 +121,10 @@ jobs:
     - name: Build and link TSan tests
       run: cmake --build build-tsan
 
-    - name: Run rings, audit observers, SinkRegistry and the bounded service profile under TSan
+    - name: Run rings, audit observers, SinkRegistry, service and diagnostic profiles under TSan
       env:
         TSAN_OPTIONS: halt_on_error=1
-      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*(RingLog|AuditRing|Service health observers|Service shutdown preserves a resource refusal|SinkRegistry:)|^audit.service.resourceProfile$' --output-on-failure --no-tests=error --timeout 60
+      run: ctest --test-dir build-tsan -R '^mddlog_specs::.*(RingLog|AuditRing|Service health observers|Service shutdown preserves a resource refusal|SinkRegistry:)|^audit.service.resourceProfile$|^diagnostic\.' --output-on-failure --no-tests=error --timeout 60
 
     - name: Verify governed boundary and negative controls
       run: ctest --test-dir build-tsan -L governed --verbose --no-tests=error --timeout 120

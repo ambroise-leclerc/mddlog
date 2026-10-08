@@ -245,7 +245,7 @@ set_tests_properties(audit.retention.allocation PROPERTIES LABELS "storage;integ
 # Diagnostic overload and lifecycle scenarios (#118), independent of application code.
 add_executable(mddlog_bounded_diagnostic_consumer consumer/BoundedDiagnosticConsumer.cpp)
 target_link_libraries(mddlog_bounded_diagnostic_consumer PRIVATE mddlog::mddlog)
-foreach(scenario IN ITEMS overload failures-sync failures-async callbacks-sync callbacks-async concurrent order active-flush configuration console global)
+foreach(scenario IN ITEMS overload failures-sync failures-async callbacks-sync callbacks-async concurrent order active-flush configuration console global sync-refusals)
     add_test(NAME diagnostic.bounded.${scenario} COMMAND mddlog_bounded_diagnostic_consumer ${scenario})
     set_tests_properties(diagnostic.bounded.${scenario} PROPERTIES LABELS "diagnostic;concurrency" TIMEOUT 30)
 endforeach()

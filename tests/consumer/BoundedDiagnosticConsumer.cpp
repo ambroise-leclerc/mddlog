@@ -34,6 +34,32 @@ public:
     std::counting_semaphore<16> release{0};
 };
 
+void synchronousRefusals() {
+    mddlog::SimpleLogger logger("sync-gate", {.messageCapacity = 1, .maxRecordBytes = 8}, false);
+    auto                 gate = std::make_shared<GateSink>();
+    logger.addSink(gate);
+    std::jthread producer([&] {
+        logger.info("x", "c");
+    });
+    require(gate->entered.try_acquire_for(2s), "synchronous sink active");
+    const auto begin = std::chrono::steady_clock::now();
+    require(logger.tryLog(mddlog::LogLevel::Info, "oversized", "c") == DiagnosticStatus::Oversized, "oversize before delivery wait");
+    require(logger.tryLog(mddlog::LogLevel::Info, "x", "c") == DiagnosticStatus::Saturated, "active synchronous record occupies budget");
+    std::jthread stopper([&] {
+        (void)logger.shutdown();
+    });
+    while (!logger.health().closing && std::chrono::steady_clock::now() - begin < 2s)
+        std::this_thread::yield();
+    require(logger.health().closing, "stop closes admission while sink active");
+    require(logger.tryLog(mddlog::LogLevel::Info, "x", "c") == DiagnosticStatus::Stopped, "closed before delivery wait");
+    require(logger.flushChecked().status == DiagnosticStatus::Stopped, "closed flush before delivery wait");
+    require(std::chrono::steady_clock::now() - begin < 2s, "refusals do not wait for five-second sink bound");
+    gate->release.release();
+    producer.join();
+    stopper.join();
+    require(logger.health().admitted == 1 && logger.health().processed == 1, "single admitted record drained");
+}
+
 class RejectingSink : public mddlog::Sink {
 public:
     void write(const mddlog::LogRecord&) override {
@@ -334,10 +360,22 @@ void console() {
     require(logger.shutdown().status == DiagnosticStatus::Success, "restored streams permit final flush");
 }
 
+class GlobalCallbackSink : public mddlog::Sink {
+public:
+    void write(const mddlog::LogRecord&) override {
+        status = mddlog::Log::shutdownChecked().status;
+    }
+    void             flush() override {}
+    std::string_view getName() const noexcept override {
+        return "global-callback";
+    }
+    DiagnosticStatus status = DiagnosticStatus::Success;
+};
+
 void global() {
     mddlog::Log::shutdown();
     require(!mddlog::Log::health(), "health does not initialize console");
-    mddlog::Log::initialize("global-budget", {.messageCapacity = 2, .maxRecordBytes = 8}, false);
+    mddlog::Log::initializeWithConfig("global-budget", {.messageCapacity = 2, .maxRecordBytes = 8}, false);
     auto retained = mddlog::Log::getLogger();
     retained->clearSinks();
     mddlog::Log::info("too long for budget");
@@ -345,6 +383,20 @@ void global() {
     mddlog::Log::shutdown();
     require(retained->tryLog(mddlog::LogLevel::Info, "x") == DiagnosticStatus::Stopped, "retained handle closed");
     require(!mddlog::Log::health(), "facade detached");
+    require(mddlog::Log::flushChecked().status == DiagnosticStatus::Stopped && mddlog::Log::flushFor(1ms).status == DiagnosticStatus::Stopped,
+            "checked flushes do not reinitialize after shutdown");
+    require(!mddlog::Log::isInitialized(), "checked operations leave facade detached");
+    mddlog::Log::initialize("legacy-braces", {});
+    auto callbackLogger = mddlog::Log::getLogger();
+    callbackLogger->clearSinks();
+    auto callback = std::make_shared<GlobalCallbackSink>();
+    callbackLogger->addSink(callback);
+    mddlog::Log::info("callback");
+    (void)mddlog::Log::flushChecked();
+    require(callback->status == DiagnosticStatus::Reentrant && mddlog::Log::isInitialized() && callbackLogger->health().shutdownRefused == 1,
+            "global checked shutdown reports refusal without detaching");
+    require(mddlog::Log::shutdownChecked().status == DiagnosticStatus::Success, "supervisor stops global instance");
+    require(mddlog::Log::shutdownChecked().status == DiagnosticStatus::Stopped, "absent instance explicitly reported");
 }
 }  // namespace
 
@@ -369,6 +421,8 @@ int main(int argc, char** argv) {
             order();
         else if (scenario == "active-flush")
             activeFlush();
+        else if (scenario == "sync-refusals")
+            synchronousRefusals();
         else if (scenario == "configuration")
             configuration();
         else if (scenario == "console")

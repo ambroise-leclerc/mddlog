@@ -10,7 +10,7 @@ Avant, la composition utilisait `Log::initialize("pump")`. Après :
 ```cpp
 import mddlog;
 import mddlog.log;
-Log::initialize("pump", DiagnosticConfig{
+Log::initializeWithConfig("pump", DiagnosticConfig{
     .messageCapacity = 64, .flushCapacity = 2,
     .maxRecordBytes = 256, .sinkCapacity = 4});
 ```
@@ -43,3 +43,8 @@ L'arrêt global depuis un callback est sans effet : le demander au superviseur.
 Le [contrat détaillé](../diagnostic-budgets.md) précise plafonds, ordre, erreurs, limites des délais
 et obligation de retour des sinks hôte. Pour le diagnostic critique sans allocation, migrer
 vers le [cœur gouverné](governed-core.md). L'audit conserve son anneau et sa supervision distincts.
+
+La configuration utilise le nom explicite `Log::initializeWithConfig` ;
+`Log::initialize(name, {})` conserve ainsi la surcharge historique avec `bool` sans ambiguïté.
+Le superviseur peut utiliser `Log::shutdownChecked()` pour observer notamment `Reentrant`
+depuis un callback. Les nouveaux flush vérifiés ne recréent pas une instance après arrêt.

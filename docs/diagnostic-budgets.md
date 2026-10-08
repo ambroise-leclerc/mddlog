@@ -27,12 +27,19 @@ filtrage avant fabrique. L'admission fermée, la taille excessive et la saturati
 dans cet ordre, avant construction du record. Message, composant/catégorie, identifiants médicaux,
 opération et corrélation entrent dans le budget d'octets. Les champs vides, la source statique,
 l'horodatage et les objets internes ont un coût fixe distinct. Aucun record personnalisé ou
-metadata de taille arbitraire n'est injectable dans cette file. Une exception d'allocation lors
-de la construction reste propagée au producteur, avant incrément d'admission.
+metadata de taille arbitraire n'est injectable dans cette file. Une erreur de construction du
+record, notamment `bad_alloc`, renvoie `InternalFailure`, incrémente `internalFailures` et
+ne modifie pas les admissions ; les raccourcis `void` laissent ce résultat dans la santé.
+La construction initiale du logger et les allocations des arguments effectuées par l'appelant
+restent susceptibles de lever une exception.
 
 Les émissions asynchrones admises sont FIFO selon leur acquisition du verrou d'admission ; aucun
-ordre total des instants d'appel concurrents n'est promis. Le mode synchrone sérialise émission
-et flush avant admission. Aucun sink n'est appelé sous verrou d'admission ou de registre.
+ordre total des instants d'appel concurrents n'est promis. Le mode synchrone vérifie les refus
+avant l'attente sur `deliveryMutex`, puis sérialise émission et flush et revérifie l'admission
+pour observer une fermeture survenue pendant l'attente. Un appel admissible peut attendre un
+sink actif ; la saturation est possible si sa capacité message est déjà occupée. Aucun sink
+n'est appelé sous verrou d'admission ou de registre ; les callbacks synchrones s'exécutent
+sous `deliveryMutex`, ce qui impose leur sérialisation.
 
 ## Flush, arrêt et erreurs
 
@@ -44,7 +51,10 @@ Une exception, ou `recordFlushFailure()` appelé par le sink, rend son résultat
 `SinkFailure` ; les autres sinks sont toujours tentés. Une absence de signalement d’erreur par
 un sink ne peut pas être détectée par l’adaptateur. ConsoleSink signale aussi les états
 d’erreur de ses streams lorsque les exceptions iostream sont désactivées ; son destructeur
-ne laisse pas échapper une exception de flush. Un retour réussi n'est ni une garantie de
+ne laisse pas échapper une exception de flush. `failbit`/`badbit` persistent jusqu'à une
+récupération explicite du flux par l'hôte : chaque tentative suivante reste en échec. Le sink
+ne fait pas de `clear()` automatique, qui masquerait une erreur sans réparer le support.
+Un retour réussi n'est ni une garantie de
 persistance, ni une affirmation que chaque écriture antérieure a réussi : celles-ci sont des
 tentatives terminées, avec leurs échecs dans la santé.
 
@@ -70,7 +80,8 @@ Les échecs d'écriture sont signalés par `recordsDropped` ou exception. Une ex
 la statistique du sink si celui-ci n'a pas déjà signalé la perte ; la différence du compteur
 alimente `writeFailures`. Le sink reste inscrit pour les tentatives suivantes ; il peut être
 désactivé ou retiré par le superviseur. Les erreurs ne sont jamais écrites dans un autre diagnostic.
-Les erreurs internes de préparation d'un snapshot sont comptées dans `internalFailures` ; un
+Les erreurs internes de préparation d'un record, d'une complétion, d'un snapshot ou de copie
+d'un résultat sont comptées dans `internalFailures` ; un
 flush affecté renvoie `InternalFailure`, sans inventer des résultats de sinks non appelés.
 
 ## Sinks, rappels et durée de vie
@@ -87,8 +98,12 @@ son contrat de quiescence ADR-003 pour les callbacks empruntant des ressources e
 
 Un garde par thread empêche une émission ou commande de flush/arrêt depuis une invocation de
 sink vers n'importe quel `SimpleLogger` : résultat `Reentrant`, émission comptée ou flush refusé.
-`Log::shutdown` depuis un callback est sans effet et compté dans `shutdownRefused` pour éviter la destruction sur le worker ;
-l'arrêt global appartient au superviseur. La garde ne couvre pas un rappel différé sur un autre
+`Log::shutdownChecked()` renvoie `Reentrant` depuis un callback, conserve le logger et sa liaison
+audit, et compte le refus dans `shutdownRefused` pour éviter la destruction sur le worker.
+`Log::shutdown()` conserve sa signature `void` et délègue à cette opération ;
+l'arrêt global appartient au superviseur. Les flush `Log::flushChecked()` / `Log::flushFor()`
+et l'arrêt vérifié n'initialisent jamais une instance absente : ils renvoient `Stopped`.
+Les émissions et le flush historique `void` conservent leur initialisation implicite. La garde ne couvre pas un rappel différé sur un autre
 thread : le sink/transport hôte doit rompre ce cycle avant de réémettre, conformément à ADR-003.
 Les autres getters, la santé, les filtres et les opérations de registre restent utilisables.
 Les ajouts après fermeture sont refusés et comptés ; les noms de sinks restent des vues stables,
