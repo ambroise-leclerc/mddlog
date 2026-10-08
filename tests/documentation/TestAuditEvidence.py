@@ -16,6 +16,13 @@ SPEC.loader.exec_module(EVIDENCE)
 
 
 class AuditEvidenceTest(unittest.TestCase):
+    def test_oversized_manifest_is_rejected_before_parsing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'manifest.json').write_bytes(b' ' * 65537)
+            with self.assertRaisesRegex(ValueError, 'manifest exceeds input budget'):
+                EVIDENCE.verify_evidence(root)
+
     def test_original_archive_and_all_histories_replay_offline(self):
         result = EVIDENCE.verify_evidence(EVIDENCE.DEFAULT)
         self.assertEqual(result['members'], 8109)

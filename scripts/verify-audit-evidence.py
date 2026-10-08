@@ -49,7 +49,9 @@ def verify_log(root, entry, maximum=16 * 1024 * 1024):
 
 
 def verify_evidence(root):
-    manifest = json.loads((root / 'manifest.json').read_text())
+    manifest_file = root / 'manifest.json'
+    require(manifest_file.stat().st_size <= 65536, 'manifest exceeds input budget')
+    manifest = json.loads(manifest_file.read_text())
     require(manifest['schema'] == 1 and manifest['issue'] == 120, 'unsupported evidence manifest')
     require(manifest['tested_revision'] == manifest['run']['head_sha']
             and manifest['run']['event'] == 'workflow_dispatch'
