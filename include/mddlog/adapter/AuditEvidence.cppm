@@ -235,10 +235,10 @@ decodeAuditEvidence(std::span<const std::uint8_t> bytes, AuditResourceLimits loc
     out.verification.verificationTime = clock.time();
     clock.end();
     const auto age = input.number();
-    if (age > std::numeric_limits<std::int64_t>::max())
+    if (age > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         throw std::invalid_argument("invalid anchor age");
     if (age != 0)
-        out.verification.maxAnchorAge = std::chrono::nanoseconds{age - 1};
+        out.verification.maxAnchorAge = std::chrono::nanoseconds{static_cast<std::int64_t>(age - 1)};
     std::array<std::uint64_t, profileFields> profile{};
     const auto                               maxima = values(local);
     for (std::size_t i = 0; i < profile.size(); ++i) {
