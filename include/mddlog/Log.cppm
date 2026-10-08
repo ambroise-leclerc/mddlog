@@ -37,10 +37,15 @@ public:
      * @param asyncLogging Enable asynchronous logging (default: true)
      */
     static void initialize(std::string_view loggerName = "GlobalLogger", bool enableColors = true, bool asyncLogging = true) {
+        initialize(loggerName, core::DiagnosticConfig{}, enableColors, asyncLogging);
+    }
+
+    /** @brief Select centralized budgets before first use; existing instances are not reconfigured. */
+    static void initialize(std::string_view loggerName, core::DiagnosticConfig config, bool enableColors = true, bool asyncLogging = true) {
         std::scoped_lock lock(mutex);
 
         if (!globalLogger) {
-            globalLogger = std::make_shared<core::SimpleLogger>(loggerName, asyncLogging);
+            globalLogger = std::make_shared<core::SimpleLogger>(loggerName, config, asyncLogging);
 
             // Add default console sink
             auto consoleSink = sinks::createConsoleSink(enableColors, true);
@@ -80,6 +85,25 @@ public:
      */
     static void flush() {
         snapshot()->flush();
+    }
+
+    /** @brief Inspect the current global instance without auto-initialization or sink dispatch. */
+    [[nodiscard]] static std::optional<core::DiagnosticHealth> health() {
+        std::shared_ptr<core::SimpleLogger> logger;
+        {
+            std::scoped_lock lock(mutex);
+            logger = globalLogger;
+        }
+        if (!logger)
+            return std::nullopt;
+        return logger->health();
+    }
+
+    [[nodiscard]] static core::DiagnosticFlushResult flushChecked() {
+        return snapshot()->flushChecked();
+    }
+    [[nodiscard]] static core::DiagnosticFlushResult flushFor(std::chrono::milliseconds timeout) {
+        return snapshot()->flushFor(timeout);
     }
 
     // Convenience logging methods
@@ -183,6 +207,16 @@ public:
      * binding on that object too, so retained handles cannot use it after shutdown returns.
      */
     static void shutdown() {
+        if (core::SimpleLogger::inSinkCallback()) {
+            std::shared_ptr<core::SimpleLogger> retained;
+            {
+                std::scoped_lock lock(mutex);
+                retained = globalLogger;
+            }
+            if (retained)
+                (void)retained->shutdown();
+            return;
+        }
         std::shared_ptr<core::SimpleLogger> toShutdown;
         {
             std::scoped_lock lock(mutex);
@@ -191,7 +225,7 @@ public:
         }
         if (toShutdown) {
             toShutdown->clearAuditRing();
-            toShutdown->flush();
+            (void)toShutdown->shutdown();
         }
     }
 

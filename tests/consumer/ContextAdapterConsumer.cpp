@@ -8,7 +8,7 @@ int main() {
     const auto auditContext = mddlog::AuditContext::create({.actor = "host", .target = "consumer", .correlationId = "call-1"});
     if (!context || !description || !auditContext)
         return 1;
-    mddlog::SimpleLogger logger("source-installed-context", false);
+    mddlog::SimpleLogger logger("source-installed-context", mddlog::DiagnosticConfig{.messageCapacity = 4, .flushCapacity = 2, .maxRecordBytes = 128}, false);
     logger.setMinLevel(mddlog::LogLevel::Info);
     mddlog::DiagnosticBinding diagnostic(logger, *context);
     int                       constructions = 0;
@@ -44,5 +44,12 @@ int main() {
     const mddlog::WriteResult full = governed.info(mddlog::RawTime::unavailable(), "full ring");
     if (full.admission() != mddlog::Admission::Refused || !full.refusal() || full.refusal()->reason != mddlog::RefusalReason::RingFull)
         return 9;
+    if (logger.health().admitted != 1 || logger.health().processed != 1 || logger.configuration().messageCapacity != 4)
+        return 10;
+    const mddlog::DiagnosticFlushResult flush = logger.flushChecked();
+    if (flush.status != mddlog::DiagnosticStatus::Success || !flush.sinks.empty())
+        return 11;
+    if (logger.shutdown().status != mddlog::DiagnosticStatus::Success || !logger.health().shutdownComplete)
+        return 12;
     return 0;
 }

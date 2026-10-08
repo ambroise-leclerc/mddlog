@@ -70,3 +70,11 @@ candidat. Le [profil Linux x86_64](../../../docs/audit-resource-budgets.md) cons
 une image plafonnée du journal ; il ne garantit pas une mémoire constante ou un WCET.
 Les autres plateformes doivent mesurer leur propre profil avant de revendiquer ces
 budgets. La qualification indépendante reste en GAP-015.
+
+## Livraison diagnostique #118
+
+SimpleLogger possède désormais un tableau circulaire borné et une santé indépendante,
+avec configuration centralisée également accessible via Log. TextLogger reste synchrone et
+allouant. Aucun module, composant tiers, dépendance de déploiement ni chemin d’audit nouveau.
+CTRL-017 et VER-064/065 relient sources, conception et [preuves](../../../docs/diagnostic-validation.md).
+Les limites de durée des sinks, mémoire propre hôte et qualification du profil restent explicites.

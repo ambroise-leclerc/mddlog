@@ -80,3 +80,12 @@ internes d’un backend personnalisé, fsync, callbacks, ordonnanceur et entrée
 diagnostiques arbitraires restent sous contrat de déploiement. Les mesures de RSS et
 les seuils CI détectent des régressions ; ils ne démontrent pas un WCET et ne décident
 pas l’acceptabilité du risque système. GAP-011/GAP-015 restent ouverts.
+
+## Diagnostic borné #118
+
+RISK-007/008 sont reliés à CTRL-017 et VER-064/065 : plafonds avant allocation, compteurs
+de pertes/commandes, barrières FIFO, santé sans réémission, snapshots possédés et garde
+réentrante. La livraison diminue la croissance de file ; elle ne garantit pas un diagnostic
+critique conservé ni le retour d’un sink bloqué. Un refus Fatal reste possible. Le fabricant
+dimensionne les budgets et définit sa réponse aux pertes, l’exclusivité/statistique et les
+durées de sinks ; GAP-011 conserve revue/acceptation et REQ-012 sa qualification du profil.

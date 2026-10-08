@@ -74,3 +74,7 @@ add_executable(mddlog_audit_application AuditApplication.cpp)
 target_link_libraries(mddlog_audit_application PRIVATE mddlog::mddlog)
 target_compile_features(mddlog_audit_application PRIVATE cxx_std_23)
 set_target_properties(mddlog_audit_application PROPERTIES FOLDER "Examples")
+
+add_executable(mddlog_bounded_diagnostic BoundedDiagnostic.cpp)
+target_link_libraries(mddlog_bounded_diagnostic PRIVATE mddlog::mddlog)
+set_target_properties(mddlog_bounded_diagnostic PROPERTIES FOLDER "Examples")
