@@ -96,7 +96,7 @@ if grep -q '^MDDLOG_BUILD_FILE_STORAGE:BOOL=OFF$' "$build_dir/CMakeCache.txt"; t
     enabled_scope=()
     for f in "${scope[@]}"; do
         case "$f" in
-            include/mddlog/adapter/FileStorageMedium.cppm|include/mddlog/adapter/FileRetainedPosition.cppm|include/mddlog/adapter/FileAnchorAuthority.cppm|include/mddlog/adapter/UnixAnchorProvider.cppm|tests/spec/WitnessSpec.cpp|tests/spec/WitnessDeployment.cpp|examples/WitnessService.cpp|tests/spec/FileRetainedPositionSpec.cpp|tests/spec/FileStorageSpec.cpp|tests/spec/FileStorageCampaign.cpp|examples/FileAudit.cpp)
+            include/mddlog/adapter/FileStorageMedium.cppm|include/mddlog/adapter/FileRetainedPosition.cppm|include/mddlog/adapter/FileAnchorAuthority.cppm|include/mddlog/adapter/UnixAnchorProvider.cppm|tests/spec/WitnessSpec.cpp|tests/spec/WitnessDeployment.cpp|tests/spec/AuditChainCampaign.cpp|examples/WitnessService.cpp|tests/spec/FileRetainedPositionSpec.cpp|tests/spec/FileStorageSpec.cpp|tests/spec/FileStorageCampaign.cpp|examples/FileAudit.cpp)
                 echo "run-clang-tidy: excluded disabled file backend: $f" ;;
             *) enabled_scope+=("$f") ;;
         esac

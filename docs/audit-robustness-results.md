@@ -1,5 +1,9 @@
 # Résultats complémentaires de stockage et robustesse — #114 / #120
 
+Le [complément du 8 octobre 2026](#complément-de-chaîne-réelle-du-8-octobre-2026) étend
+ces résultats historiques au pilotage, au témoin/checkpoint réels et aux archives v0.2/v0.3.
+Les résultats ci-dessous du 5 octobre restent attachés à leur propre révision et profil.
+
 Campagne locale du 5 octobre 2026, workspace fondé sur `f3df383` avec les modifications
 de ce lot. La PR #136 a été fusionnée à `4757e6e` ; son contenu documentaire est présent
 dans cette base locale. Références : [plan de robustesse](audit-robustness-test-plan.md),
@@ -193,3 +197,108 @@ campagne Orin Nano. Le [bilan actualisé](orin-nano-electrical-results.md) et la
 et leurs événements avec les mentions du template retirées. Les réserves de traçabilité,
 d’oracle et de preuves externes sont explicites ; la qualification reste ouverte.
 Cette réception n’ajoute aucun nouveau résultat aux campagnes logicielles ci-dessus.
+
+## Complément de chaîne réelle du 8 octobre 2026
+
+Base `197574f2ceefb72a7e0aaebe6ad322cce2e8fe7d`, workspace du lot #120 non encore
+accepté. [Modèle, traçabilité, protocole et réserves](audit-chain-campaign.md) ; VER-070–072.
+Aucune modification des quatre contrats ni des modules déployés. Tuple local : Linux
+x86_64 7.0.0-34-generic, Clang/libc++ 21.1.8, GCC/libstdc++ 16.1.0, CMake 4.2.3,
+Python 3.14.6 ; SpecLab inchangé au SHA épinglé. Les rapports JSON conservent options,
+versions, révision/worktree, commandes et empreintes des workers/sources/traces/corpus.
+
+| Vérification exécutée | Résultat et borne |
+| --- | --- |
+| CTest Clang Release final | 238/238 réussis, y compris consommateurs source/installé, witness.deployment et les deux archives |
+| Nouveau banc GCC Release | Compilation/lien réussis ; audit.chain-campaign passe, sans attribuer un nouveau passage à toute la suite GCC |
+| Profil réel prolongé Clang Release | 32 seeds 120–151 × 24 flux × 64 événements ; 49 152 événements de référence, 768 fautes terminales, 1 000 refus puis 1 000 polls sans fournisseur par flux ; reprise supplémentaire de chaque dernier flux |
+| Isolation réelle répétée | 32 invocations de VER-044 avec --require-isolation, toutes réussies ; autorités writer/witness/reader/retirement sous UID distincts |
+| Profil Clang Debug ASan/UBSan | 8 seeds × 6 flux × 64 événements, 3 072 événements de référence et 928 records relus après rétention/reprise ; quatre invocations multi-UID et relecture des deux archives réussies |
+| Fuzzing avec archives réelles | 100 000 entrées seed 120, douze seeds initiaux incluant les quatre segments originaux v0.2/v0.3 ; aucun crash, UB ou timeout ; couverture des six lecteurs collectée |
+| Oracle SHA-256 | 268 inputs concordent avec hashlib ; nouvel oracle de chaîne reconstruit aussi les octets depuis les requêtes, pas depuis decodeCanonical |
+| Contrôles documentaires | 64 tests réussis et registre/références vérifiés ; contrôles négatifs du modèle et fidélité byte-for-byte des seeds aux archives inclus |
+| Format et analyse | 119 fichiers conformes à clang-format 21 ; nouvelle unité AuditChainCampaign analysée par clang-tidy 21 sans diagnostic utilisateur |
+
+Le profil ASan/UBSan utilise `ASAN_OPTIONS=detect_leaks=0:abort_on_error=1` localement,
+avec UBSan halt-on-error ; le fuzzing utilise explicitement --disable-leak-detection.
+LSan n’est donc pas vérifié localement, conformément à la limite ptrace déjà consignée.
+La CI conserve LSan et impose le namespace multi-UID ; sa nouvelle configuration n’est
+pas annoncée comme une exécution réussie. Le nouveau banc est séquentiel ; aucun nouveau
+résultat TSan n’est revendiqué et le suivi antérieur libc++/TSan reste ouvert.
+
+La campagne de fuzzing finale est `build-robustness-fuzz/120-releases/run-ftawngvp/report.json`
+(184,07 s). Le profil ASan/UBSan final est
+`build-120-asan/120-delivery/run-fg8vjs8a/report.json` (43,79 s), worker SHA-256
+`14861a326fbb32f01b43ee2933d4d7427d836c9ccc9e41fca84164f9462eafb6`.
+Le profil prolongé final est `build-clang/120-final/run-6xlfo1p7/report.json`
+(209,84 s), worker SHA-256
+`99219f32744cd66d1e143ab90eddbca7f073d1c4b14f92b36042559becc3c8e1` ; 14 848 records
+relus après rétention/reprise. Les intégrations multi-UID et les deux corpus sont PASS.
+Les artefacts générés restent hors Git ; leur conservation définitive relève de GAP-003/#122.
+
+La nouvelle archive v0.3 a été réellement produite par une reconstruction séparée de
+`073761b7a6d5ed29ed87bc37c85967db72386d3c` ; protocole, hash et distinction entre
+production d’octets par la release et durabilité physique sont dans le
+[README du corpus](../tests/archives/audit-export/README.md). La v0.2 est conservée
+intacte. Le support des futurs formats/releases et sa durée restent dus à #121.
+
+Anomalies du banc corrigées puis rejouées : l’injection du reclaim a d’abord atteint
+une barrière de rotation du ledger ; elle est maintenant armée au vrai reclaim.
+Le contrôle terminal a ensuite additionné takenUnacknowledged à pendingInRings : le
+premier est une partie du second, donc le modèle comptait deux fois un refus de sink.
+La relation correcte transmis + pending = admis et le reporting des pertes après
+transmission sont vérifiés dans le modèle et ses contrôles négatifs. Les premiers FAIL
+restent dans leurs répertoires de campagne, distincts des passages finaux. Les nouveaux
+contrôles CLI d’ordre ont aussi été rejoués après correction du chemin fields.sequence
+selon le schéma de projection.
+
+Livraison proposée à la revue du mainteneur. GAP-003/013, les qualifications physiques,
+la politique de futures archives #121 et l’acceptation explicite #122 restent ouverts.
+Aucun succès fini n’est présenté comme une preuve exhaustive ni une certification.
+
+Couverture LLVM du fuzzing final (branche exécutée / branches totales) :
+AuditCanonical 123/160, AuditLayout 47/54, AuditLedger 96/172, AuditLog 152/506,
+AuditLogVerifier 58/192, AuditStore 55/650. Les chemins non couverts restent présents
+et visibles dans coverage.json/coverage.txt ; en particulier le fuzzing de lecteurs ne
+prouve pas les branches de mutation et de rétention du sink. Les campagnes de chaîne
+les exercent séparément sans additionner leurs résultats à ces pourcentages.
+
+### Complément après revue de PR #146
+
+La revue a révélé un faux positif du superviseur : une borne `through == records`
+initialisait le compteur de reprise à sa valeur attendue sans exiger de record relu.
+Le cas a été reproduit sur un flux initial et le flux final ; la régression couvre les
+trois producteurs du profil court. L’oracle exige maintenant `recovery_started` pour
+chaque flux, sans exception finale : le worker exécute déjà un boot de récupération
+supplémentaire pour ce dernier. La ponctuation du passage décrivant cette reprise est
+également corrigée.
+
+65 tests documentaires et les trois CTests de chaîne/outils passent après ce correctif.
+Les 32 histoires Release et les huit histoires ASan/UBSan précédentes ont été revalidées
+par le nouvel oracle : leurs hashes de trace sont inchangés, les 49 152 / 3 072 records
+de référence et 14 848 / 928 records relus restent concordants. Ce contrôle revalide les
+captures existantes ; il ne constitue pas une nouvelle campagne du worker inchangé.
+Rapport local : `build-clang/120-review-oracle.json`, SHA-256 de l’oracle corrigé
+`890fd3673250496e61aedf4d93535ac51c4dac63a084b29f3a8c49a3177b26a6`.
+
+### Revue du périmètre CI et de la provenance (#120)
+
+Le générateur v0.3 émet désormais lui-même producerRevision, producerStream et
+eventCount ; la procédure exacte du README a été rejouée sur la release figée
+`073761b7a6d5ed29ed87bc37c85967db72386d3c`. La reconstruction et le générateur
+compilés/liés avec Clang/libc++ 21.1.8 produisent le même JSON octet pour octet et
+la même empreinte `0852b676669ab7570753c61b139d16524b7e4ec1ce8c721116c73585052761e2`.
+
+Le profil CI élève seulement run-witness-deployment.py, conserve le superviseur,
+les workers de chaîne et les CLI sous l’utilisateur du runner, et relève le budget
+de l’étape à 110 minutes et celui du job à 300 minutes. Le calcul des plafonds et
+la limite des admissions observées via la trace figurent dans audit-chain-campaign.md.
+Les bornes worker/superviseur exigent maintenant toutes deux au moins trois boots.
+Les empreintes des sources incluent les scripts d’intégration et les deux générateurs.
+
+Validation locale de ce correctif : trois CTests de chaîne/archives, formatage des
+119 fichiers et contrôle du dossier réussis. Un nouveau contrôle négatif exige
+FAIL si l’élévation du déploiement est refusée ; il vérifie aussi que l’histoire
+précédente reste sans sudo et que les sources supplémentaires sont hachées.
+L’exécution CI prolongée sur la branche sera consignée dans la PR avec son SHA
+et ses artefacts ; cette configuration ne constitue pas encore sa réussite.

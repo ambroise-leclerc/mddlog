@@ -22,7 +22,7 @@ jobs:
   readers:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.campaign == 'volume' && 'File storage ENOSPC (Clang 21)' || 'Audit readers fuzzing and coverage (Clang 21)' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 300
     env:
       VOLUME_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.campaign == 'volume' }}
     steps:
@@ -33,12 +33,13 @@ jobs:
         with:
           cache-key: audit-fuzz
       - name: Install fuzzing runtime and coverage tools
-        run: sudo apt-get install -y libclang-rt-21-dev llvm-21
+        run: sudo apt-get install -y libclang-rt-21-dev llvm-21 uidmap
       - name: Configure scenarios and instrumented readers separately
         run: |
           cmake -S . -B build-robustness -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-clang21-libcxx.cmake \
-            -DCMAKE_BUILD_TYPE=Debug -DMDDLOG_BUILD_TESTS=ON -DMDDLOG_BUILD_EXAMPLES=OFF \
+            -DCMAKE_BUILD_TYPE=Debug -DMDDLOG_BUILD_TESTS=ON -DMDDLOG_BUILD_EXAMPLES=ON \
+            -DMDDLOG_BUILD_AUDIT_TOOLS=ON \
             -DENABLE_SANITIZER_ADDRESS=ON -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
           if [ "$VOLUME_ONLY" != true ]; then
             cmake -S . -B build-robustness-fuzz -G Ninja \
@@ -52,7 +53,8 @@ jobs:
           if [ "$VOLUME_ONLY" = true ]; then
             cmake --build build-robustness --target mddlog_file_storage_campaign --parallel 4
           else
-            cmake --build build-robustness --target mddlog_sha256_oracle mddlog_specs mddlog_file_storage_campaign --parallel 4
+            cmake --build build-robustness --target mddlog_sha256_oracle mddlog_specs mddlog_file_storage_campaign \
+              mddlog_audit_chain_campaign mddlog_witness_deployment mddlog_witness mddlog_audit mddlog_audit_tool_reference --parallel 4
             cmake --build build-robustness-fuzz --target mddlog_audit_readers_fuzz --parallel 4
           fi
       - name: Run concurrent and generated audit scenarios
@@ -62,8 +64,24 @@ jobs:
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: |
           ctest --test-dir build-robustness \
-            -R 'AuditRing (follows|concurrent)|Generated audit cuts|Idle asynchronous' \
-            --repeat until-fail:10 --no-tests=error --output-on-failure --timeout 60
+            -R 'AuditRing (follows|concurrent)|Generated audit cuts|Idle asynchronous|^audit.chain-campaign$|^audit.tools' \
+            --repeat until-fail:10 --no-tests=error --output-on-failure --timeout 150
+      - name: Run prolonged real-chain histories and separate-authority regressions
+        timeout-minutes: 110
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.campaign != 'volume')
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          sudo usermod --add-subuids 100000-100004 --add-subgids 100000-100004 root
+          python3 scripts/run-audit-chain-campaign.py \
+            --worker "$PWD/build-robustness/tests/mddlog_audit_chain_campaign" \
+            --output "$PWD/build-robustness/chain-long" \
+            --seeds 32 --boots 24 --records 64 --outage 1000 --timeout 120 \
+            --deployment-worker "$PWD/build-robustness/tests/mddlog_witness_deployment" \
+            --witness-service "$PWD/build-robustness/examples/mddlog_witness" --deployment-repetitions 32 --deployment-sudo \
+            --tools-cli "$PWD/build-robustness/mddlog-audit" \
+            --tool-reference "$PWD/build-robustness/tests/mddlog_audit_tool_reference"
       - name: Run bounded readers fuzzing and independent digest oracle
         if: github.event_name != 'workflow_dispatch' || inputs.campaign != 'volume'
         env:
@@ -107,5 +125,7 @@ jobs:
             build-robustness/readers/
             build-robustness/storage-100/
             build-robustness/storage-full-volume/
+            build-robustness/chain-long/
+            build-robustness/tests/audit-chain-campaign/
             build-robustness/Testing/Temporary/
           if-no-files-found: error

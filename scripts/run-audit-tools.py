@@ -24,14 +24,14 @@ def text(value):
 
 
 def corpus_package(corpus):
-    """Independent v1 encoder around original v0.2 bytes, not a re-encoding of events."""
+    """Independent v1 envelope around original release bytes, without re-encoding events."""
     listing = text(corpus['providerId']) + number(corpus['head']) + number(len(corpus['anchors']))
     for anchor in corpus['anchors']:
         listing += number(0) + number(anchor['anchorFormat']) + number(anchor['canonicalVersion'])
         listing += text(anchor['streamId']) + number(anchor['position']) + bytes.fromhex(anchor['digest'])
         listing += text(corpus['providerId']) + number(anchor['counter']) + number(0) + number(0)
     profile = [4096, 1048576, 67108864, 65536, 134217728, 4096, 262144, 4096, 1024, 32768, 4096, 0]
-    payload = b'MDDAUDIT' + number(1) + text('v0.2.0 corpus') + text('original v0.2 test witness; accepted assumption')
+    payload = b'MDDAUDIT' + number(1) + text(corpus['producerVersion'] + ' corpus') + text('original release test witness; accepted assumption')
     payload += blob(number(0) + number(0)) + number(0) + b''.join(map(number, profile))
     payload += blob(listing) + number(0) + number(0) + number(len(corpus['segments']))
     for segment in corpus['segments']:
@@ -176,11 +176,15 @@ def main():
             service.terminate()
             service.communicate(timeout=5)
         corpus = json.loads(args.corpus.read_text())
-        old = root / 'v02.mda'
+        old = root / 'original-release.mda'
         old.write_bytes(corpus_package(corpus))
         imported = json.loads(run([args.cli, 'verify', '--archive', old, '--accept-embedded-provider', '--format', 'json']).stdout)
         assert len(imported['report']['streams']) == 2 and all(stream['report']['verdictId'] == 7 for stream in imported['report']['streams'])
-        assert len([event for event in imported['events'] if event['streamId'] == 'v02/producer']) == 3
+        producer = corpus.get('producerStream', 'v02/producer')
+        expected_count = corpus.get('eventCount', 3)
+        producer_events = [event for event in imported['events'] if event['streamId'] == producer]
+        assert len(producer_events) == expected_count
+        assert [event['fields']['sequence'] for event in producer_events] == list(range(1, expected_count + 1))
         assert all(event['canonicalVersion'] == 1 for event in imported['events'])
         # Same old bytes as a real Linux directory give the same report as packaged replay.
         legacy = root / 'legacy'
@@ -192,7 +196,7 @@ def main():
         unanchored = json.loads(run([args.cli, 'inspect', '--source', legacy, '--format', 'json'], 4).stdout)
         assert len(unanchored['events']) == len(imported['events'])
         assert all(stream['report']['verdictId'] == 9 for stream in unanchored['report']['streams'])
-    print('audit.tools: real-file oracle, replay, trust, checkpoints, filters, budgets, errors and v0.2 corpus passed')
+    print('audit.tools: real-file oracle, replay, trust, checkpoints, filters, budgets, errors and', corpus['producerVersion'], 'corpus passed')
 
 
 if __name__ == '__main__':

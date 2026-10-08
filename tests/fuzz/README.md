@@ -8,7 +8,16 @@ format canonique version 1 ; leur numéro n’est pas une version de format.
 `layout-v1` contient ces vecteurs dans un segment dont les digests sont calculés par
 Python hashlib et les CRC-32C selon le polynôme de l’ADR. `layout-cut` en tronque la fin.
 `unknown-version` et `ledger-origin` atteignent les refus de version et le registre.
-Ces fixtures ne revendiquent aucune provenance d’archive produite par une release.
+Ces huit fixtures initiales ne revendiquent aucune provenance d’archive produite par une release.
+
+`real-v02-ledger` et `real-v02-producer` sont les segments 1 et 2, sans transformation, de
+[la vraie archive v0.2.0](../archives/audit-export/README.md), produite à la révision
+`e7012f299b3c976b37b43b53add43e5e6e4636b8`. Leur origine est le champ `segments[].hex`
+de `tests/archives/audit-export/v0.2.0.json` ; comparer les octets avant toute modification.
+`real-v03-ledger` et `real-v03-producer` reproduisent les deux segments de la release
+v0.3.0 reconstruite à `073761b7a6d5ed29ed87bc37c85967db72386d3c`, selon le même protocole.
+Les deux releases productrices d’audit publiées sont ainsi présentes ; les futures releases
+et la durée de support restent #121.
 
 Ne modifier le corpus source qu’après revue. Les mutations générées, crashs et résultats
 restent sous le build et sont archivés par le workflow `Audit Robustness`.

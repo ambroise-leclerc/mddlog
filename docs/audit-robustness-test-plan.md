@@ -1,8 +1,9 @@
 # Plan de robustesse de l’audit — #120
 
 Ce plan complète le [protocole du support fichiers](file-storage-test-plan.md).
-Il couvre les composants disponibles ; le témoin réel, sa position retenue persistante
-et le pilotage dépendent encore de #115/#116. Les [résultats](audit-robustness-results.md)
+Il couvre les composants disponibles, dont le témoin persistant, le checkpoint du lecteur,
+le pilotage et les outils livrés par #115–#119. Le [complément de chaîne réelle](audit-chain-campaign.md)
+définit leur oracle, les combinaisons de fautes et les campagnes prolongées. Les [résultats](audit-robustness-results.md)
 identifient les essais exécutés et les critères de clôture restant ouverts.
 
 | Famille | Banc et oracle | Critère |
@@ -42,8 +43,10 @@ libFuzzer utilise des mutations guidées par couverture. Le banc exerce décodag
 framing/CRC, registre, analyse de journal, vérification et récupération. Il conserve aussi
 un encadrement valide des octets mutés pour atteindre les lecteurs sémantiques après le CRC.
 Le corpus initial contient les vecteurs ADR-004, leur segment composé, une troncature,
-une version inconnue et un registre d’origine. Ces seeds sont des vecteurs de test,
-pas des archives produites par une version publiée ; cette compatibilité reste due en #121.
+une version inconnue et un registre d’origine. Les huit seeds initiaux sont des vecteurs de test. Quatre seeds supplémentaires reproduisent
+exactement les segments des vraies archives v0.2.0 et v0.3.0 ; leur provenance est
+documentée dans le corpus. Les archives de futures releases et la durée de lecture
+promise restent dues en #121.
 
 Budgets : entrée de 64 Kio, quatre segments pour la récupération, RSS de 512 Mio,
 deux secondes par entrée, sortie de 2 Mio, 600 secondes par invocation par défaut.
@@ -89,6 +92,7 @@ la CI conserve LSan activé et aucune fuite n’est réputée vérifiée par une
 Le bilan électrique de l’Orin Nano doit identifier le tuple matériel/stockage/OS/cache,
 la révision, l’opérateur, les points et cycles, les accusés et l’acquisition indépendante.
 Une réussite déclarée est un résultat à consigner ; les paramètres absents ne sont pas inventés.
-La partie logicielle ne remplace ni ces preuves, ni les campagnes du témoin réel de #115,
-ni le raccordement au pilotage de #116. Leur maintien ou leur transfert explicite dans
+La partie logicielle ne remplace ni ces preuves, ni la qualification du témoin indépendant et de son déploiement,
+ni l’acceptation du dossier final. Les campagnes logicielles #115/#116 et leur intégration
+prolongée sont identifiées séparément dans le complément de chaîne réelle. Leur maintien ou leur transfert explicite dans
 ces issues doit être décidé avant de présenter #114/#120 comme terminées.
