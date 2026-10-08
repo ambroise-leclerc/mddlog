@@ -52,9 +52,9 @@
       "id": "GAP-003",
       "title": "Rattacher les résultats effectifs aux profils et révisions",
       "status": "open",
-      "issue": 120,
-      "owner": "Mainteneur et responsable de campagne à désigner en #120",
-      "closure": "Journal de campagne ou CI identifié avec SHA, profil exact, options, commandes, résultats, anomalies et décision finale #122."
+      "issue": 122,
+      "owner": "Mainteneur et responsable d’intégration #122",
+      "closure": "Campagne prolongée #120 exécutée sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32, revue AM-L et fusion #146 à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. Archive originale, quatre rapports, inventaire de 8109 fichiers et logs sélectionnés conservés dans Git : docs/validation/audit-robustness/2026-10-08/README.md ; vérification hors ligne et relecture de 32 traces par scripts/verify-audit-evidence.py. Conservation avec l’historique du projet, sans expiration ni remplacement des octets originaux. Le rattachement logiciel/profil est réalisé ; GAP reste ouvert sous #122 pour les preuves du déploiement réel et la décision finale du dossier."
     },
     {
       "id": "GAP-004",
@@ -134,7 +134,7 @@
       "status": "open",
       "issue": 120,
       "owner": "Ambroise Leclerc",
-      "closure": "Campagnes génératives, fuzz et concurrence avec critères et anomalies tracés ; limites des doubles conservées. Modèles génératifs, fuzzing borné, oracle hashlib, observateurs audit et TSan ajoutés ; preuves dans docs/audit-robustness-results.md, revue/CI du lot et intégration du témoin réel restent ouvertes."
+      "closure": "Disposition de clôture logicielle de #120 soumise dans le lot de conservation demandé par le mainteneur ; GAP reste ouvert jusqu’à enregistrement de la décision nominative sur ce lot. L’approbation #146 porte sur les campagnes logicielles précédentes, pas sur la présente conservation. Modèles génératifs, fuzzing, concurrence et chaîne fichiers/témoin/checkpoint réels livrés par #146, approuvée par AM-L le 2026-10-08 sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32 et fusionnée à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. VER-070–072 : 32 histoires, 49152 événements, 32 déploiements isolés requis et archives v0.2/v0.3 ; fuzz CI 1000000 entrées, sans nouveau résultat C++ revendiqué par la conservation. Preuves, empreintes, limites et contrôles négatifs conservés dans docs/validation/audit-robustness/2026-10-08/README.md. Oracle fondé sur une trace du worker, profils finis, absence de qualification physique ; suivi autonome TSan/libc++ explicitement conservé dans #147 avant qualification du tuple #121/#122. GAP-003 et acceptation finale restent #122 ; politique des archives et matrice restent #121. Aucun défaut libc++ ni faux positif déclaré résolu."
     },
     {
       "id": "GAP-014",
@@ -1318,7 +1318,7 @@
       "test": "tests/spec/AuditChainCampaign.cpp",
       "scenario": null,
       "evidence": "docs/audit-chain-campaign.md",
-      "limits": "Histoires séquentielles bornées, EIO injectés sur vrais descripteurs, checkpoint rechargé ; même UID pour les autorités fonctionnelles, pas une qualification physique. Oracle Python selon ADR-004, familles obligatoires, suffixes incertains explicités ; revue proposée."
+      "limits": "Histoires séquentielles bornées, EIO injectés sur vrais descripteurs, checkpoint rechargé ; même UID pour les autorités fonctionnelles, pas une qualification physique. Oracle Python selon ADR-004, familles obligatoires, suffixes incertains explicités ; revue logicielle #146 approuvée sur la révision citée ; conservation et limites dans docs/validation/audit-robustness/2026-10-08/README.md, acceptation finale #122 ouverte."
     },
     {
       "id": "VER-071",
@@ -1351,7 +1351,7 @@
       "test": "scripts/run-audit-robustness.py",
       "scenario": null,
       "evidence": "docs/audit-chain-campaign.md",
-      "limits": "Quatre segments identiques aux corpus originaux v0.2.0 et v0.3.0, reconstruits aux SHA publiés ; pas une politique complète de futures archives. Profil fuzz instrumenté séparé, budget et absence locale de LSan explicités ; revue proposée."
+      "limits": "Quatre segments identiques aux corpus originaux v0.2.0 et v0.3.0, reconstruits aux SHA publiés ; pas une politique complète de futures archives. Profil fuzz instrumenté séparé, budget et absence locale de LSan explicités ; revue logicielle #146 approuvée sur la révision citée ; conservation et limites dans docs/validation/audit-robustness/2026-10-08/README.md, acceptation finale #122 ouverte."
     }
   ],
   "risks": [
@@ -2000,7 +2000,7 @@
       "license": "Licences spécifiques libstdc++ (GPL avec exception runtime), libc++ (Apache-2.0 avec exceptions LLVM) ou runtime MSVC ; notices exactes à relever pour le profil.",
       "classification": "Classement SOUP proposé pour bibliothèques préexistantes ; confirmation GAP-005.",
       "knownIssues": "Garanties std/atomiques/modules liées au tuple ; limites des contrôles de frontière. Les factories de contextes utilisent std::expected (ADR-005) ; leurs valeurs sont inline, les accesseurs levants ne sont pas appelés dans le cœur et les scans sont étendus aux corps de factories.",
-      "monitoring": "Plan : mainteneur et intégrateur examinent avant mise à jour et release les défauts libstdc++ via https://gcc.gnu.org/bugzilla/ (accès automatisé bloqué lors de la consultation du 2026-10-04), les avis libc++/LLVM via https://github.com/llvm/llvm-project/security/advisories et le runtime MSVC via https://msrc.microsoft.com/update-guide. Filtrer sur le runtime réellement déployé et consigner version, avis examinés et anomalies du profil dans GAP-005.",
+      "monitoring": "Plan : mainteneur et intégrateur examinent avant mise à jour et release les défauts libstdc++ via https://gcc.gnu.org/bugzilla/ (accès automatisé bloqué lors de la consultation du 2026-10-04), les avis libc++/LLVM via https://github.com/llvm/llvm-project/security/advisories et le runtime MSVC via https://msrc.microsoft.com/update-guide. Filtrer sur le runtime réellement déployé et consigner version, avis examinés et anomalies du profil dans GAP-005. Suivi autonome promise/future TSan sous libc++ 21 dans #147 ; qualification du tuple à décider en #121/#122, sans suppression globale ni correction présumée.",
       "gaps": [
         "GAP-005"
       ]

@@ -1,0 +1,1220 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "profile": {
+    "worker": "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+    "output": "/home/runner/work/mddlog/mddlog/build-robustness/chain-long",
+    "seed": 120,
+    "seeds": 32,
+    "boots": 24,
+    "records": 64,
+    "outage": 1000,
+    "timeout": 120,
+    "deployment_worker": "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+    "witness_service": "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+    "deployment_repetitions": 32,
+    "deployment_sudo": true,
+    "tools_cli": "/home/runner/work/mddlog/mddlog/build-robustness/mddlog-audit",
+    "tool_reference": "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_tool_reference"
+  },
+  "histories": [
+    {
+      "seed": 120,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-120",
+        "120",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "3dbfd94cfc73462ff9064723631124d8f06f89b8f048f7ad02d83fbf08ef3935",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 121,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-121",
+        "121",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "a9e514b69c47b3c58d3419b8b743ff7efac7988d16d8060610e992075b7c0438",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 122,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-122",
+        "122",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "7d503578bd9497f4ab13f8d30b4993ebd2955902ed11d42a2b7c97093c4a88b5",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 123,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-123",
+        "123",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "c1b8057dceb2495591920b21266c51039b3c5400d39d1b00a9f5b2a537367034",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 124,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-124",
+        "124",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "098e77f474002158e54b5f978a52cb92979acbd9b104e82de57bd756ee956452",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 125,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-125",
+        "125",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "870c73e26e83b1a1f58958ff23a7bbfb2bd19866dadec055ca6f3926daa6527d",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 126,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-126",
+        "126",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "00d51737bcde92a88074e91e1678a5254ba4ecf0fd857cde6e5ebb291c8a5388",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 127,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-127",
+        "127",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "38a5773bff7ecb611afd9097caad54a10f2b1a9d311275d71fdca7e858001aeb",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 128,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-128",
+        "128",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "5bbf29df076e66b43af3abf1e9a83ae9a9286e675c96d5efb183b29fcc105fac",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 129,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-129",
+        "129",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "12bc0e53d142bede67b9c32299027d5d12df4592d8cd2835ce388c7506b814a8",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 130,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-130",
+        "130",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "6dff09ee2628213977d4315d04c9090cf2bed41557e22b1085ea5a87af5d0efe",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 131,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-131",
+        "131",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "92148ff7bf42dbf2a80559a91be56876da34890a5f39c608bb196da3ff8dd3c9",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 132,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-132",
+        "132",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "bb6108af37fb2648053115d80972bd063fc7bab062092bfaa50199f2bfa9c42e",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 133,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-133",
+        "133",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "a358437663c92a6d9cd7e7270b3888e42c77297cfc8bb0cb9f4da172f9b0bca9",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 134,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-134",
+        "134",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "cc89eb9f364cf02281e004d5d5d5d943e04e15dfa1ba3ef0802f6799c329a1c0",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 135,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-135",
+        "135",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "afb9524e11480f6eb1c6d99d6941ed6d270deb1961f15a47a8f2122d2f9ec6a9",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 136,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-136",
+        "136",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "822caa69ed393ec11b84d3bcd94f154c7329ad631436971bd972ff0aba77bc2e",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 137,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-137",
+        "137",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "92558b777adfa80dd1be5680852a196a9e093df4bb8969758eb2e894e8fa4b8c",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 138,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-138",
+        "138",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "a762599ab054dd0e87d10d6df58c3262f13b93cbe8846b6a92be483e463b5253",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 139,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-139",
+        "139",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "674dd47a85ac9664a9496bf359ba66507945dcfdb45f102d607a241085bc0c48",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 140,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-140",
+        "140",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "1908b795312fdac03326adbf61179083263d58102f7654f9563be22aaf3f137e",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 141,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-141",
+        "141",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "d53295f57544349c3c12e7785bae24670a51e22ac2febf0641ec2db737b62882",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 142,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-142",
+        "142",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "c97341bf2a93800b7b52d0a8bc14035ed89daca09743630aef9773871eabb931",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 143,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-143",
+        "143",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "50489087be2ee45dab7a1a8bb7079d2feaa4cc7813b927cb8831dc6fd869270c",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 144,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-144",
+        "144",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "7af21877e1a8d3a45e69549786803772638ffb5d6304c5e0a461b193c3447bd5",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 145,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-145",
+        "145",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "5980c6c0ca49b20373eff1842688f30f7dbd7ed680e7572c341eee01cfca670d",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 146,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-146",
+        "146",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "7fbe6fc807d78434b30db794e47a190d6961ffc241315195c8230178065e0938",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 147,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-147",
+        "147",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "b33d1c4ef8cd9f4b77d3b88a17b6314baa5eff924d359cfde244f67591c9b82f",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 148,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-148",
+        "148",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "bfff10b27db5b18be62b5d803746b29d0852f6763c1b905547cd1d9b2f8e282e",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 149,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-149",
+        "149",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "c3fbfcd1fbab30e14e4e8836f504590b11de684db26150b17d147b2e09ac5920",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 150,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-150",
+        "150",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "cb01b3df14f844df638235220d0d9f5b93d76aca8fcaf2daceb33fb2f301d107",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    },
+    {
+      "seed": 151,
+      "command": [
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_chain_campaign",
+        "/home/runner/work/mddlog/mddlog/build-robustness/chain-long/run-7x_paaay/seed-151",
+        "151",
+        "24",
+        "64",
+        "1000"
+      ],
+      "status": "PASS",
+      "streams": 24,
+      "baseline_records": 1536,
+      "recovered_records": 464,
+      "faults": [
+        "append",
+        "reclaim",
+        "sync"
+      ],
+      "trace_sha256": "9d71e6c8eb0c9f827b115d349cc81e2cda26cc1c1ea7152fa4be3b5eb3ff13dc",
+      "oracle": "ADR-004 contract bytes, abstract queue, Python hashlib.sha256"
+    }
+  ],
+  "environment": {
+    "uname": {
+      "system": "Linux",
+      "node": "runnervmmprz5",
+      "release": "6.17.0-1022-azure",
+      "version": "#22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    },
+    "python": "3.12.3"
+  },
+  "scope": "real-file witness functional faults; shared UID, no independent custody qualification",
+  "deployment": {
+    "status": "PASS",
+    "commands": [
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ],
+      [
+        "sudo",
+        "--non-interactive",
+        "--preserve-env=ASAN_OPTIONS,UBSAN_OPTIONS",
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-witness-deployment.py",
+        "--worker",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment",
+        "--service",
+        "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness",
+        "--require-isolation"
+      ]
+    ],
+    "repetitions": 32,
+    "binary_sha256": {
+      "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_witness_deployment": "767b23caac584b72bddc183be80a0e816b3d59023e91f4e3b1dfef4fcbfc202a",
+      "/home/runner/work/mddlog/mddlog/build-robustness/examples/mddlog_witness": "1e3843b3aa490b576607eaa4f785a9cda0997cbc4e7740538ec2b018c0016af9"
+    }
+  },
+  "tools": {
+    "status": "PASS",
+    "commands": [
+      [
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-audit-tools.py",
+        "--cli",
+        "/home/runner/work/mddlog/mddlog/build-robustness/mddlog-audit",
+        "--reference",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_tool_reference",
+        "--corpus",
+        "/home/runner/work/mddlog/mddlog/tests/archives/audit-export/v0.2.0.json"
+      ],
+      [
+        "python3",
+        "/home/runner/work/mddlog/mddlog/scripts/run-audit-tools.py",
+        "--cli",
+        "/home/runner/work/mddlog/mddlog/build-robustness/mddlog-audit",
+        "--reference",
+        "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_tool_reference",
+        "--corpus",
+        "/home/runner/work/mddlog/mddlog/tests/archives/audit-export/v0.3.0.json"
+      ]
+    ],
+    "corpus_sha256": {
+      "v0.2.0.json": "b1d7f485eb046e6d95a1fa288e2904c7b6ad76ac7291e86d8ba393eeb39c532d",
+      "v0.3.0.json": "0852b676669ab7570753c61b139d16524b7e4ec1ce8c721116c73585052761e2"
+    },
+    "binary_sha256": {
+      "/home/runner/work/mddlog/mddlog/build-robustness/mddlog-audit": "5563fe9ac172e45e1b84634c96a96ba548e494e8ffe8f80cf914399845b17e14",
+      "/home/runner/work/mddlog/mddlog/build-robustness/tests/mddlog_audit_tool_reference": "2fb4a0d052827b5c1458f19697a2dfc8d55b45a0f3f431fa8aa20c569e2358b0"
+    }
+  },
+  "sanitizer_options": {
+    "ASAN_OPTIONS": "detect_leaks=1",
+    "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1",
+    "TSAN_OPTIONS": "runtime default"
+  },
+  "revision": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+  "worktree": "",
+  "source_sha256": {
+    "scripts/run-audit-chain-campaign.py": "865a0b25b5955e9652b3750033d141de1f90f1ea33c6b4c4f2ca6d8486d7bee5",
+    "scripts/run-audit-robustness.py": "f28ca94d14c22332e0225da8407881396241a1cf5404a38d108af4ce1b98508f",
+    "tests/spec/AuditChainCampaign.cpp": "83dad3e0f936b3398e852daf90d87d9438f87ce5361f916a8295d23fedcfd3f6",
+    "scripts/run-witness-deployment.py": "b3cf79d6665498c6e3780768210a2e87763151a97a00c50dd72195e5fd01ec2c",
+    "scripts/run-audit-tools.py": "db6285db86c32bd534514ee7bcbd9f50a27b9db54f685633a903277a844d7119",
+    "tests/archives/audit-export/GenerateV02.cpp": "c027bb530f068f10add07f7c435b912b97ee97b0362bdae5bab14788c3310527",
+    "tests/archives/audit-export/GenerateV03.cpp": "229b8a526c3afb1944c96b34ffcb44fec04767602e0e0dacd08632ff394231ac"
+  },
+  "build": {
+    "CMAKE_BUILD_TYPE": "Debug",
+    "CMAKE_CXX_COMPILER": "/usr/lib/llvm-21/bin/clang++",
+    "CMAKE_CXX_COMPILER_AR": "/usr/bin/llvm-ar-21",
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS": "/usr/bin/clang-scan-deps-21",
+    "CMAKE_CXX_COMPILER_RANLIB": "/usr/bin/llvm-ranlib-21",
+    "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+    "CMAKE_CXX_FLAGS_DEBUG": "-g",
+    "CMAKE_CXX_FLAGS_MINSIZEREL": "-Os -DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g -DNDEBUG",
+    "ENABLE_SANITIZER_ADDRESS": "ON",
+    "ENABLE_SANITIZER_LEAK": "OFF",
+    "ENABLE_SANITIZER_MEMORY": "OFF",
+    "ENABLE_SANITIZER_THREAD": "OFF",
+    "ENABLE_SANITIZER_UNDEFINED_BEHAVIOR": "ON",
+    "MDDLOG_BUILD_AUDIT_TOOLS": "ON",
+    "MDDLOG_BUILD_EXAMPLES": "ON",
+    "MDDLOG_BUILD_FILE_STORAGE": "ON",
+    "MDDLOG_BUILD_FUZZERS": "OFF",
+    "MDDLOG_BUILD_TESTS": "ON",
+    "CMAKE_CXX_COMPILER-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_AR-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_RANLIB-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_DEBUG-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_MINSIZEREL-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_RELEASE-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO-ADVANCED": "1",
+    "cmake_version": "cmake version 4.3.1\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+    "cmake_version_exit_code": 0,
+    "ninja_version": "1.13.2",
+    "ninja_version_exit_code": 0,
+    "compiler_version": "Ubuntu clang version 21.1.8 (++20251221032922+2078da43e25a-1~exp1~20251221153059.70)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-21/bin",
+    "compiler_version_exit_code": 0
+  },
+  "binary_sha256": "8693c64f5094233bc183ee53308d3f70a90c4da59c970bb1f244b18cc4d3d2a7",
+  "duration_seconds": 264.295026452
+}

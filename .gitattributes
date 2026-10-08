@@ -1,0 +1,4 @@
+# Preserve original verification bytes regardless of checkout line-ending settings.
+docs/validation/** -text
+docs/validation/**/*.zip binary
+docs/validation/**/*.gz binary

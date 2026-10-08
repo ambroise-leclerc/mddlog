@@ -234,7 +234,8 @@ Le profil prolongé final est `build-clang/120-final/run-6xlfo1p7/report.json`
 (209,84 s), worker SHA-256
 `99219f32744cd66d1e143ab90eddbca7f073d1c4b14f92b36042559becc3c8e1` ; 14 848 records
 relus après rétention/reprise. Les intégrations multi-UID et les deux corpus sont PASS.
-Les artefacts générés restent hors Git ; leur conservation définitive relève de GAP-003/#122.
+Ces captures locales restaient hors Git lors de ce relevé. La campagne CI de référence
+et sa conservation versionnée sont consignées dans le complément ci-dessous.
 
 La nouvelle archive v0.3 a été réellement produite par une reconstruction séparée de
 `073761b7a6d5ed29ed87bc37c85967db72386d3c` ; protocole, hash et distinction entre
@@ -302,3 +303,38 @@ FAIL si l’élévation du déploiement est refusée ; il vérifie aussi que l�
 précédente reste sans sudo et que les sources supplémentaires sont hachées.
 L’exécution CI prolongée sur la branche sera consignée dans la PR avec son SHA
 et ses artefacts ; cette configuration ne constitue pas encore sa réussite.
+
+### Conservation Git et disposition de clôture de #120
+
+La PR #146 a été approuvée par AM-L le 2026-10-08 sur
+`6bf13770bd7732ab2640fc6fe28a06ccf5d38d32`, puis fusionnée à
+`b73ab46acb7e6d008535b3871c1980e1f7b94fc3`. Son workflow manuel prolongé
+37810541676 réussit aussi sur la révision testée. Les
+[preuves conservées dans Git](validation/audit-robustness/2026-10-08/README.md)
+contiennent l’archive originale de 7 482 376 octets, les quatre rapports originaux
+lisibles, l’inventaire SHA-256 des 8 109 membres et les logs sélectionnés de build,
+sanitizers et campagne. L’expiration GitHub n’affecte plus ces octets.
+
+La campagne CI avec LSan actif confirme 32 histoires × 24 flux × 64 événements,
+49 152 événements de référence, 14 848 relus et 768 fautes terminales ; 32
+déploiements isolés requis et les deux archives passent. Durée : 264,30 s. Le
+fuzzing exécute 1 000 000 entrées et l’oracle SHA-256 268 entrées. Stockage :
+100 répétitions, 2 609 PASS, zéro FAIL et un SKIP ENOSPC sans privilèges ; le
+volume dédié sous sudo produit ensuite PASS sans SKIP. Le statut PARTIAL du
+rapport des 100 répétitions est conservé, sans le transformer en PASS.
+
+Le vérificateur `scripts/verify-audit-evidence.py` contrôle hors ligne toutes les
+empreintes, les copies des rapports, leur provenance, les comptes et intégrations,
+puis rejoue les 32 traces avec l’oracle Python. Ce contrôle n’exécute ni worker
+C++, ni sudo et ne constitue pas une nouvelle campagne. La CI documentaire
+vérifie ce jeu et les contrôles de corruption. Conservation avec l’historique du
+projet, sans expiration automatique, suppression ni remplacement par d’autres
+campagnes ; les nouveaux jeux prennent un nouveau répertoire daté.
+
+Disposition soumise à revue : clôture logicielle de #120/GAP-013 pour les profils
+bornés réalisés et revue/fusion #146. GAP-003 reste ouvert sous #122 pour la
+traçabilité du déploiement réel et l’acceptation finale. Le suivi autonome libc++
+est transféré explicitement à #147, avec sa source et son observation conservées
+dans Git ; il n’est ni résolu ni déclaré faux positif et reste à évaluer pour la
+matrice #121 et la candidate #122. La conservation demandée ne qualifie ni le
+stockage physique, ni le témoin de production, ni le dossier final.

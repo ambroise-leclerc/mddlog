@@ -1,0 +1,667 @@
+{
+  "schema": 1,
+  "scope": "audit readers fuzzing and SHA-256",
+  "environment": {
+    "uname": {
+      "system": "Linux",
+      "node": "runnervmmprz5",
+      "release": "6.17.0-1022-azure",
+      "version": "#22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    },
+    "python": "3.12.3"
+  },
+  "status": "PASS",
+  "directory": "/home/runner/work/mddlog/mddlog/build-robustness/readers/run-nu6za7m7",
+  "commands": [
+    [
+      "/home/runner/work/mddlog/mddlog/build-robustness-fuzz/tests/mddlog_audit_readers_fuzz",
+      "/home/runner/work/mddlog/mddlog/build-robustness/readers/run-nu6za7m7/corpus",
+      "-runs=1000000",
+      "-seed=120",
+      "-max_len=65536",
+      "-rss_limit_mb=512",
+      "-timeout=2",
+      "-verbosity=0",
+      "-print_final_stats=1",
+      "-artifact_prefix=/home/runner/work/mddlog/mddlog/build-robustness/readers/run-nu6za7m7/"
+    ]
+  ],
+  "leak_detection": true,
+  "revision": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+  "worktree": "",
+  "sha256": {
+    "status": "PASS",
+    "inputs": 268,
+    "seed": 120,
+    "oracle": "Python hashlib.sha256",
+    "binary_sha256": "3473673d2b7b2857ac210cc0b0354056841a95c532401c02bec40ed326066c50"
+  },
+  "build": {
+    "CMAKE_BUILD_TYPE": "Debug",
+    "CMAKE_CXX_COMPILER": "/usr/lib/llvm-21/bin/clang++",
+    "CMAKE_CXX_COMPILER_AR": "/usr/bin/llvm-ar-21",
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS": "/usr/bin/clang-scan-deps-21",
+    "CMAKE_CXX_COMPILER_RANLIB": "/usr/bin/llvm-ranlib-21",
+    "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+    "CMAKE_CXX_FLAGS_DEBUG": "-g",
+    "CMAKE_CXX_FLAGS_MINSIZEREL": "-Os -DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g -DNDEBUG",
+    "ENABLE_SANITIZER_ADDRESS": "ON",
+    "ENABLE_SANITIZER_LEAK": "OFF",
+    "ENABLE_SANITIZER_MEMORY": "OFF",
+    "ENABLE_SANITIZER_THREAD": "OFF",
+    "ENABLE_SANITIZER_UNDEFINED_BEHAVIOR": "ON",
+    "MDDLOG_BUILD_AUDIT_TOOLS": "OFF",
+    "MDDLOG_BUILD_EXAMPLES": "OFF",
+    "MDDLOG_BUILD_FILE_STORAGE": "ON",
+    "MDDLOG_BUILD_FUZZERS": "ON",
+    "MDDLOG_BUILD_TESTS": "ON",
+    "CMAKE_CXX_COMPILER-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_AR-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_RANLIB-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_DEBUG-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_MINSIZEREL-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_RELEASE-ADVANCED": "1",
+    "CMAKE_CXX_FLAGS_RELWITHDEBINFO-ADVANCED": "1",
+    "cmake_version": "cmake version 4.3.1\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+    "cmake_version_exit_code": 0,
+    "ninja_version": "1.13.2",
+    "ninja_version_exit_code": 0,
+    "compiler_version": "Ubuntu clang version 21.1.8 (++20251221032922+2078da43e25a-1~exp1~20251221153059.70)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-21/bin",
+    "compiler_version_exit_code": 0
+  },
+  "seeds": {
+    "canonical-v1.hex": "9c33ba5c9013b777190e19eb8af2b0beaf3a6cf47768c44c3b4ae5ba46e61758",
+    "canonical-v2.hex": "a02e48aa119db58ed74b097b934370039475b9c625e6b445ac6d56e3c78c65ba",
+    "canonical-v3.hex": "00108fffef80cb00c86b884c6c04655791fd10f4ec24a05e6f3e8111e8e0b056",
+    "canonical-v4.hex": "990d304455e908996f77176affaa85d5d0d4f4abcda79c8a4cc4733a01a26b26",
+    "layout-cut.hex": "bdd3d84aef4821c2a8024396423f5d9db441a166244511ca5a2c9b883bda1771",
+    "layout-v1.hex": "b341b24498d046cb539fb8b60a3093972feea5ec1853151a0e6706cfaebd6af2",
+    "ledger-origin.hex": "9a9a7b8a6cb22553cc4f6c2c8cd6aee86f5de98b4ca40146ffe09a32354a3335",
+    "real-v02-ledger.hex": "7ae084881280b1056a9485868cf379324f253506043b8592a482b35dcb086799",
+    "real-v02-producer.hex": "ebd7e69af9ccd8b71ed368d99eaecf7056a1a44280f2a180d41f37d7ad7cc11b",
+    "real-v03-ledger.hex": "a200198a5806b77eab1226e7fdf4f7a46bbbb319093a40f63d607f6558f66e71",
+    "real-v03-producer.hex": "a96fe369c59277b9b3a70be5bece2a548853ef63f129ef702b81a160eec17f1b",
+    "unknown-version.hex": "3475db618dbecc48ace5266b21cd2c270d6f117894164b8493323b4a0d3bed36"
+  },
+  "fuzz": {
+    "status": "PASS",
+    "inputs": 1000000,
+    "seed": 120,
+    "binary_sha256": "83eb9241430c40c187e8021610495c481c78a8259158d6831df9c8b1bd23dbf2",
+    "final_corpus_files": 161
+  },
+  "coverage": {
+    "status": "COLLECTED",
+    "report": "coverage.txt",
+    "units": {
+      "AuditAnchor.cppm": {
+        "branches": {
+          "count": 98,
+          "covered": 20,
+          "notcovered": 78,
+          "percent": 20.408163265306122
+        },
+        "functions": {
+          "count": 30,
+          "covered": 12,
+          "percent": 40
+        },
+        "instantiations": {
+          "count": 31,
+          "covered": 12,
+          "percent": 38.70967741935484
+        },
+        "lines": {
+          "count": 181,
+          "covered": 59,
+          "percent": 32.59668508287293
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 154,
+          "covered": 51,
+          "notcovered": 103,
+          "percent": 33.116883116883116
+        }
+      },
+      "AuditCanonical.cppm": {
+        "branches": {
+          "count": 160,
+          "covered": 124,
+          "notcovered": 36,
+          "percent": 77.5
+        },
+        "functions": {
+          "count": 20,
+          "covered": 8,
+          "percent": 40
+        },
+        "instantiations": {
+          "count": 20,
+          "covered": 8,
+          "percent": 40
+        },
+        "lines": {
+          "count": 203,
+          "covered": 113,
+          "percent": 55.66502463054187
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 175,
+          "covered": 133,
+          "notcovered": 42,
+          "percent": 76
+        }
+      },
+      "AuditChain.cppm": {
+        "branches": {
+          "count": 44,
+          "covered": 25,
+          "notcovered": 19,
+          "percent": 56.81818181818182
+        },
+        "functions": {
+          "count": 16,
+          "covered": 10,
+          "percent": 62.5
+        },
+        "instantiations": {
+          "count": 16,
+          "covered": 10,
+          "percent": 62.5
+        },
+        "lines": {
+          "count": 104,
+          "covered": 63,
+          "percent": 60.57692307692307
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 79,
+          "covered": 51,
+          "notcovered": 28,
+          "percent": 64.55696202531645
+        }
+      },
+      "AuditLayout.cppm": {
+        "branches": {
+          "count": 54,
+          "covered": 49,
+          "notcovered": 5,
+          "percent": 90.74074074074075
+        },
+        "functions": {
+          "count": 15,
+          "covered": 11,
+          "percent": 73.33333333333333
+        },
+        "instantiations": {
+          "count": 15,
+          "covered": 11,
+          "percent": 73.33333333333333
+        },
+        "lines": {
+          "count": 140,
+          "covered": 119,
+          "percent": 85
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 87,
+          "covered": 79,
+          "notcovered": 8,
+          "percent": 90.80459770114942
+        }
+      },
+      "AuditLedger.cppm": {
+        "branches": {
+          "count": 172,
+          "covered": 100,
+          "notcovered": 72,
+          "percent": 58.139534883720934
+        },
+        "functions": {
+          "count": 22,
+          "covered": 10,
+          "percent": 45.45454545454545
+        },
+        "instantiations": {
+          "count": 22,
+          "covered": 10,
+          "percent": 45.45454545454545
+        },
+        "lines": {
+          "count": 230,
+          "covered": 140,
+          "percent": 60.86956521739131
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 195,
+          "covered": 133,
+          "notcovered": 62,
+          "percent": 68.2051282051282
+        }
+      },
+      "AuditLog.cppm": {
+        "branches": {
+          "count": 506,
+          "covered": 152,
+          "notcovered": 354,
+          "percent": 30.039525691699602
+        },
+        "functions": {
+          "count": 63,
+          "covered": 33,
+          "percent": 52.38095238095239
+        },
+        "instantiations": {
+          "count": 69,
+          "covered": 33,
+          "percent": 47.82608695652174
+        },
+        "lines": {
+          "count": 870,
+          "covered": 364,
+          "percent": 41.839080459770116
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 570,
+          "covered": 194,
+          "notcovered": 376,
+          "percent": 34.03508771929825
+        }
+      },
+      "AuditLogVerifier.cppm": {
+        "branches": {
+          "count": 192,
+          "covered": 58,
+          "notcovered": 134,
+          "percent": 30.208333333333332
+        },
+        "functions": {
+          "count": 28,
+          "covered": 6,
+          "percent": 21.428571428571427
+        },
+        "instantiations": {
+          "count": 34,
+          "covered": 6,
+          "percent": 17.647058823529413
+        },
+        "lines": {
+          "count": 368,
+          "covered": 108,
+          "percent": 29.347826086956523
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 232,
+          "covered": 70,
+          "notcovered": 162,
+          "percent": 30.17241379310345
+        }
+      },
+      "AuditMedium.cppm": {
+        "branches": {
+          "count": 154,
+          "covered": 32,
+          "notcovered": 122,
+          "percent": 20.77922077922078
+        },
+        "functions": {
+          "count": 28,
+          "covered": 13,
+          "percent": 46.42857142857143
+        },
+        "instantiations": {
+          "count": 28,
+          "covered": 13,
+          "percent": 46.42857142857143
+        },
+        "lines": {
+          "count": 266,
+          "covered": 89,
+          "percent": 33.45864661654135
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 216,
+          "covered": 75,
+          "notcovered": 141,
+          "percent": 34.72222222222222
+        }
+      },
+      "AuditResources.cppm": {
+        "branches": {
+          "count": 22,
+          "covered": 11,
+          "notcovered": 11,
+          "percent": 50
+        },
+        "functions": {
+          "count": 2,
+          "covered": 1,
+          "percent": 50
+        },
+        "instantiations": {
+          "count": 3,
+          "covered": 1,
+          "percent": 33.33333333333333
+        },
+        "lines": {
+          "count": 5,
+          "covered": 4,
+          "percent": 80
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 22,
+          "covered": 21,
+          "notcovered": 1,
+          "percent": 95.45454545454545
+        }
+      },
+      "AuditStore.cppm": {
+        "branches": {
+          "count": 650,
+          "covered": 55,
+          "notcovered": 595,
+          "percent": 8.461538461538462
+        },
+        "functions": {
+          "count": 76,
+          "covered": 7,
+          "percent": 9.210526315789473
+        },
+        "instantiations": {
+          "count": 82,
+          "covered": 7,
+          "percent": 8.536585365853659
+        },
+        "lines": {
+          "count": 1203,
+          "covered": 122,
+          "percent": 10.141313383208644
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 826,
+          "covered": 100,
+          "notcovered": 726,
+          "percent": 12.106537530266344
+        }
+      },
+      "AuditVerifier.cppm": {
+        "branches": {
+          "count": 264,
+          "covered": 77,
+          "notcovered": 187,
+          "percent": 29.166666666666668
+        },
+        "functions": {
+          "count": 35,
+          "covered": 18,
+          "percent": 51.42857142857142
+        },
+        "instantiations": {
+          "count": 39,
+          "covered": 18,
+          "percent": 46.15384615384615
+        },
+        "lines": {
+          "count": 351,
+          "covered": 194,
+          "percent": 55.27065527065527
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 349,
+          "covered": 169,
+          "notcovered": 180,
+          "percent": 48.42406876790831
+        }
+      },
+      "Sha256.cppm": {
+        "branches": {
+          "count": 22,
+          "covered": 22,
+          "notcovered": 0,
+          "percent": 100
+        },
+        "functions": {
+          "count": 5,
+          "covered": 5,
+          "percent": 100
+        },
+        "instantiations": {
+          "count": 5,
+          "covered": 5,
+          "percent": 100
+        },
+        "lines": {
+          "count": 70,
+          "covered": 70,
+          "percent": 100
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 32,
+          "covered": 32,
+          "notcovered": 0,
+          "percent": 100
+        }
+      },
+      "AuditEvent.cppm": {
+        "branches": {
+          "count": 70,
+          "covered": 29,
+          "notcovered": 41,
+          "percent": 41.42857142857143
+        },
+        "functions": {
+          "count": 30,
+          "covered": 4,
+          "percent": 13.333333333333334
+        },
+        "instantiations": {
+          "count": 30,
+          "covered": 4,
+          "percent": 13.333333333333334
+        },
+        "lines": {
+          "count": 152,
+          "covered": 22,
+          "percent": 14.473684210526317
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 107,
+          "covered": 38,
+          "notcovered": 69,
+          "percent": 35.51401869158878
+        }
+      },
+      "InlineString.cppm": {
+        "branches": {
+          "count": 24,
+          "covered": 1,
+          "notcovered": 23,
+          "percent": 4.166666666666666
+        },
+        "functions": {
+          "count": 8,
+          "covered": 3,
+          "percent": 37.5
+        },
+        "instantiations": {
+          "count": 19,
+          "covered": 3,
+          "percent": 15.789473684210526
+        },
+        "lines": {
+          "count": 61,
+          "covered": 10,
+          "percent": 16.39344262295082
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 40,
+          "covered": 5,
+          "notcovered": 35,
+          "percent": 12.5
+        }
+      },
+      "Record.cppm": {
+        "branches": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "functions": {
+          "count": 6,
+          "covered": 3,
+          "percent": 50
+        },
+        "instantiations": {
+          "count": 7,
+          "covered": 3,
+          "percent": 42.857142857142854
+        },
+        "lines": {
+          "count": 14,
+          "covered": 7,
+          "percent": 50
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 8,
+          "covered": 5,
+          "notcovered": 3,
+          "percent": 62.5
+        }
+      },
+      "AuditSink.cppm": {
+        "branches": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "functions": {
+          "count": 4,
+          "covered": 2,
+          "percent": 50
+        },
+        "instantiations": {
+          "count": 4,
+          "covered": 2,
+          "percent": 50
+        },
+        "lines": {
+          "count": 8,
+          "covered": 2,
+          "percent": 25
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 4,
+          "covered": 2,
+          "notcovered": 2,
+          "percent": 50
+        }
+      }
+    },
+    "profile_sha256": "dc94531fcb29ae56f7c97978c3ac97f5ba87950c855415986467dbafafbd4fa6"
+  },
+  "duration_seconds": 829.971427449
+}
