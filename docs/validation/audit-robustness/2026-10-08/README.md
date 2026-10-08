@@ -114,6 +114,6 @@ sa source et de son observation dans [le dossier de suivi](../tsan-libcxx/README
 Il reste ouvert et doit être évalué pour la matrice #121 et la candidate #122 ;
 aucun faux positif ni défaut de bibliothèque n'est déclaré établi. La politique
 des futures archives relève de #121 ; le profil réel et l'acceptation finale du
-dossier, de #122. La disposition proposée vise la clôture de GAP-013 pour les profils logiciels
-livrés ; il reste ouvert jusqu’à enregistrement de la décision sur ce lot.
+dossier, de #122. La clôture de GAP-013 pour les profils logiciels livrés est acceptée par la
+décision nominative AM-L : PR #148 approuvée le 2026-10-08 à 21:58:47 UTC sur `f5b015c08a0fb9bda55ee792f039309d86debc5e`, fusionnée à `2b606df47d5bf2d7db5e021a8bf359173ee5490e` ; le registre la consigne depuis #121.
 GAP-003 conserve son acceptation finale sous #122.

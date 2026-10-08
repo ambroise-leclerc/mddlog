@@ -212,7 +212,7 @@ cmake -S . -B build -G Ninja -DMDDLOG_BUILD_EXAMPLES=OFF -DMDDLOG_BUILD_TESTS=OF
 cmake --build build --parallel
 ```
 
-CI configurations:
+CI configurations ([detailed matrix](docs/compatibility-matrix.md)):
 
 | Platform | Compiler and standard library | CMake |
 | --- | --- | --- |
@@ -229,7 +229,16 @@ cmake --build --preset ninja-gcc
 ctest --preset ninja-gcc --output-on-failure
 ```
 
-Tests fetch a pinned [SpecLab](https://github.com/ambroise-leclerc/SpecLab) revision, only when enabled. `SourceTreeCoreConsumer` and `InstallTreeCoreConsumer` separately exercise the core-only target. CI also runs sanitisers and the governed-core checks; see [the evidence note](docs/governed-evidence.md) for their scope. A successful configuration is neither a build nor a test result.
+Tests fetch a pinned [SpecLab](https://github.com/ambroise-leclerc/SpecLab) revision, only when enabled. `SourceTreeCoreConsumer` and `InstallTreeCoreConsumer` separately exercise the core-only target. An independent consumer project is built against the installed package (full and core-only), against this repository added as a subdirectory and against a source archive (CTest label `consumer`).
+
+### Consuming mddlog
+
+```cmake
+find_package(mddlog 0.3 CONFIG REQUIRED COMPONENTS core full)   # + file_storage, audit_tool on Linux
+target_link_libraries(application PRIVATE mddlog::mddlog)       # or mddlog::core alone
+```
+
+The consumer itself selects C++23 without extensions and the `import std` gate before `project()`, with the same compiler the package was built with. The package no longer changes the consumer's directory and explicitly refuses a combination it does not serve. See the [consumer requirements](docs/consumer-requirements.md), the [matrix and source archive](docs/compatibility-matrix.md), the [candidate compatibility policy](docs/adr/ADR-007-compatibility-and-distribution.md) and the [migration from v0.2](docs/migration/v0.2-to-1.0.md) (in French). CI also runs sanitisers and the governed-core checks; see [the evidence note](docs/governed-evidence.md) for their scope. A successful configuration is neither a build nor a test result.
 
 ## Licence and participation
 

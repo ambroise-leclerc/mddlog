@@ -12,6 +12,35 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Propose the 1.0 compatibility commitments in
+  [ADR-007](docs/adr/ADR-007-compatibility-and-distribution.md): surface tiers recorded in a
+  checked [inventory](docs/api/public-surface.json), SemVer and deprecation without an ABI/BMI
+  promise, format read duration and explicit refusal of unknown versions, the qualified matrix
+  and a reproducible source archive. Candidates until the #122 feedback; nothing is frozen (#121).
+- **Breaking for package consumers:** `mddlogConfig.cmake` no longer sets the consumer's C++
+  standard, `import std` or directory compile options; the consumer selects C++23 without
+  extensions and the `import std` gate before `project()`. `find_package` accepts only the same
+  minor version before 1.0 (`SameMinorVersion`). `MDDLOG_VERSION_*`, `MDDLOG_PLATFORM_*`,
+  `NOMINMAX`/`WIN32_LEAN_AND_MEAN` and MSVC `/W4`/`/permissive-` no longer reach consumer
+  translation units; query `mddlog::getVersion()`. Installed interface units move from
+  `include/modules/include/mddlog/` to `include/modules/mddlog/`. See the
+  [migration guide](docs/migration/v0.2-to-1.0.md).
+- The project's `-Werror` warning target is neither installed nor exported, so it no longer
+  governs a consumer's rebuild of the installed BMIs. The package offers components `core`,
+  `full`, `file_storage` and `audit_tool` (new imported executable `mddlog::audit_tool`), writes
+  `mddlog-build-info.json`, and refuses an unknown component, a non-Ninja generator or a compiler
+  other than its build's, with the remedy in the message.
+- An independent consumer project (`tests/consumer/package`) builds with its own strict warnings
+  against the installed full and core packages, a source subdirectory and a source archive;
+  `build.package.refusals` checks the refusals. `scripts/package-source.py` produces the
+  reproducible archive and its file/dependency manifest. The GAP-013 decision of #148 is
+  synchronized in the development file.
+- Known consumer constraints: `-Wextra` on GCC 16.1 and Clang 21 reports
+  `-Wmissing-field-initializers` on the designated-initializer idiom of mddlog's option structs;
+  CMake's redundant `-c` on Clang BMI precompilation warns under a global `-Werror`. The Linux
+  Clang and Windows MSVC CI legs are exercised but not pinned to a patch version, and the
+  #147 TSan/libc++ observation keeps that tuple unqualified for TSan.
+
 - Bound diagnostic messages, text bytes, pending/active flushes and sink registrations
   through `DiagnosticConfig`; refuse newest events with independent health counters.
   Preserve short emission methods, report per-sink flush/stop failures, expire waits

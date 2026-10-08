@@ -1,0 +1,1132 @@
+{
+  "formatVersion": 1,
+  "status": "candidate",
+  "policy": "docs/adr/ADR-007-compatibility-and-distribution.md",
+  "tiers": {
+    "stable-candidate": "Usual-use surface proposed for the 1.0 source/behavior promise; frozen only after #122.",
+    "extension": "Supported building blocks and interfaces an integrator implements or composes; same promise once frozen, and adding a pure virtual member needs a major version.",
+    "format-codec": "C++ codecs of versioned byte formats. The formats are governed by their own versions; the C++ API may change in a minor release with a changelog entry.",
+    "implementation-module": "Module import name not promised; its exported symbols are supported only through the umbrella names listed below.",
+    "reduction-candidate": "Exported low-level helper kept for compatibility; to be reviewed for removal from the umbrella, with deprecation, before the freeze.",
+    "test-double": "In-memory reference implementation for tests and evaluation, never a deployment backend.",
+    "link-only": "Installed only because an exported target links it; not for direct use."
+  },
+  "targets": {
+    "mddlog::core": {
+      "component": "core",
+      "tier": "stable-candidate",
+      "kind": "static library",
+      "note": "Governed modules only; links Threads through mddlog::mddlog_options."
+    },
+    "mddlog::mddlog": {
+      "component": "full",
+      "tier": "stable-candidate",
+      "kind": "static library",
+      "note": "Adapters, sinks, umbrella and facade; links mddlog::core PUBLIC."
+    },
+    "mddlog::audit_tool": {
+      "component": "audit_tool",
+      "tier": "extension",
+      "kind": "executable",
+      "note": "Optional Linux CLI mddlog-audit (MDDLOG_BUILD_AUDIT_TOOLS)."
+    },
+    "mddlog::mddlog_options": {
+      "component": "core",
+      "tier": "link-only",
+      "kind": "interface",
+      "note": "Threads and sanitizer link options of an instrumented build."
+    }
+  },
+  "components": {
+    "core": {
+      "option": null,
+      "targets": [
+        "mddlog::core"
+      ]
+    },
+    "full": {
+      "option": null,
+      "targets": [
+        "mddlog::mddlog"
+      ]
+    },
+    "file_storage": {
+      "option": "MDDLOG_BUILD_FILE_STORAGE",
+      "targets": [
+        "mddlog::mddlog"
+      ],
+      "platforms": [
+        "Linux"
+      ]
+    },
+    "audit_tool": {
+      "option": "MDDLOG_BUILD_AUDIT_TOOLS",
+      "targets": [
+        "mddlog::audit_tool"
+      ],
+      "platforms": [
+        "Linux"
+      ],
+      "requires": [
+        "file_storage"
+      ]
+    }
+  },
+  "formats": {
+    "canonical-event": {
+      "file": "include/mddlog/adapter/AuditCanonical.cppm",
+      "pattern": "canonicalContractVersion = (\\d+);",
+      "version": 1
+    },
+    "segment-layout": {
+      "file": "include/mddlog/adapter/AuditLayout.cppm",
+      "pattern": "storageLayoutVersion = (\\d+);",
+      "version": 1
+    },
+    "anchor-claim": {
+      "file": "include/mddlog/adapter/AuditAnchor.cppm",
+      "pattern": "anchorFormatVersion = (\\d+);",
+      "version": 1
+    },
+    "witness-protocol": {
+      "file": "include/mddlog/adapter/WitnessCodec.cppm",
+      "pattern": "protocolVersion = (\\d+);",
+      "version": 1
+    },
+    "retained-position": {
+      "file": "include/mddlog/adapter/FileRetainedPosition.cppm",
+      "pattern": "formatVersion += (\\d+);",
+      "version": 1
+    },
+    "evidence-package": {
+      "file": "include/mddlog/adapter/AuditEvidence.cppm",
+      "pattern": "auditEvidenceVersion = (\\d+);",
+      "version": 1
+    },
+    "projection-json": {
+      "file": "include/mddlog/adapter/AuditProjection.cppm",
+      "pattern": "auditProjectionVersion = (\\d+);",
+      "version": 1
+    },
+    "cli-configuration": {
+      "file": "tools/AuditTool.cpp",
+      "pattern": "value != \"(\\d+)\"\\)",
+      "version": 1
+    },
+    "build-info": {
+      "file": "cmake/MddlogBuildInfo.cmake",
+      "pattern": "formatVersion (\\d+)\\)",
+      "version": 1
+    },
+    "source-manifest": {
+      "file": "scripts/package-source.py",
+      "pattern": "'formatVersion': (\\d+),",
+      "version": 1
+    }
+  },
+  "modules": {
+    "mddlog": {
+      "file": "include/mddlog/mddlog.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.adapter.auditanchor": {
+      "file": "include/mddlog/adapter/AuditAnchor.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditcanonical": {
+      "file": "include/mddlog/adapter/AuditCanonical.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditchain": {
+      "file": "include/mddlog/adapter/AuditChain.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditdrain": {
+      "file": "include/mddlog/adapter/AuditDrain.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditevidence": {
+      "file": "include/mddlog/adapter/AuditEvidence.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "format-codec",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.auditlayout": {
+      "file": "include/mddlog/adapter/AuditLayout.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditledger": {
+      "file": "include/mddlog/adapter/AuditLedger.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditlog": {
+      "file": "include/mddlog/adapter/AuditLog.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditlogverifier": {
+      "file": "include/mddlog/adapter/AuditLogVerifier.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditmedium": {
+      "file": "include/mddlog/adapter/AuditMedium.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditprojection": {
+      "file": "include/mddlog/adapter/AuditProjection.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "format-codec",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.auditresources": {
+      "file": "include/mddlog/adapter/AuditResources.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.auditservice": {
+      "file": "include/mddlog/adapter/AuditService.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.auditstore": {
+      "file": "include/mddlog/adapter/AuditStore.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.auditverifier": {
+      "file": "include/mddlog/adapter/AuditVerifier.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.diagnosticbinding": {
+      "file": "include/mddlog/adapter/DiagnosticBinding.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.3.0"
+    },
+    "mddlog.adapter.fileanchorauthority": {
+      "file": "include/mddlog/adapter/FileAnchorAuthority.cppm",
+      "target": "mddlog::mddlog",
+      "component": "file_storage",
+      "tier": "extension",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.fileretainedposition": {
+      "file": "include/mddlog/adapter/FileRetainedPosition.cppm",
+      "target": "mddlog::mddlog",
+      "component": "file_storage",
+      "tier": "extension",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.filestoragemedium": {
+      "file": "include/mddlog/adapter/FileStorageMedium.cppm",
+      "target": "mddlog::mddlog",
+      "component": "file_storage",
+      "tier": "extension",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.logger": {
+      "file": "include/mddlog/adapter/Logger.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.1.0"
+    },
+    "mddlog.adapter.logrecord": {
+      "file": "include/mddlog/adapter/LogRecord.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.1.0"
+    },
+    "mddlog.adapter.ringdrain": {
+      "file": "include/mddlog/adapter/RingDrain.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.1.0"
+    },
+    "mddlog.adapter.sha256": {
+      "file": "include/mddlog/adapter/Sha256.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.sinkregistry": {
+      "file": "include/mddlog/adapter/SinkRegistry.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.textlogger": {
+      "file": "include/mddlog/adapter/TextLogger.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.transportconsumer": {
+      "file": "include/mddlog/adapter/TransportConsumer.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "extension",
+      "since": "0.2.0"
+    },
+    "mddlog.adapter.unixanchorprovider": {
+      "file": "include/mddlog/adapter/UnixAnchorProvider.cppm",
+      "target": "mddlog::mddlog",
+      "component": "file_storage",
+      "tier": "extension",
+      "since": "unreleased"
+    },
+    "mddlog.adapter.witnesscodec": {
+      "file": "include/mddlog/adapter/WitnessCodec.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "format-codec",
+      "since": "unreleased"
+    },
+    "mddlog.core.auditbinding": {
+      "file": "include/mddlog/core/AuditBinding.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.3.0"
+    },
+    "mddlog.core.auditcontext": {
+      "file": "include/mddlog/core/AuditContext.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.3.0"
+    },
+    "mddlog.core.auditevent": {
+      "file": "include/mddlog/core/AuditEvent.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.2.0"
+    },
+    "mddlog.core.auditring": {
+      "file": "include/mddlog/core/AuditRing.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.2.0"
+    },
+    "mddlog.core.diagnosticcontext": {
+      "file": "include/mddlog/core/DiagnosticContext.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.3.0"
+    },
+    "mddlog.core.governedbinding": {
+      "file": "include/mddlog/core/GovernedBinding.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.3.0"
+    },
+    "mddlog.core.inlinestring": {
+      "file": "include/mddlog/core/InlineString.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.core.loglevel": {
+      "file": "include/mddlog/core/LogLevel.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.core.record": {
+      "file": "include/mddlog/core/Record.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.core.ring": {
+      "file": "include/mddlog/core/Ring.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.core.writeresult": {
+      "file": "include/mddlog/core/WriteResult.cppm",
+      "target": "mddlog::core",
+      "component": "core",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.log": {
+      "file": "include/mddlog/Log.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "stable-candidate",
+      "since": "0.1.0"
+    },
+    "mddlog.sinks.auditsink": {
+      "file": "include/mddlog/sinks/AuditSink.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.2.0"
+    },
+    "mddlog.sinks.console": {
+      "file": "include/mddlog/sinks/ConsoleSink.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.1.0"
+    },
+    "mddlog.sinks.sink": {
+      "file": "include/mddlog/sinks/Sink.cppm",
+      "target": "mddlog::mddlog",
+      "component": "full",
+      "tier": "implementation-module",
+      "since": "0.1.0"
+    }
+  },
+  "umbrella": {
+    "module": "mddlog",
+    "file": "include/mddlog/mddlog.cppm",
+    "names": {
+      "Admission": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AdvanceAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AdvanceRefusal": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AgeStatus": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "Anchor": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AnchorAbsent": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AnchorClaim": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AnchorProvider": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AnchorStamp": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AnchorVerifier": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AppendAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AppendStatus": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditBinding": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AuditCategory": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditChain": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditChainVerifier": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditContext": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AuditContextOptions": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AuditDescription": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AuditDescriptionOptions": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AuditDrainResult": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditDrainStatus": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditEvent": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditEventOptions": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "AuditField": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditHealthSnapshot": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditInput": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditPhase": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditRefusal": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditRefusalReason": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "auditReservedActionPrefix": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditRing": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditRingRegistration": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditSink": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditSinkAdapter": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditSinkPtr": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "AuditWriteResult": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "BoundaryKind": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "boundaryName": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "BoundaryNote": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "buildLedgerEvent": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "canonicalContractVersion": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "CanonicalRecord": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ChainedRecord": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ChainFinding": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ChainRefusal": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ChainStateRecovery": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "checkMediumAtStart": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "CitedPosition": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ConsoleSink": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "Continuity": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "crc32c": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "createConsoleSink": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "DiagnosticBinding": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "DiagnosticConfig": {
+        "tier": "stable-candidate",
+        "since": "unreleased"
+      },
+      "DiagnosticContext": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "DiagnosticContextOptions": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "DiagnosticFlushResult": {
+        "tier": "stable-candidate",
+        "since": "unreleased"
+      },
+      "DiagnosticHealth": {
+        "tier": "stable-candidate",
+        "since": "unreleased"
+      },
+      "DiagnosticSinkResult": {
+        "tier": "stable-candidate",
+        "since": "unreleased"
+      },
+      "DiagnosticStatus": {
+        "tier": "stable-candidate",
+        "since": "unreleased"
+      },
+      "digestFromHex": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "encodeCanonical": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "encodeRecordFrame": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "encodeSegmentOpening": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "fromString": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "getColorCode": {
+        "tier": "reduction-candidate",
+        "since": "0.1.0"
+      },
+      "getResetColorCode": {
+        "tier": "reduction-candidate",
+        "since": "0.1.0"
+      },
+      "getVersion": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "GovernedBinding": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "IdentifierField": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "InMemoryAnchorProvider": {
+        "tier": "test-double",
+        "since": "0.2.0"
+      },
+      "InMemoryStorageMedium": {
+        "tier": "test-double",
+        "since": "0.2.0"
+      },
+      "IntegrityFault": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "IntegrityFaultKind": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "isComplianceLevel": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "isLedgerHeadAction": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "isMedicalComplianceEnabled": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "isReservedAuditAction": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LatestAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ledgerActionName": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerCheck": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerChecker": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerConfig": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerEntry": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerFault": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerImage": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ledgerKindOf": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerRecordKind": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LedgerRecordView": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "ledgerReserveSegments": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "LogAnalysis": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LogImage": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LogLevel": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "LogRecord": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "LogReport": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "LogStatistics": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "LogVerifier": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "makeAnchorClaim": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "makeBoundaryNote": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "OpenAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "OpenStatus": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "OperationContextOptions": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "PendingRetirement": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "PersistingAuditSink": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ProviderListing": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "ProviderUnavailable": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RawTime": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "readStoredStream": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "recoverChainState": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RecoveredStream": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RecoveryFinding": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RecoveryFindingKind": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RecoveryReport": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "Refusal": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "RefusalReason": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "RestartReport": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetainedAnchor": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetainedOutcome": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetainedPosition": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetentionOutcome": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetentionPolicy": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetentionResult": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetireAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "Retirement": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RetireRefusal": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "RingLog": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "RingSinkAdapter": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "ScannedRecord": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "scanSegment": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentHeader": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentImage": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentInfo": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentOpening": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentRef": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentScan": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "SegmentStatus": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "Sha256Digest": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SimpleLogger": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "Sink": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "SinkPtr": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "StorageConfig": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StorageConfigError": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StorageCounters": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StorageHealthSnapshot": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StorageIssue": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "storageLayoutVersion": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StorageMedium": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StoredRecord": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StoredStream": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamBoundaryReport": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamDisposition": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamEntry": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamEvaluation": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamImage": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamReport": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamsAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamStart": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamStorageHealth": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "StreamStorageState": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SyncAnswer": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "SyncPolicy": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "toString": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "TrailingRegion": {
+        "tier": "reduction-candidate",
+        "since": "0.2.0"
+      },
+      "TrimRecord": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "TruncatedFields": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      },
+      "Verdict": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "VerdictCause": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "verdictName": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "VerifierConfig": {
+        "tier": "stable-candidate",
+        "since": "0.2.0"
+      },
+      "WeakSinkPtr": {
+        "tier": "stable-candidate",
+        "since": "0.1.0"
+      },
+      "WriteResult": {
+        "tier": "stable-candidate",
+        "since": "0.3.0"
+      }
+    }
+  },
+  "removed": []
+}

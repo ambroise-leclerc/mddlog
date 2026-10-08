@@ -187,7 +187,8 @@ Ce tmpfs teste les erreurs système ; il ne qualifie pas la persistance contre c
 
 Le maintien ou le transfert explicite des critères d’intégration vers #115/#116/#121
 reste à décider. Aucun critère n’est supprimé par la réussite des tests logiciels.
-GAP-003, GAP-007 et GAP-013 restent ouverts jusqu’aux décisions et preuves correspondantes.
+GAP-003 et GAP-007 restent ouverts jusqu’aux décisions et preuves correspondantes ; GAP-013 est
+clos depuis la décision sur #148 consignée plus bas.
 
 ## Dossier électrique reçu le 6 octobre 2026
 
@@ -331,8 +332,8 @@ vérifie ce jeu et les contrôles de corruption. Conservation avec l’historiqu
 projet, sans expiration automatique, suppression ni remplacement par d’autres
 campagnes ; les nouveaux jeux prennent un nouveau répertoire daté.
 
-Disposition soumise à revue : clôture logicielle de #120/GAP-013 pour les profils
-bornés réalisés et revue/fusion #146. GAP-003 reste ouvert sous #122 pour la
+Disposition acceptée : clôture logicielle de #120/GAP-013 pour les profils bornés
+réalisés et revue/fusion #146, par la décision nominative AM-L : PR #148 approuvée le 2026-10-08 à 21:58:47 UTC sur `f5b015c08a0fb9bda55ee792f039309d86debc5e`, fusionnée à `2b606df47d5bf2d7db5e021a8bf359173ee5490e`. GAP-003 reste ouvert sous #122 pour la
 traçabilité du déploiement réel et l’acceptation finale. Le suivi autonome libc++
 est transféré explicitement à #147, avec sa source et son observation conservées
 dans Git ; il n’est ni résolu ni déclaré faux positif et reste à évaluer pour la

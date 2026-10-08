@@ -210,16 +210,18 @@ set(MDDLOG_CORE_MODULE_FILES
     include/mddlog/core/AuditRing.cppm
     include/mddlog/core/AuditBinding.cppm
 )
+# BASE_DIRS include: the installed interface units keep their path below include/ (for example
+# include/modules/mddlog/core/LogLevel.cppm), not a repeated include/ component.
 target_sources(mddlog-core
     PUBLIC
-    FILE_SET cxx_modules TYPE CXX_MODULES FILES
+    FILE_SET cxx_modules TYPE CXX_MODULES BASE_DIRS include FILES
         ${MDDLOG_CORE_MODULE_FILES}
 )
 
 # mddlog: adapter/sink modules, in dependency order.
 target_sources(mddlog
     PUBLIC
-    FILE_SET cxx_modules TYPE CXX_MODULES FILES
+    FILE_SET cxx_modules TYPE CXX_MODULES BASE_DIRS include FILES
         include/mddlog/adapter/SinkRegistry.cppm
         include/mddlog/adapter/TextLogger.cppm
         include/mddlog/adapter/LogRecord.cppm
@@ -260,17 +262,21 @@ if(MDDLOG_BUILD_FILE_STORAGE)
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
         message(FATAL_ERROR "MDDLOG_BUILD_FILE_STORAGE requires Linux.")
     endif()
-    target_sources(mddlog PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
+    target_sources(mddlog PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES BASE_DIRS include FILES
         include/mddlog/adapter/FileStorageMedium.cppm
         include/mddlog/adapter/FileRetainedPosition.cppm
         include/mddlog/adapter/FileAnchorAuthority.cppm
         include/mddlog/adapter/UnixAnchorProvider.cppm)
 endif()
 
-# Configuration application
-configure_compiler_settings(mddlog_options)
-configure_medical_compliance(mddlog_options ${PROJECT_VERSION_MAJOR} ${PROJECT_VERSION_MINOR} ${PROJECT_VERSION_PATCH})
-configure_linker(mddlog_options)
+# Configuration application. Compiler settings, version definitions and warnings are private to
+# mddlog's own targets (#121); mddlog_options carries only what a consumer's link genuinely needs.
+foreach(_mddlog_library IN ITEMS mddlog-core mddlog)
+    configure_compiler_settings(${_mddlog_library})
+    configure_medical_compliance(${_mddlog_library} ${PROJECT_VERSION_MAJOR} ${PROJECT_VERSION_MINOR} ${PROJECT_VERSION_PATCH})
+endforeach()
+unset(_mddlog_library)
+configure_linker()
 set_project_warnings(mddlog_warnings)
 
 enable_sanitizers(mddlog_options)
@@ -300,15 +306,17 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(mddlog_options INTERFACE Threads::Threads)
 
-# Apply compiler settings. mddlog_options is PUBLIC because it carries Threads::Threads, which a
-# consumer's own final link needs too; mddlog_warnings (this project's -Wall/-Werror/etc.) is
-# PRIVATE so those flags apply while building mddlog itself and never leak into a consumer's
-# compile of its own code - a downstream project should choose its own warning policy.
+# Apply compiler settings. mddlog_options is PUBLIC because it carries Threads::Threads (and the
+# sanitizer link options of an instrumented build), which a consumer's own final link needs too.
+# mddlog_warnings (this project's -Wall/-Werror/etc.) is PRIVATE and BUILD_INTERFACE-only: it is
+# neither installed nor exported, so it reaches neither a consumer's own compile nor its rebuild of
+# the installed BMIs, where a newer diagnostic under -Werror would otherwise fail a build over code
+# the consumer cannot change (#121).
 target_link_libraries(mddlog-core PUBLIC mddlog_options)
-target_link_libraries(mddlog-core PRIVATE mddlog_warnings)
+target_link_libraries(mddlog-core PRIVATE $<BUILD_INTERFACE:mddlog_warnings>)
 
 target_link_libraries(mddlog PUBLIC mddlog_options mddlog::core)
-target_link_libraries(mddlog PRIVATE mddlog_warnings)
+target_link_libraries(mddlog PRIVATE $<BUILD_INTERFACE:mddlog_warnings>)
 
 # Early direct-link guard: mddlog-core must never link mddlog. The build.core.graph CTest adds
 # evaluated target dependencies and compiler-produced imports after the build. Here a regression
@@ -368,7 +376,8 @@ if(MDDLOG_BUILD_AUDIT_TOOLS)
         message(FATAL_ERROR "MDDLOG_BUILD_AUDIT_TOOLS requires the Linux file adapters (MDDLOG_BUILD_FILE_STORAGE=ON).")
     endif()
     add_executable(mddlog_audit tools/AuditTool.cpp)
-    set_target_properties(mddlog_audit PROPERTIES OUTPUT_NAME mddlog-audit)
+    # Installed and exported as mddlog::audit_tool (the audit_tool package component).
+    set_target_properties(mddlog_audit PROPERTIES OUTPUT_NAME mddlog-audit EXPORT_NAME audit_tool)
     target_link_libraries(mddlog_audit PRIVATE mddlog::mddlog)
 endif()
 
@@ -381,15 +390,23 @@ if(MDDLOG_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 
-    # Report the full and core-only installed consumers separately. Their scratch prefixes differ,
-    # but every `cmake --install` of this build tree rewrites ${CMAKE_BINARY_DIR}/install_manifest.txt,
-    # so a shared resource lock keeps the two installs from writing that file concurrently.
-    foreach(_mddlog_consumer_kind IN ITEMS full core)
-        if(_mddlog_consumer_kind STREQUAL "full")
-            set(_mddlog_consumer_test InstallTreeConsumer)
-        else()
-            set(_mddlog_consumer_test InstallTreeCoreConsumer)
-        endif()
+    # Independent consumers (tests/consumer/package, #121): the full and core-only installed
+    # packages, this source tree added by a consumer, and a source archive of the tracked files.
+    # The installed consumers' scratch prefixes differ, but every `cmake --install` of this build
+    # tree rewrites ${CMAKE_BINARY_DIR}/install_manifest.txt, so a shared resource lock keeps them
+    # from writing that file concurrently. The source consumers rebuild the library themselves.
+    find_package(Python3 3.9 COMPONENTS Interpreter)
+    find_package(Git QUIET)
+    set(_mddlog_consumer_kinds full core source)
+    if(Python3_Interpreter_FOUND AND GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+        list(APPEND _mddlog_consumer_kinds archive)
+    endif()
+    foreach(_mddlog_consumer_kind IN LISTS _mddlog_consumer_kinds)
+        set(_mddlog_consumer_test_full InstallTreeConsumer)
+        set(_mddlog_consumer_test_core InstallTreeCoreConsumer)
+        set(_mddlog_consumer_test_source SourceSubdirectoryConsumer)
+        set(_mddlog_consumer_test_archive SourceArchiveConsumer)
+        set(_mddlog_consumer_test ${_mddlog_consumer_test_${_mddlog_consumer_kind}})
         # NAME/COMMAND form so $<CONFIG> names the configuration CTest is testing, which a
         # multi-config generator (Ninja Multi-Config) needs for install, build and run paths.
         add_test(NAME ${_mddlog_consumer_test}
@@ -405,28 +422,56 @@ if(MDDLOG_BUILD_TESTS)
             # scans libc++'s std.cppm with libstdc++'s include path and fails on a missing '__config'.
             -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
             # MSVC's runtime-library selection (/MD vs /MT, Release vs Debug) is driven by the
-            # configuration. Without forwarding it, the consumer configures with an empty build
-            # type while this build used Release, the two pick different default runtime libraries,
-            # and linking the consumer against the installed mddlog.lib fails with LNK4098/LNK1319.
+            # configuration, so the driver keeps it there and varies it elsewhere.
             -D "CONFIG=$<CONFIG>"
             -D "GENERATOR=${CMAKE_GENERATOR}"
             -D "EXPECTED_VERSION=${PROJECT_VERSION}"
             -D "SOURCE_DIR=${CMAKE_SOURCE_DIR}"
             -D "CONSUMER_KIND=${_mddlog_consumer_kind}"
             -D "FILE_STORAGE=${MDDLOG_BUILD_FILE_STORAGE}"
+            -D "AUDIT_TOOL=${MDDLOG_BUILD_AUDIT_TOOLS}"
+            -D "PYTHON=${Python3_EXECUTABLE}"
             -P "${CMAKE_SOURCE_DIR}/cmake/TestInstallConsumer.cmake"
         )
-        set_tests_properties(${_mddlog_consumer_test} PROPERTIES LABELS "build" RESOURCE_LOCK mddlog_install_tree)
+        # Each consumer compiles mddlog's modules (BMIs, or the whole library from source): give
+        # it its own timeout rather than the suite's per-test default.
+        set_tests_properties(${_mddlog_consumer_test} PROPERTIES LABELS "build;consumer" TIMEOUT 1200)
+        if(_mddlog_consumer_kind MATCHES "^(full|core)$")
+            set_tests_properties(${_mddlog_consumer_test} PROPERTIES RESOURCE_LOCK mddlog_install_tree)
+        endif()
     endforeach()
+    unset(_mddlog_consumer_kinds)
+
+    # Configure-time refusals of the installed package. OTHER_CXX_COMPILER is optional: set
+    # MDDLOG_TEST_OTHER_CXX_COMPILER to a second compiler to also check the toolchain refusal.
+    set(MDDLOG_TEST_OTHER_CXX_COMPILER "" CACHE FILEPATH
+        "A compiler other than CMAKE_CXX_COMPILER, for the package's toolchain refusal test")
+    add_test(NAME build.package.refusals
+        COMMAND "${CMAKE_COMMAND}"
+        -D "BUILD_DIR=${CMAKE_BINARY_DIR}"
+        -D "CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        -D "CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        -D "STDLIB_MODULES_JSON=${CMAKE_CXX_STDLIB_MODULES_JSON}"
+        -D "OTHER_CXX_COMPILER=${MDDLOG_TEST_OTHER_CXX_COMPILER}"
+        -D "CONFIG=$<CONFIG>"
+        -D "GENERATOR=${CMAKE_GENERATOR}"
+        -D "EXPECTED_VERSION=${PROJECT_VERSION}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/TestPackageRefusals.cmake"
+    )
+    set_tests_properties(build.package.refusals PROPERTIES LABELS "build;consumer" TIMEOUT 600
+        RESOURCE_LOCK mddlog_install_tree)
 endif()
 
-# Installation
+# Installation. The package installs mddlog::core, mddlog::mddlog, the link-only mddlog::mddlog_options
+# and, when enabled, mddlog::audit_tool; mddlog_warnings stays build-only. Supported targets,
+# components and consumer requirements: docs/adr/ADR-007-compatibility-and-distribution.md.
 include(GNUInstallDirs)
+set(_mddlog_installed_targets mddlog mddlog-core mddlog_options)
 if(MDDLOG_BUILD_AUDIT_TOOLS)
-    install(TARGETS mddlog_audit RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    list(APPEND _mddlog_installed_targets mddlog_audit)
 endif()
 
-install(TARGETS mddlog mddlog-core mddlog_options mddlog_warnings
+install(TARGETS ${_mddlog_installed_targets}
     EXPORT mddlogTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -434,6 +479,7 @@ install(TARGETS mddlog mddlog-core mddlog_options mddlog_warnings
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILE_SET cxx_modules DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/modules
 )
+unset(_mddlog_installed_targets)
 
 install(EXPORT mddlogTargets
     FILE mddlogTargets.cmake
@@ -441,13 +487,20 @@ install(EXPORT mddlogTargets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mddlog
 )
 
-# Create config file
+# Create config file. Before 1.0 a minor version may break source compatibility, so a request for
+# 0.Y accepts only 0.Y.*; from 1.0 the major version carries that promise (ADR-007).
 include(CMakePackageConfigHelpers)
+if(PROJECT_VERSION_MAJOR EQUAL 0)
+    set(_mddlog_version_compatibility SameMinorVersion)
+else()
+    set(_mddlog_version_compatibility SameMajorVersion)
+endif()
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/mddlogConfigVersion.cmake"
     VERSION ${PROJECT_VERSION}
-    COMPATIBILITY AnyNewerVersion
+    COMPATIBILITY ${_mddlog_version_compatibility}
 )
+unset(_mddlog_version_compatibility)
 
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/mddlogConfig.cmake.in"
@@ -455,8 +508,16 @@ configure_package_config_file(
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mddlog
 )
 
+# Build manifest: the exact toolchain, options and dependencies of this package (ADR-007).
+include(MddlogBuildInfo)
+mddlog_write_build_info("${CMAKE_CURRENT_BINARY_DIR}/mddlog-build-info-$<CONFIG>.json")
+
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/mddlogConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/mddlogConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mddlog
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mddlog-build-info-$<CONFIG>.json"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/mddlog
+    RENAME mddlog-build-info.json
 )

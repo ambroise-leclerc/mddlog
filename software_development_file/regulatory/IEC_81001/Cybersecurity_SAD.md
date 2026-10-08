@@ -82,3 +82,7 @@ Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs
 ## Campagnes de robustesse #120
 
 Le [complément](../../../docs/audit-chain-campaign.md) vérifie la reprise du checkpoint puis la détection d’un rollback combiné et réinjecte quatre segments originaux v0.2/v0.3 dans les lecteurs bornés. Les autorités du générateur fonctionnel partagent un UID ; la preuve d’isolation réelle VER-044 est répétée séparément sans généralisation. Les rapports gardent octets et requêtes synthétiques ; appliquer les règles de confidentialité/conservation du profil aux campagnes utilisant des données réelles. Aucun gel multi-releases #121 ni fermeture de GAP-003/013.
+
+## Distribution source et intégrité #121
+
+L’archive source est reproductible depuis un commit et accompagnée des empreintes SHA-256 de chaque fichier, du flux tar et de l’archive. Ces empreintes détectent une altération accidentelle mais n’authentifient pas l’émetteur : aucune signature n’est ajoutée (#123). Le contournement `MDDLOG_ACCEPT_UNQUALIFIED_TOOLCHAIN` reste visible par avertissement. La procédure de signalement d’un défaut de sécurité reste due avec la release (GAP-004).

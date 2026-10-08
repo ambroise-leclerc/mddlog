@@ -41,6 +41,11 @@ jobs:
         apt-get update
         apt-get install -y cmake ninja-build python3
 
+    # The container user does not own the checkout. Trust it before configuring, so the build
+    # manifest records the revision and SourceArchiveConsumer can list the tracked files.
+    - name: Trust the checkout for Git
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
     - name: Install pinned CMake
       run: |
         CMAKE_VERSION="4.1.1"

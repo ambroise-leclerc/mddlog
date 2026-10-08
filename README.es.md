@@ -212,7 +212,7 @@ cmake -S . -B build -G Ninja -DMDDLOG_BUILD_EXAMPLES=OFF -DMDDLOG_BUILD_TESTS=OF
 cmake --build build --parallel
 ```
 
-Configuraciones de la CI:
+Configuraciones de la CI ([matriz detallada](docs/compatibility-matrix.md)):
 
 | Plataforma | Compilador y biblioteca estándar | CMake |
 | --- | --- | --- |
@@ -229,7 +229,16 @@ cmake --build --preset ninja-gcc
 ctest --preset ninja-gcc --output-on-failure
 ```
 
-Las pruebas descargan una revisión fijada de [SpecLab](https://github.com/ambroise-leclerc/SpecLab), solo cuando están activadas. `SourceTreeCoreConsumer` e `InstallTreeCoreConsumer` comprueban por separado el objetivo del núcleo solo. La CI ejecuta además los sanitizadores y los controles del núcleo gobernado; su alcance figura en [la nota de evidencias](docs/governed-evidence.md). Una configuración correcta no es ni una compilación ni un resultado de prueba.
+Las pruebas descargan una revisión fijada de [SpecLab](https://github.com/ambroise-leclerc/SpecLab), solo cuando están activadas. `SourceTreeCoreConsumer` e `InstallTreeCoreConsumer` comprueban por separado el objetivo del núcleo solo. Un proyecto consumidor independiente se compila contra el paquete instalado (completo y solo núcleo), contra este repositorio añadido como subdirectorio y contra un archivo de fuentes (etiqueta CTest `consumer`).
+
+### Consumir mddlog
+
+```cmake
+find_package(mddlog 0.3 CONFIG REQUIRED COMPONENTS core full)   # + file_storage, audit_tool en Linux
+target_link_libraries(application PRIVATE mddlog::mddlog)       # o solo mddlog::core
+```
+
+El consumidor fija él mismo C++23 sin extensiones y la puerta `import std` antes de `project()`, con el mismo compilador que construyó el paquete. El paquete ya no modifica el directorio del consumidor y rechaza explícitamente una combinación que no sirve. Véanse los [requisitos del consumidor](docs/consumer-requirements.md), la [matriz y el archivo de fuentes](docs/compatibility-matrix.md), la [política de compatibilidad candidata](docs/adr/ADR-007-compatibility-and-distribution.md) y la [migración desde v0.2](docs/migration/v0.2-to-1.0.md) (en francés). La CI ejecuta además los sanitizadores y los controles del núcleo gobernado; su alcance figura en [la nota de evidencias](docs/governed-evidence.md). Una configuración correcta no es ni una compilación ni un resultado de prueba.
 
 ## Licencia y participación
 

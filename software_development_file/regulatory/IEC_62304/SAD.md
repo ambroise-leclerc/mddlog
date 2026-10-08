@@ -90,3 +90,7 @@ Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs
 ## Banc de robustesse réel #120
 
 VER-070/071 composent les adaptateurs existants et le service sous un consommateur unique ; aucun module déployé supplémentaire. Oracle et superviseur Python restent hors bibliothèque. Le témoin fonctionnel même UID et le profil multi-UID répété restent deux preuves différentes ; voir [campagnes](../../../docs/audit-chain-campaign.md).
+
+## Distribution et compatibilité #121
+
+[ADR-007](../../../docs/adr/ADR-007-compatibility-and-distribution.md), candidate, classe la surface en niveaux. L’[inventaire](../../../docs/api/public-surface.json) attribue ces niveaux aux modules, cibles, composants et formats. Le paquet installé expose les composants `core`, `full`, `file_storage` et `audit_tool` sans dépendance nouvelle sur `mddlog::core`. CTRL-019 garde sa configuration sans effet sur le répertoire du consommateur et ses refus explicites. Aucun module déployé n’est ajouté ; le gel attend #122.

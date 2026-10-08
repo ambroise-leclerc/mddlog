@@ -279,3 +279,9 @@ if(MDDLOG_BUILD_AUDIT_TOOLS)
         --corpus ${PROJECT_SOURCE_DIR}/tests/archives/audit-export/v0.3.0.json)
     set_tests_properties(audit.tools.v0.3.0 PROPERTIES LABELS "audit;integration;robustness" TIMEOUT 60)
 endif()
+
+# The migration guide's compiled before/after examples (#121), also run by every package consumer.
+add_executable(mddlog_migration_examples consumer/package/MigrationExamples.cpp)
+target_link_libraries(mddlog_migration_examples PRIVATE mddlog::mddlog)
+add_test(NAME SourceTreeMigrationExamples COMMAND mddlog_migration_examples)
+set_tests_properties(SourceTreeMigrationExamples PROPERTIES LABELS "build;api")

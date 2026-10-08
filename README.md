@@ -226,7 +226,7 @@ cmake -S . -B build -G Ninja -DMDDLOG_BUILD_EXAMPLES=OFF -DMDDLOG_BUILD_TESTS=OF
 cmake --build build --parallel
 ```
 
-Configurations de la CI :
+Configurations de la CI ([matrice détaillée](docs/compatibility-matrix.md)) :
 
 | Plateforme | Compilateur et bibliothèque standard | CMake |
 | --- | --- | --- |
@@ -243,7 +243,16 @@ cmake --build --preset ninja-gcc
 ctest --preset ninja-gcc --output-on-failure
 ```
 
-Les tests récupèrent une révision figée de [SpecLab](https://github.com/ambroise-leclerc/SpecLab), seulement lorsqu'ils sont activés. `SourceTreeCoreConsumer` et `InstallTreeCoreConsumer` exercent séparément la cible du cœur seul. La CI exécute aussi les sanitizers et les contrôles du cœur gouverné ; voir [la note de preuves](docs/governed-evidence.md) pour leur portée. Une configuration réussie n'est ni une compilation ni un résultat de test.
+Les tests récupèrent une révision figée de [SpecLab](https://github.com/ambroise-leclerc/SpecLab), seulement lorsqu'ils sont activés. `SourceTreeCoreConsumer` et `InstallTreeCoreConsumer` exercent séparément la cible du cœur seul. Un projet consommateur indépendant est construit contre le paquet installé (complet et cœur seul), contre ce dépôt ajouté en sous-répertoire et contre une archive source (label CTest `consumer`).
+
+### Consommer mddlog
+
+```cmake
+find_package(mddlog 0.3 CONFIG REQUIRED COMPONENTS core full)   # + file_storage, audit_tool sous Linux
+target_link_libraries(application PRIVATE mddlog::mddlog)       # ou mddlog::core seul
+```
+
+Le consommateur fixe lui-même C++23 sans extensions et la porte `import std` avant `project()`, avec le même compilateur que la construction du paquet. Le paquet ne modifie plus son répertoire et refuse explicitement une combinaison qu’il ne sert pas. Voir les [exigences du consommateur](docs/consumer-requirements.md), la [matrice et l’archive source](docs/compatibility-matrix.md), la [politique de compatibilité candidate](docs/adr/ADR-007-compatibility-and-distribution.md) et la [migration depuis v0.2](docs/migration/v0.2-to-1.0.md). La CI exécute aussi les sanitizers et les contrôles du cœur gouverné ; voir [la note de preuves](docs/governed-evidence.md) pour leur portée. Une configuration réussie n'est ni une compilation ni un résultat de test.
 
 ## Licence et participation
 
