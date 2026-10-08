@@ -43,6 +43,7 @@ mapfile -t files < <(
         find include -type f -name '*.cppm'
         find tests -type f \( -name '*.cpp' -o -name '*.hpp' \)
         find examples -type f -name '*.cpp'
+        find tools -type f -name '*.cpp'
     } 2>/dev/null | LC_ALL=C sort
 )
 [ "${#files[@]}" -gt 0 ] || fail "the formatted scope resolved to no files; refusing to pass vacuously."

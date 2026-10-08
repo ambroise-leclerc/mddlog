@@ -176,7 +176,7 @@ Further reading: [audit admission and hand-off](docs/migration/audit-admission.m
 
 - **Tamper evidence, relative to an anchor.** A rewrite, a truncation or an old restored state is reported when it affects records an independent anchor covers, or a position the reader retained. The log remains modifiable by anyone who can write the medium: mddlog does not prevent it.
 - **Past the last anchor, nothing is detectable.** Later records are only consistent with each other, and the report says so.
-- **No proof of authorship.** Nothing is signed: chaining shows consistency, not who wrote a record. Signing, key management and an export format are deferred (ADR-004, Decision 11).
+- **No proof of authorship.** Nothing is signed: chaining shows consistency, not who wrote a record. Signing and key management are deferred (ADR-004, Decision 11); candidate export formats are available for review ([ADR-006](docs/adr/ADR-006-audit-tools-and-export.md)).
 - **The library ships no real medium or provider.** `InMemoryStorageMedium` and `InMemoryAnchorProvider` are test doubles. Qualifying a suitable medium (file, flash, device log) and provider is the integrator's task.
 - **One consumer thread** for the audit adapter, the transport consumer and the persisting sink.
 
@@ -201,7 +201,7 @@ The [evidence note](docs/governed-evidence.md) states what the module graph, sou
 - **Delivered (v0.2.0):** synchronised sink registry, bounded transport consumer and text logger, with WebFront as the reference consumer ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); epic [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Delivered (v0.2.0), evidence under review:** durable confirmation on an eligible medium, tamper evidence relative to an independent anchor, restart, rotation and retention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); epic [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). Accepting that evidence is a separate review decision.
 - **Delivered (v0.3.0):** diagnostic/audit contexts and bindings, lazy filtering and verified usages ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). Local component integration is accepted; independent application #122, budgets #117, robustness #120 and the freeze #121 remain open.
-- **Deferred:** signing and key management, export format ([ADR-004, Decision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
+- **Deferred:** signing and key management ([ADR-004, Decision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)); export format acceptance remains open ([ADR-006](docs/adr/ADR-006-audit-tools-and-export.md)).
 
 ## Build and verify
 
@@ -234,3 +234,12 @@ Tests fetch a pinned [SpecLab](https://github.com/ambroise-leclerc/SpecLab) revi
 ## Licence and participation
 
 mddlog is offered under the [European Union Public Licence 1.2](LICENSE) or separate commercial terms; see [LICENSING.md](LICENSING.md). [CONTRIBUTING.md](CONTRIBUTING.md) describes the invitation-only contribution process and review rules. For questions or defects, use [GitHub Issues](https://github.com/ambroise-leclerc/mddlog/issues).
+
+### Optional audit tools (#119)
+
+The Linux `mddlog-audit` CLI inspects journals, exports JSON projections or complete
+evidence packages, and replays packages with explicit anchor trust and reader-state
+provenance. Build with `-DMDDLOG_BUILD_AUDIT_TOOLS=ON`; see [usage](docs/audit-tools.md),
+[candidate schemas](docs/audit-export-format.md) and [local verification](docs/audit-tools-validation.md).
+Projection/evidence v1 is proposed for maintainer review; no compliance attestation or
+self-authenticating package is claimed. Final schema/support acceptance remains #121/#122.

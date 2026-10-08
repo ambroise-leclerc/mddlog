@@ -176,7 +176,7 @@ Para saber más: [admisión y entrega de auditoría](docs/migration/audit-admiss
 
 - **Detección de alteraciones, relativa a un anclaje.** Una reescritura, un truncamiento o un estado antiguo restaurado se señala cuando afecta a registros que cubre un anclaje independiente, o a una posición que el lector ha conservado. El registro sigue siendo modificable por cualquiera que pueda escribir el soporte: mddlog no lo impide.
 - **Más allá del último anclaje, nada es detectable.** Los registros posteriores solo son coherentes entre sí, y el informe lo dice.
-- **Ninguna prueba de autoría.** Nada está firmado: el encadenamiento muestra coherencia, no quién escribió un registro. La firma, la gestión de claves y un formato de exportación quedan aplazados (ADR-004, decisión 11).
+- **Ninguna prueba de autoría.** Nada está firmado: el encadenamiento muestra coherencia, no quién escribió un registro. La firma y la gestión de claves quedan aplazadas (ADR-004, decisión 11); los formatos candidatos de exportación están disponibles para revisión ([ADR-006](docs/adr/ADR-006-audit-tools-and-export.md)).
 - **La biblioteca no incluye ni soporte ni proveedor reales.** `InMemoryStorageMedium` e `InMemoryAnchorProvider` son dobles de prueba. Cualificar un soporte (archivo, flash, registro de dispositivo) y un proveedor adecuados corresponde al integrador.
 - **Un solo hilo consumidor** para el adaptador de auditoría, el consumidor de transporte y el sink persistente.
 
@@ -201,7 +201,7 @@ La [nota de evidencias](docs/governed-evidence.md) indica qué cubren los contro
 - **Entregado (v0.2.0):** registro de sinks sincronizado, consumidor de transporte acotado y registro de texto, con WebFront como consumidor de referencia ([ADR-003](docs/adr/ADR-003-application-integration-and-sink-ownership.md); épica [#10](https://github.com/ambroise-leclerc/mddlog/issues/10)).
 - **Entregado (v0.2.0), evidencias en revisión:** confirmación duradera en un soporte apto, detección de alteraciones relativa a un anclaje independiente, reinicio, rotación y retención ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md); épica [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). La aceptación de estas evidencias es una decisión de revisión aparte.
 - **Entregado (v0.3.0):** contextos y vínculos de diagnóstico/auditoría, filtrado perezoso y usos verificados ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). La integración del componente local está aceptada; la aplicación independiente #122, los presupuestos #117, la robustez #120 y la congelación #121 siguen abiertos.
-- **Aplazado:** firma y gestión de claves, formato de exportación ([ADR-004, decisión 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
+- **Aplazado:** firma y gestión de claves ([ADR-004, decisión 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)); la aceptación de los formatos de exportación sigue pendiente ([ADR-006](docs/adr/ADR-006-audit-tools-and-export.md)).
 
 ## Compilar y verificar
 
@@ -234,3 +234,14 @@ Las pruebas descargan una revisión fijada de [SpecLab](https://github.com/ambro
 ## Licencia y participación
 
 mddlog se ofrece bajo la [Licencia Pública de la Unión Europea 1.2](LICENSE) o bajo condiciones comerciales separadas; véase [LICENSING.md](LICENSING.md). [CONTRIBUTING.md](CONTRIBUTING.md) describe el proceso de contribución por invitación y las reglas de revisión. Para preguntas o defectos, utilice las [issues de GitHub](https://github.com/ambroise-leclerc/mddlog/issues).
+
+### Herramientas de auditoría opcionales (#119)
+
+La herramienta Linux `mddlog-audit` inspecciona registros, exporta proyecciones JSON o
+archivos completos de pruebas y verifica estos archivos explicitando la confianza en
+las anclas y la procedencia del estado del lector. Active `-DMDDLOG_BUILD_AUDIT_TOOLS=ON`;
+consulte la [guía](docs/audit-tools.md), los [esquemas candidatos](docs/audit-export-format.md)
+y la [validación local](docs/audit-tools-validation.md).
+Los formatos de proyección/pruebas v1 se proponen para revisión de los mantenedores;
+no constituyen una certificación de conformidad ni archivos autoautenticados.
+La aceptación final de los esquemas y del soporte sigue vinculada a #121/#122.

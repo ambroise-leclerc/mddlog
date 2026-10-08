@@ -20,6 +20,7 @@ capability as delivered from an ADR's existence alone.
 | [003](ADR-003-application-integration-and-sink-ownership.md) | Application integration and sink ownership | Accepted |
 | [004](ADR-004-audit-persistence-and-tamper-evidence.md) | Audit persistence and tamper evidence | Accepted |
 | [005](ADR-005-contextual-logging-api.md) | Explicit contexts and producer bindings (#113/#127) | Accepted |
+| [006](ADR-006-audit-tools-and-export.md) | Audit CLI and versioned projection/evidence (#119/#121) | Proposed for review |
 
 ## How the five relate
 
@@ -41,10 +42,11 @@ its evidence. The integration report records the maintainer closure decision and
 local-application reservation; this acceptance remains separate from design acceptance.
 
 Further records are anticipated and deliberately not drafted: signing with key management
-(custody, provisioning, rotation), an **export format**, and **compliance reports**, which ADR-004
+(custody, provisioning, rotation), **compliance reports**, which ADR-004
 Decision 11 records as deferred work with the reason for each. The root `README.md` presents none of
-them as a delivered feature. An export format is read by tools this project does not control and
-should not be sketched before there is something to export.
+them as a delivered feature. ADR-006 now proposes the export format around implemented canonical/layout/witness contracts.
+Its optional CLI and codecs are a candidate implementation with local evidence, awaiting
+maintainer schema review; this does not amend the preceding four contracts.
 
 ## Relationship to MduX
 

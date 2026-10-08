@@ -39,3 +39,9 @@ admission ni un flush réussi ; `tryLog`, `flushChecked` et santé portent cette
 [La migration](../../../docs/migration/bounded-diagnostics.md) rend visibles le refus Fatal,
 l’expiration sans annulation et l’obligation de retour des sinks. Revue locale livrée ;
 ni essai d’utilisabilité représentatif des opérateurs ni acceptation indépendante présumés.
+
+## Lot outils et export #119
+
+Le lot #119 offre commandes nommées, configuration réutilisable, erreurs actionnables et couverture toujours visible ; export vers fichier neuf privé, inspection sans sauvegarde implicite, filtrage JSON explicitement partiel. La revue technique locale des parcours est documentée ; elle ne vaut pas étude d’utilisateurs indépendante ni adoption système #122.
+
+Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).

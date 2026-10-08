@@ -126,7 +126,7 @@
       "status": "open",
       "issue": 119,
       "owner": "Ambroise Leclerc",
-      "closure": "Inspection réelle avec verdicts et limites explicites, format versionné et compatible avec archives v0.2."
+      "closure": "CLI optionnelle, projection JSON v1 et paquet de preuves v1 livrés pour revue dans le lot #119 ; VER-066–069 couvrent équivalence bibliothèque, checkpoint, confiance, filtrage, budgets et corpus original v0.2. Décision de schéma ADR-006 proposée ; revue/acceptation, matrice #120/#121 et adoption #122 restent ouvertes. Aucun paquet autonome authentique ni attestation réglementaire."
     },
     {
       "id": "GAP-013",
@@ -425,6 +425,21 @@
         "include/mddlog/Log.cppm",
         "examples/BoundedDiagnostic.cpp",
         "include/mddlog/sinks/ConsoleSink.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-018",
+      "title": "CLI d’inspection et formats projection/preuves versionnés avec confiance explicite",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-006-audit-tools-and-export.md",
+        "docs/audit-export-format.md",
+        "docs/audit-tools.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/AuditEvidence.cppm",
+        "include/mddlog/adapter/AuditProjection.cppm",
+        "tools/AuditTool.cpp"
       ]
     }
   ],
@@ -1238,6 +1253,54 @@
       "scenario": null,
       "evidence": "docs/diagnostic-validation.md",
       "limits": "Un million de refus avec drain immobile et injections d’échecs de préparation record/flush ; allocations C++ ordinaires, pas RSS global, allocations sinks ou qualification temps réel."
+    },
+    {
+      "id": "VER-066",
+      "title": "Équivalence des rapports et positions après capture/relecture",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-018"
+      ],
+      "test": "tests/spec/AuditExportSpec.cpp",
+      "scenario": "audit-export-roundtrip",
+      "evidence": "docs/audit-tools-validation.md",
+      "limits": "Profil local Clang/libc++ 21, preuve logicielle avec fournisseur de test ; aucune authenticité intrinsèque du paquet, acceptation de schéma ou qualification physique."
+    },
+    {
+      "id": "VER-067",
+      "title": "Refus de paquets inconnus, tronqués, dupliqués et hors budgets",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-018"
+      ],
+      "test": "tests/spec/AuditExportSpec.cpp",
+      "scenario": "audit-export-refusals",
+      "evidence": "docs/audit-tools-validation.md",
+      "limits": "Profil local Clang/libc++ 21, preuve logicielle avec fournisseur de test ; aucune authenticité intrinsèque du paquet, acceptation de schéma ou qualification physique."
+    },
+    {
+      "id": "VER-068",
+      "title": "Confiance explicite et maintien des positions après refus de travail",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-018"
+      ],
+      "test": "tests/spec/AuditExportSpec.cpp",
+      "scenario": "audit-export-trust-budgets",
+      "evidence": "docs/audit-tools-validation.md",
+      "limits": "Profil local Clang/libc++ 21, preuve logicielle avec fournisseur de test ; aucune authenticité intrinsèque du paquet, acceptation de schéma ou qualification physique."
+    },
+    {
+      "id": "VER-069",
+      "title": "Parcours CLI sur fichiers réels et corpus original v0.2 depuis un consommateur Python",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-018"
+      ],
+      "test": "scripts/run-audit-tools.py",
+      "scenario": null,
+      "evidence": "docs/audit-tools-validation.md",
+      "limits": "Journal réel temporaire, oracle direct LogVerifier, transport Unix sous un seul UID ; séparation des autorités vérifiée séparément par witness.deployment. Corpus issu de v0.2.0 ; matrice complète #120/#121 et adoption/acceptation #122 non acquises."
     }
   ],
   "risks": [
@@ -1300,7 +1363,8 @@
       "controls": [
         "CTRL-005",
         "CTRL-006",
-        "CTRL-008"
+        "CTRL-008",
+        "CTRL-018"
       ],
       "gaps": [
         "GAP-007",
@@ -1329,7 +1393,8 @@
       "title": "Fournisseur compromis ou indisponible",
       "effect": "Une autorité compromise invalide les garanties ; une panne réduit la couverture vérifiable. Un UID enrôlé peut saturer le témoin mono-consommateur par des connexions lentes répétées malgré un délai borné par connexion.",
       "controls": [
-        "CTRL-006"
+        "CTRL-006",
+        "CTRL-018"
       ],
       "gaps": [
         "GAP-008",
@@ -1381,7 +1446,9 @@
       "id": "RISK-009",
       "title": "Fuite de données sensibles",
       "effect": "Messages et identifiants persistés accessibles sans chiffrement ni contrôle d’accès fourni par mddlog.",
-      "controls": [],
+      "controls": [
+        "CTRL-018"
+      ],
       "gaps": [
         "GAP-017",
         "GAP-015"
@@ -1433,6 +1500,19 @@
       ],
       "status": "open",
       "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+    },
+    {
+      "id": "RISK-013",
+      "title": "Paquet modifiable pris pour une autorité indépendante",
+      "effect": "Journal, ancrages et checkpoint remplacés ensemble ; faux sentiment de couverture authentique ou de protection contre rollback. Projection filtrée confondue avec historique complet.",
+      "controls": [
+        "CTRL-018"
+      ],
+      "gaps": [
+        "GAP-012"
+      ],
+      "status": "open",
+      "systemAssessment": "Le fabricant qualifie les autorités indépendantes, la confidentialité des exports, leur conservation et les hypothèses acceptées. Voir docs/audit-tools.md ; aucune signature ni confiance implicite des données embarquées."
     }
   ],
   "requirements": [
@@ -1555,7 +1635,8 @@
         "RISK-006"
       ],
       "controls": [
-        "CTRL-006"
+        "CTRL-006",
+        "CTRL-018"
       ],
       "verifications": [
         "VER-006",
@@ -1565,7 +1646,10 @@
         "VER-043",
         "VER-044",
         "VER-046",
-        "VER-047"
+        "VER-047",
+        "VER-066",
+        "VER-068",
+        "VER-069"
       ],
       "gaps": [
         "GAP-008",
@@ -1813,6 +1897,29 @@
         "VER-063"
       ],
       "gaps": []
+    },
+    {
+      "id": "REQ-018",
+      "text": "Un outil optionnel inspecte et exporte l’audit avec schémas/codes versionnés, couverture et confiance visibles ; un paquet complet conserve les octets pour relecture contrôlée, une sélection ne prétend pas être un journal complet, et l’inspection ne sauvegarde pas silencieusement la position du lecteur.",
+      "status": "implemented",
+      "risks": [
+        "RISK-004",
+        "RISK-006",
+        "RISK-009",
+        "RISK-013"
+      ],
+      "controls": [
+        "CTRL-018"
+      ],
+      "verifications": [
+        "VER-066",
+        "VER-067",
+        "VER-068",
+        "VER-069"
+      ],
+      "gaps": [
+        "GAP-012"
+      ]
     }
   ],
   "dependencies": [

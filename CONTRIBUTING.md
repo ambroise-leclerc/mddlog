@@ -126,13 +126,14 @@ The reference tool version is **LLVM 21** (the same toolchain `clang-build.yml` 
 ### Formatting a change
 
 Run clang-format 21 over the formatted scope (`include/**/*.cppm`, `tests/**/*.cpp`,
-`tests/**/*.hpp`, `examples/**/*.cpp`):
+`tests/**/*.hpp`, `examples/**/*.cpp`, `tools/**/*.cpp`):
 
 ```bash
 clang-format-21 --style=file -i \
   $(find include -type f -name '*.cppm') \
   $(find tests -type f \( -name '*.cpp' -o -name '*.hpp' \)) \
-  $(find examples -type f -name '*.cpp')
+  $(find examples -type f -name '*.cpp') \
+  $(find tools -type f -name '*.cpp')
 ```
 
 To check without modifying anything, use the same entry point CI runs (added by the formatting-check
@@ -158,7 +159,7 @@ scripts/run-clang-tidy.sh build-clang
 ```
 
 - **Version**: clang-tidy 21 (`clang-tidy-21`), verified at run time; any other major version fails.
-- **Scope** (translation units): `include/mddlog/**/*.cppm`, `tests/spec/*.cpp`, `tests/bench/*.cpp`, `examples/*.cpp`.
+- **Scope** (translation units): `include/mddlog/**/*.cppm`, `tests/spec/*.cpp`, `tests/bench/*.cpp`, `examples/*.cpp`, `tools/*.cpp` when the optional CLI is enabled.
   `tests/framework/*.hpp` is a header, analysed through the specs that include it.
 - **What fails the run**: any diagnostic (findings are promoted to errors), any tool failure, a
   missing or unbuilt Clang preset, a file of the scope absent from `compile_commands.json`, or an

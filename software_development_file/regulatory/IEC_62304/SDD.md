@@ -194,3 +194,9 @@ les flush vérifiés ne réinitialisent pas une instance absente.
 et VER-064/065 remplacent la limite de file non bornée ci-dessus pour SimpleLogger.
 REQ-012 reste planned pour la qualification globale du profil ; GAP-011 reste ouvert pour
 revue/acceptation, aucune acceptation normative ou temps réel présumée.
+
+## Lot outils et export #119
+
+REQ-018/CTRL-018 ajoutent la capture intégrale de segments et la relecture via LogVerifier, avec fournisseur figé et budgets locaux. Projection lisible et paquet revérifiable sont distincts ; inspection sur copie de la position retenue, sauvegarde explicite et génération #115. VER-066–069 couvrent les parcours et refus. ADR-006 est proposée pour revue, aucun gel final implicite.
+
+Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).

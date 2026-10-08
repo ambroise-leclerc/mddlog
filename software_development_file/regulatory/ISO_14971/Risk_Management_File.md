@@ -89,3 +89,9 @@ réentrante. La livraison diminue la croissance de file ; elle ne garantit pas u
 critique conservé ni le retour d’un sink bloqué. Un refus Fatal reste possible. Le fabricant
 dimensionne les budgets et définit sa réponse aux pertes, l’exclusivité/statistique et les
 durées de sinks ; GAP-011 conserve revue/acceptation et REQ-012 sa qualification du profil.
+
+## Lot outils et export #119
+
+RISK-013/CTRL-018 rendent explicite la confiance d’un paquet modifiable : aucun ancrage/checkpoint embarqué ne devient authentique par présence ou checksum. RISK-004/RISK-006 conservent leurs limites hors couverture et hors checkpoint indépendant ; RISK-009 exige une destination privée et des mesures hôte de confidentialité. Le filtre marque une sélection partielle sans masquer le rapport du journal complet.
+
+Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).

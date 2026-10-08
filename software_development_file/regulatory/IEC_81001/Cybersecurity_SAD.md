@@ -72,3 +72,9 @@ La boucle de diagnostic synchrone est refusée par thread et les erreurs sont da
 sans sink secondaire. Les callbacks différés, données propres des sinks et leur durée restent
 des obligations hôte ; une panne peut encore supprimer l’observabilité. VER-064/065 vérifient
 les bornes locales ; aucune résistance exhaustive au déni de service n’est revendiquée.
+
+## Lot outils et export #119
+
+RISK-013/CTRL-018 : le décodeur refuse versions/troncatures/doublons/budgets et ne restaure aucun chemin de l’archive. La confiance embarquée est une hypothèse explicitement acceptée ; le fournisseur Unix authentifié nécessite une indépendance de déploiement qualifiée. Checkpoint embarqué non authentifié, source externe privilégiée ; aucune signature ni mécanisme #123 ajouté.
+
+Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).

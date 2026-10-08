@@ -115,6 +115,7 @@ add_executable(mddlog_specs
     spec/AuditScenarioSpec.cpp
     spec/AuditDrainSpec.cpp
     spec/AuditResourceSpec.cpp
+    spec/AuditExportSpec.cpp
     spec/AuditServiceSpec.cpp
     spec/AuditCanonicalSpec.cpp
     spec/AuditAnchorSpec.cpp
@@ -254,3 +255,14 @@ add_executable(mddlog_diagnostic_memory_consumer consumer/DiagnosticMemoryConsum
 target_link_libraries(mddlog_diagnostic_memory_consumer PRIVATE mddlog::mddlog)
 add_test(NAME diagnostic.bounded.memory COMMAND mddlog_diagnostic_memory_consumer)
 set_tests_properties(diagnostic.bounded.memory PROPERTIES LABELS "diagnostic;resources" TIMEOUT 30)
+
+if(MDDLOG_BUILD_AUDIT_TOOLS)
+    add_executable(mddlog_audit_tool_reference consumer/AuditToolReference.cpp)
+    target_link_libraries(mddlog_audit_tool_reference PRIVATE mddlog::mddlog)
+    add_test(NAME audit.tools COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/scripts/run-audit-tools.py
+        --cli $<TARGET_FILE:mddlog_audit>
+        --reference $<TARGET_FILE:mddlog_audit_tool_reference>
+        --corpus ${PROJECT_SOURCE_DIR}/tests/archives/audit-export/v0.2.0.json)
+    set_tests_properties(audit.tools PROPERTIES LABELS "audit;integration" TIMEOUT 60)
+endif()

@@ -92,3 +92,9 @@ Les épiques #113–#122 ne sont closes qu'avec exigences, conception, risques, 
 preuves concernés à jour. #121 fixe API, formats et matrice ; #122 accepte les preuves de
 persistance et le profil réel, les écarts résiduels et le dossier final. Publication selon
 [docs/release-process.md](../../docs/release-process.md), sans tag direct sur master.
+
+## Lot outils et export #119
+
+REQ-018/CTRL-018/VER-066–069 sont livrés pour revue en #119, avec schéma candidat raccordé au jalon A de #121. GAP-012 reste ouvert pour la décision du mainteneur ; la décision historique de la base initiale reste inchangée. Archives additionnelles #120/#121 et acceptation finale #122 demeurent planifiées.
+
+Voir [contrat et usage](../../docs/audit-tools.md) et [preuves](../../docs/audit-tools-validation.md).

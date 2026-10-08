@@ -41,7 +41,7 @@ jobs:
     # The preset, not an equivalent-looking configure line: CMakePresets.json's ninja-clang
     # description exists precisely to keep the preset and CI from drifting apart.
     - name: Configure CMake
-      run: cmake --preset ninja-clang
+      run: cmake --preset ninja-clang -DMDDLOG_BUILD_AUDIT_TOOLS=ON
 
     - name: Build
       run: cmake --build --preset ninja-clang
@@ -143,7 +143,7 @@ jobs:
         save-cache: 'false'
 
     - name: Configure CMake
-      run: cmake --preset ninja-clang
+      run: cmake --preset ninja-clang -DMDDLOG_BUILD_AUDIT_TOOLS=ON
 
     # clang-tidy needs the preset's compile_commands.json AND its built module interfaces
     # (std, mddlog.*), hence a full build of the preset before the analysis.
@@ -181,6 +181,7 @@ jobs:
       run: |
         cmake --preset ninja-clang-debug \
           -DMDDLOG_BUILD_EXAMPLES=OFF \
+          -DMDDLOG_BUILD_AUDIT_TOOLS=ON \
           -DENABLE_SANITIZER_ADDRESS=ON \
           -DENABLE_SANITIZER_UNDEFINED_BEHAVIOR=ON
 
