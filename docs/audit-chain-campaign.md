@@ -3,14 +3,17 @@
 Ce lot complète les [preuves précédentes](audit-robustness-results.md) sur la base
 `197574f2ceefb72a7e0aaebe6ad322cce2e8fe7d` de `develop`. Il ajoute des histoires
 reproductibles aux composants livrés par #115–#119. Les contrats des ADR ne changent pas.
-Livraison des bancs et résultats locaux soumis à revue ; aucune acceptation du mainteneur
-ni clôture de #120/#121/#122 n’est inférée de leur exécution.
+Lot logiciel approuvé par AM-L et fusionné via #146 sur la révision citée dans
+les [preuves conservées](validation/audit-robustness/2026-10-08/README.md).
+La conservation et la disposition de clôture logicielle de #120 sont soumises à revue ;
+qualification et acceptation finale #122 restent distinctes.
 
 ## Traçabilité et plan de preuves
 
 Les identifiants relient le registre unique aux exigences ; les scénarios existants restent
 les preuves des variantes que le profil génératif ne visite pas. Statut de revue de ce
-complément : **proposé**, y compris sérialisation indépendante et limites ci-dessous.
+complément : **lot logiciel revu dans #146**, avec les limites ci-dessous ;
+conservation et disposition de clôture dans le présent lot.
 
 | Contrat / exigence | Scénario et preuve attendue | Limite |
 | --- | --- | --- |
@@ -115,14 +118,19 @@ longue sont distincts ; leur configuration ne constitue pas un résultat exécut
 ## Résultats et réserves
 
 Les résultats locaux du 8 octobre 2026 sont consignés dans le
-[rapport de robustesse](audit-robustness-results.md). VER-070–072 enrichissent GAP-003/013,
-qui restent ouverts pour revue et conservation des preuves. Les requêtes `detail`,
+[rapport de robustesse](audit-robustness-results.md). VER-070–072 complètent les
+preuves logicielles de GAP-013 ; le présent lot conserve les résultats et propose
+sa clôture pour ces profils. GAP-003 reste ouvert sous #122
+pour le déploiement réel et la décision finale. Les requêtes `detail`,
 admissions et compteurs observés proviennent de la trace du worker ; l’oracle contrôle
 leur cohérence avec sa file abstraite et avec les octets et digests stockés. Il ne
 constitue pas une observation indépendante de l’admission : une trace et des octets
 mensongers mais cohérents pourraient échapper au contrôle. Les campagnes ne prouvent
 ni chaque interleaving, ni l’endurance physique du stockage, ni l’indépendance du témoin
 du profil sous un seul UID. La campagne multi-UID répète VER-044 sans attribuer ses
-permissions aux histoires injectées sous un seul UID. Le suivi libc++/TSan antérieur,
+permissions aux histoires injectées sous un seul UID. Le suivi libc++/TSan antérieur
+est explicitement conservé dans #147 ;
 la politique des futures archives et la durée de support #121, ainsi que l’acceptation
-explicite #122 restent ouverts. Ce lot ne ferme aucune issue automatiquement.
+explicite #122 restent ouverts. Les [preuves versionnées](validation/audit-robustness/2026-10-08/README.md)
+sont vérifiables hors ligne ; la clôture logicielle de #120 attend la revue/fusion
+de ce lot de conservation, sans annoncer le suivi #147 comme résolu.

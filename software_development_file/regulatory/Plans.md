@@ -102,3 +102,9 @@ Voir [contrat et usage](../../docs/audit-tools.md) et [preuves](../../docs/audit
 ## Complément génératif réel #120
 
 VER-070–072 et le [modèle/campagnes](../../docs/audit-chain-campaign.md) relient ADR, exigences et preuves des contrats #115–#119. Profils courts et prolongés séparés, mêmes invariants avec oracle Python des requêtes/octets/digests ; les intégrations non demandées restent NOT_EXECUTED. Révision/empreintes/logs et réserves sont conservés dans les rapports. Revue de ce lot proposée, GAP-003/013 ouverts ; aucune acceptation finale ni politique d’archives #121 inférée.
+
+## Conservation et clôture logicielle du complément #120
+
+Le lot #146 est approuvé par AM-L le 2026-10-08 sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32 et fusionné à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. La campagne manuelle est exécutée, pas seulement configurée. Le présent lot conserve [l’archive originale, les rapports, l’inventaire et les logs](../../docs/validation/audit-robustness/2026-10-08/README.md) dans Git, avec vérification hors ligne et contrôles négatifs en CI documentaire ; conservation avec l’historique du projet, sans expiration automatique ni modification des octets originaux.
+
+Disposition de clôture logicielle de GAP-013/#120 soumise à revue pour ces profils bornés. GAP-003 reste ouvert sous #122 pour le déploiement et l’acceptation finale. Le suivi autonome du tuple TSan/libc++ est explicitement conservé dans #147 et sa source dans le jeu documentaire ; il doit être évalué pour la matrice #121/candidate #122. Aucun défaut ou faux positif résolu, aucune qualification physique ou acceptation finale du dossier présumés. La décision historique de la base initiale est inchangée.

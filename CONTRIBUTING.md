@@ -190,6 +190,12 @@ python3 scripts/check-development-file.py
 python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 ```
 
+Selected verification evidence may be preserved under `docs/validation/` when requested
+and reviewed by a maintainer. Preserve original bytes, tested revisions, profiles, commands,
+results and limitations with a SHA-256 manifest and an offline check. Retain accepted evidence
+with project history; add a new dated set for a later campaign instead of replacing an older
+one. This does not permit committing build directories, objects, modules or compiled workers.
+
 These checks do not accept content or qualify a deployment. A maintainer's decision must identify
 the reviewed revision, date and reservations; #124 accepts the initial baseline and #122 the final
 release dossier. Follow the dossier README's [integration and traceability section](software_development_file/README.md#utilisation-et-traçabilité) when reusing its templates.

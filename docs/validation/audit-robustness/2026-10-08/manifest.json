@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "issue": 120,
+  "tested_revision": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+  "merged_revision": "b73ab46acb7e6d008535b3871c1980e1f7b94fc3",
+  "review": {
+    "pull_request": 146,
+    "reviewer": "AM-L",
+    "approved_at": "2026-10-08T19:08:07Z",
+    "merged_at": "2026-10-08T19:08:25Z",
+    "scope": "bounded software verification; no final dossier or physical qualification"
+  },
+  "run": {
+    "id": 37810541676,
+    "html_url": "https://github.com/ambroise-leclerc/mddlog/actions/runs/37810541676",
+    "event": "workflow_dispatch",
+    "head_branch": "120-audit-generative-campaign",
+    "head_sha": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+    "run_attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-10-08T16:39:46Z",
+    "updated_at": "2026-10-08T17:01:31Z"
+  },
+  "artifact": {
+    "id": 11566830079,
+    "name": "audit-robustness-6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+    "created_at": "2026-10-08T17:01:26Z",
+    "expires_at": "2027-01-06T16:39:48Z",
+    "digest": "sha256:9a98a554725bd4d9d8b6d5cc31fa23a86402fd2855fbbe7531ad33fa8ced2855"
+  },
+  "archive": {
+    "file": "audit-robustness.zip",
+    "sha256": "9a98a554725bd4d9d8b6d5cc31fa23a86402fd2855fbbe7531ad33fa8ced2855",
+    "bytes": 7482376,
+    "entries": 8109,
+    "uncompressed_bytes": 148178779
+  },
+  "inventory": {
+    "file": "files.sha256",
+    "sha256": "ca85415ce8af97bb8ba8854779d69358da612e454d7bd579008795e64f847076"
+  },
+  "reports": {
+    "chain": {
+      "file": "chain-report.json",
+      "archive_member": "chain-long/run-7x_paaay/report.json",
+      "sha256": "4a3b0ed7541a0907c6e5518237aa1f89e69316e23018a7a5ab18352c95951aa6",
+      "status": "PASS"
+    },
+    "readers": {
+      "file": "readers-report.json",
+      "archive_member": "readers/run-nu6za7m7/report.json",
+      "sha256": "2bd471e7839575abb5e14e65d5a6691d65902a33cd1736c1a4aa2e57d652f95e",
+      "status": "PASS"
+    },
+    "storage": {
+      "file": "storage-report.json",
+      "archive_member": "storage-100/run-lnl158fu/report.json",
+      "sha256": "967fddadb3aaa7eeb09155d96d81763f98a168f3fa9ef7cda772ba4c9ad311b0",
+      "status": "PARTIAL"
+    },
+    "volume": {
+      "file": "volume-report.json",
+      "archive_member": "storage-full-volume/run-_tx6tdqj/report.json",
+      "sha256": "17663a197b7ebf0a2a6f436eb9eb9b981d445fd60a6a8409e6715b24ce0d7d4a",
+      "status": "PASS"
+    }
+  },
+  "retention": {
+    "location": "Git history of this directory",
+    "duration": "retain with project history; no automatic expiry or replacement by later campaigns",
+    "policy": "append a new dated directory for later accepted evidence; preserve original bytes"
+  },
+  "remaining": {
+    "toolchain_issue": 147,
+    "archive_policy_issue": 121,
+    "final_acceptance_issue": 122
+  },
+  "logs": [
+    {
+      "file": "long-workflow.log.gz",
+      "sha256": "58e08ca23a509f0be0bfb9d37e7dfe4d47576c359488fe628522af05f4208ee7",
+      "uncompressed_sha256": "b69ee3fdd2d8d1eddff230fc91d35ca3d77ad19eedba5d46d748b1648d5a33a1",
+      "run": 37810541676,
+      "url": "https://github.com/ambroise-leclerc/mddlog/actions/runs/37810541676",
+      "revision": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+      "conclusion": "success",
+      "format": "UTF-8 workflow job logs joined in upstream archive order with job name headers; gzip mtime 0"
+    },
+    {
+      "file": "sanitizers.log.gz",
+      "sha256": "7ceb0bc94834c59317d7f23816ce2e0ac180e8b6cb5370d29da3ea1c45ef225a",
+      "uncompressed_sha256": "541cc45e4f4ae4bac677e5575e8451b3ae2dfe6b4b5d5978905d964d1a336cae",
+      "run": 37810539016,
+      "url": "https://github.com/ambroise-leclerc/mddlog/actions/runs/37810539016",
+      "revision": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+      "conclusion": "success",
+      "format": "UTF-8 workflow job logs joined in upstream archive order with job name headers; gzip mtime 0"
+    },
+    {
+      "file": "clang-build.log.gz",
+      "sha256": "098666e51b27a574f04455ce1389f5108c6fcde01263cd72a599eef1e4ace424",
+      "uncompressed_sha256": "a6f644498a7222e44b89320d079e1a2e8281f1d8ac16e8fc5f4e4a9c40fbbc58",
+      "run": 37810539053,
+      "url": "https://github.com/ambroise-leclerc/mddlog/actions/runs/37810539053",
+      "revision": "6bf13770bd7732ab2640fc6fe28a06ccf5d38d32",
+      "conclusion": "success",
+      "format": "UTF-8 workflow job logs joined in upstream archive order with job name headers; gzip mtime 0"
+    }
+  ]
+}
