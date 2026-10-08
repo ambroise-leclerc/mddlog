@@ -3,6 +3,7 @@
 import argparse
 import gzip
 import hashlib
+import io
 from importlib.util import module_from_spec, spec_from_file_location
 import json
 from pathlib import Path, PurePosixPath
@@ -10,6 +11,8 @@ import tempfile
 import zipfile
 
 DEFAULT = Path(__file__).resolve().parents[1] / 'docs/validation/audit-robustness/2026-10-08'
+# Original GitHub digest, also published in the README; independent of a supplied manifest.
+ORIGINAL_SHA256 = '9a98a554725bd4d9d8b6d5cc31fa23a86402fd2855fbbe7531ad33fa8ced2855'
 
 
 def require(condition, message):
@@ -27,9 +30,22 @@ def safe_name(name):
 def checked_file(root, entry):
     path = root / safe_name(entry['file'])
     require(path.resolve().is_relative_to(root.resolve()), 'evidence file escapes its root')
+    require(path.stat().st_size <= 16 * 1024 * 1024, 'evidence file exceeds input budget')
     data = path.read_bytes()
     require(hashlib.sha256(data).hexdigest() == entry['sha256'], 'evidence file SHA-256 mismatch')
     return data
+
+
+def verify_log(root, entry, maximum=16 * 1024 * 1024):
+    require(maximum > 0, 'invalid workflow log budget')
+    digest = hashlib.sha256()
+    length = 0
+    with gzip.GzipFile(fileobj=io.BytesIO(checked_file(root, entry))) as source:
+        while block := source.read(min(65536, maximum - length + 1)):
+            length += len(block)
+            require(length <= maximum, 'workflow log exceeds decompression budget')
+            digest.update(block)
+    require(length > 0 and digest.hexdigest() == entry['uncompressed_sha256'], 'workflow log content mismatch')
 
 
 def verify_evidence(root):
@@ -41,13 +57,12 @@ def verify_evidence(root):
     descriptor = manifest['archive']
     require(manifest['artifact']['digest'] == 'sha256:' + descriptor['sha256'], 'original artifact digest mismatch')
     data = checked_file(root, descriptor)
+    require(hashlib.sha256(data).hexdigest() == ORIGINAL_SHA256, 'original archive reference mismatch')
     require(len(data) == descriptor['bytes'] and len(data) <= 16 * 1024 * 1024, 'archive size mismatch')
     for log in manifest['logs']:
         require(log['revision'] == manifest['tested_revision'] and log['conclusion'] == 'success',
                 'workflow log provenance mismatch')
-        text = gzip.decompress(checked_file(root, log))
-        require(text and hashlib.sha256(text).hexdigest() == log['uncompressed_sha256'],
-                'workflow log content mismatch')
+        verify_log(root, log)
     inventory = {}
     for line in checked_file(root, manifest['inventory']).decode().splitlines():
         digest, separator, name = line.partition('  ')
@@ -134,7 +149,7 @@ def main():
     try:
         print(json.dumps(verify_evidence(args.evidence)))
         return 0
-    except (OSError, ValueError, KeyError, AssertionError, zipfile.BadZipFile) as error:
+    except (OSError, ValueError, KeyError, AssertionError, EOFError, zipfile.BadZipFile) as error:
         print(json.dumps({'status': 'FAIL', 'error': str(error)}))
         return 1
 

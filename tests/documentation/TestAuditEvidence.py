@@ -1,10 +1,13 @@
 """Offline verification and corruption controls for the preserved #120 campaign."""
 import importlib.util
+import gzip
+import hashlib
 import json
 from pathlib import Path
 import shutil
 import tempfile
 import unittest
+import zipfile
 
 SOURCE = Path(__file__).resolve().parents[2] / 'scripts/verify-audit-evidence.py'
 SPEC = importlib.util.spec_from_file_location('audit_evidence', SOURCE)
@@ -46,6 +49,33 @@ class AuditEvidenceTest(unittest.TestCase):
                 (root / 'manifest.json').write_text(json.dumps(manifest))
                 with self.assertRaisesRegex(ValueError, expected):
                     EVIDENCE.verify_evidence(root)
+
+    def test_replaced_archive_with_consistent_manifest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = json.loads((EVIDENCE.DEFAULT / 'manifest.json').read_text())
+            archive = root / manifest['archive']['file']
+            with zipfile.ZipFile(archive, 'w') as output:
+                output.writestr('truncated.txt', b'incomplete evidence')
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            manifest['archive'].update(sha256=digest, bytes=archive.stat().st_size)
+            manifest['artifact']['digest'] = 'sha256:' + digest
+            (root / 'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'original archive reference mismatch'):
+                EVIDENCE.verify_evidence(root)
+
+    def test_log_decompression_budget_rejects_self_consistent_oversized_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            content = b'x' * 1025
+            data = gzip.compress(content, mtime=0)
+            (root / 'log.gz').write_bytes(data)
+            entry = {'file': 'log.gz', 'sha256': hashlib.sha256(data).hexdigest(),
+                     'uncompressed_sha256': hashlib.sha256(content).hexdigest()}
+            with self.assertRaisesRegex(ValueError, 'decompression budget'):
+                EVIDENCE.verify_log(root, entry, maximum=1024)
+            # The same digest is valid exactly at the accepted output boundary.
+            EVIDENCE.verify_log(root, entry, maximum=1025)
 
 
 if __name__ == '__main__':

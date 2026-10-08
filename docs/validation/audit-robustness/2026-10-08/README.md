@@ -51,7 +51,10 @@ python3 -m unittest discover -s tests/documentation -p 'TestAuditEvidence.py'
 ```
 
 Le vérificateur contrôle le digest original, l'inventaire complet, les tailles, les
-rapports et logs, le profil et les résultats requis. Il refuse les chemins sortant
+rapports et logs, le profil et les résultats requis. Le digest original est aussi
+figé dans le vérificateur, indépendamment d’un manifeste fourni. Les fichiers en
+entrée et chaque log décompressé sont plafonnés à 16 Mio ; les logs sont hachés
+par morceaux bornés. Il refuse les chemins sortant
 du répertoire, les membres dupliqués et les archives hors budget. Il ne déploie pas
 le témoin et n'exécute pas de worker C++ ni sudo : il rejoue les 32 traces par
 l'oracle Python de file, d'octets canoniques et de digests. Les tests négatifs
@@ -87,5 +90,6 @@ sa source et de son observation dans [le dossier de suivi](../tsan-libcxx/README
 Il reste ouvert et doit être évalué pour la matrice #121 et la candidate #122 ;
 aucun faux positif ni défaut de bibliothèque n'est déclaré établi. La politique
 des futures archives relève de #121 ; le profil réel et l'acceptation finale du
-dossier, de #122. La disposition proposée clôt GAP-013 pour les profils logiciels
-livrés ; GAP-003 conserve son acceptation finale sous #122.
+dossier, de #122. La disposition proposée vise la clôture de GAP-013 pour les profils logiciels
+livrés ; il reste ouvert jusqu’à enregistrement de la décision sur ce lot.
+GAP-003 conserve son acceptation finale sous #122.

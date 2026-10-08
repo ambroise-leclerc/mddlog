@@ -131,10 +131,10 @@
     {
       "id": "GAP-013",
       "title": "Étendre robustesse et concurrence",
-      "status": "closed",
+      "status": "open",
       "issue": 120,
       "owner": "Ambroise Leclerc",
-      "closure": "Disposition de clôture logicielle de #120 soumise dans le lot de conservation demandé par le mainteneur. Modèles génératifs, fuzzing, concurrence et chaîne fichiers/témoin/checkpoint réels livrés par #146, approuvée par AM-L le 2026-10-08 sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32 et fusionnée à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. VER-070–072 : 32 histoires, 49152 événements, 32 déploiements isolés requis et archives v0.2/v0.3 ; fuzz CI 1000000 entrées, sans nouveau résultat C++ revendiqué par la conservation. Preuves, empreintes, limites et contrôles négatifs conservés dans docs/validation/audit-robustness/2026-10-08/README.md. Oracle fondé sur une trace du worker, profils finis, absence de qualification physique ; suivi autonome TSan/libc++ explicitement conservé dans #147 avant qualification du tuple #121/#122. GAP-003 et acceptation finale restent #122 ; politique des archives et matrice restent #121. Aucun défaut libc++ ni faux positif déclaré résolu."
+      "closure": "Disposition de clôture logicielle de #120 soumise dans le lot de conservation demandé par le mainteneur ; GAP reste ouvert jusqu’à enregistrement de la décision nominative sur ce lot. L’approbation #146 porte sur les campagnes logicielles précédentes, pas sur la présente conservation. Modèles génératifs, fuzzing, concurrence et chaîne fichiers/témoin/checkpoint réels livrés par #146, approuvée par AM-L le 2026-10-08 sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32 et fusionnée à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. VER-070–072 : 32 histoires, 49152 événements, 32 déploiements isolés requis et archives v0.2/v0.3 ; fuzz CI 1000000 entrées, sans nouveau résultat C++ revendiqué par la conservation. Preuves, empreintes, limites et contrôles négatifs conservés dans docs/validation/audit-robustness/2026-10-08/README.md. Oracle fondé sur une trace du worker, profils finis, absence de qualification physique ; suivi autonome TSan/libc++ explicitement conservé dans #147 avant qualification du tuple #121/#122. GAP-003 et acceptation finale restent #122 ; politique des archives et matrice restent #121. Aucun défaut libc++ ni faux positif déclaré résolu."
     },
     {
       "id": "GAP-014",
