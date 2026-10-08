@@ -228,6 +228,44 @@ class AuditEvidenceTest(unittest.TestCase):
             # The same digest is valid exactly at the accepted output boundary.
             EVIDENCE.verify_log(root, entry, maximum=1025)
 
+    def test_replaced_workflow_logs_with_consistent_manifest_are_rejected(self):
+        for name in EVIDENCE.ORIGINAL_LOGS:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / 'evidence'
+                shutil.copytree(EVIDENCE.DEFAULT, root)
+                manifest = json.loads((root / 'manifest.json').read_text())
+                entry = next(log for log in manifest['logs'] if log['file'] == name)
+                content = b'replacement workflow log\n'
+                data = gzip.compress(content, mtime=0)
+                (root / name).write_bytes(data)
+                entry.update(sha256=hashlib.sha256(data).hexdigest(),
+                             uncompressed_sha256=hashlib.sha256(content).hexdigest())
+                (root / 'manifest.json').write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, 'original workflow log reference mismatch'):
+                    EVIDENCE.verify_evidence(root)
+
+    def test_incomplete_duplicate_or_misrepresented_workflow_logs_are_rejected(self):
+        for corruption in ('empty', 'missing', 'duplicate', 'extra', 'run'):
+            with self.subTest(corruption=corruption), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / 'evidence'
+                shutil.copytree(EVIDENCE.DEFAULT, root)
+                manifest = json.loads((root / 'manifest.json').read_text())
+                logs = manifest['logs']
+                if corruption == 'empty':
+                    logs.clear()
+                elif corruption == 'missing':
+                    logs.pop()
+                elif corruption == 'duplicate':
+                    logs[1] = logs[0].copy()
+                elif corruption == 'extra':
+                    logs.append(logs[0].copy())
+                else:
+                    logs[0]['run'] += 1
+                (root / 'manifest.json').write_text(json.dumps(manifest))
+                expected = 'original workflow log reference mismatch' if corruption == 'run' else 'workflow log set mismatch'
+                with self.assertRaisesRegex(ValueError, expected):
+                    EVIDENCE.verify_evidence(root)
+
 
 if __name__ == '__main__':
     unittest.main()

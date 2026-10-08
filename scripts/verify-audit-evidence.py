@@ -13,6 +13,21 @@ import zipfile
 DEFAULT = Path(__file__).resolve().parents[1] / 'docs/validation/audit-robustness/2026-10-08'
 # Original GitHub digest, also published in the README; independent of a supplied manifest.
 ORIGINAL_SHA256 = '9a98a554725bd4d9d8b6d5cc31fa23a86402fd2855fbbe7531ad33fa8ced2855'
+# Supplemental logs are outside the ZIP; pin their references independently too.
+ORIGINAL_LOGS = {
+    'long-workflow.log.gz': (
+        37810541676,
+        '58e08ca23a509f0be0bfb9d37e7dfe4d47576c359488fe628522af05f4208ee7',
+        'b69ee3fdd2d8d1eddff230fc91d35ca3d77ad19eedba5d46d748b1648d5a33a1'),
+    'sanitizers.log.gz': (
+        37810539016,
+        '7ceb0bc94834c59317d7f23816ce2e0ac180e8b6cb5370d29da3ea1c45ef225a',
+        '541cc45e4f4ae4bac677e5575e8451b3ae2dfe6b4b5d5978905d964d1a336cae'),
+    'clang-build.log.gz': (
+        37810539053,
+        '098666e51b27a574f04455ce1389f5108c6fcde01263cd72a599eef1e4ace424',
+        'a6f644498a7222e44b89320d079e1a2e8281f1d8ac16e8fc5f4e4a9c40fbbc58'),
+}
 
 
 def require(condition, message):
@@ -68,7 +83,12 @@ def verify_evidence(root):
     data = checked_file(root, descriptor)
     require(hashlib.sha256(data).hexdigest() == ORIGINAL_SHA256, 'original archive reference mismatch')
     require(len(data) == descriptor['bytes'] and len(data) <= 16 * 1024 * 1024, 'archive size mismatch')
-    for log in manifest['logs']:
+    logs = manifest['logs']
+    require(len(logs) == len(ORIGINAL_LOGS)
+            and {log['file'] for log in logs} == set(ORIGINAL_LOGS), 'workflow log set mismatch')
+    for log in logs:
+        require((log['run'], log['sha256'], log['uncompressed_sha256']) == ORIGINAL_LOGS[log['file']],
+                'original workflow log reference mismatch')
         require(log['revision'] == manifest['tested_revision'] and log['conclusion'] == 'success',
                 'workflow log provenance mismatch')
         verify_log(root, log)

@@ -45,7 +45,8 @@ du ZIP : aucun chemin absolu, statut ou chiffre n'a été réécrit pour les pub
 
 Le vérificateur est propre au jeu du **2026-10-08** et à son profil. `--evidence`
 permet de vérifier une copie déplacée de ce jeu, pas une nouvelle campagne. Son
-ancrage de confiance est le digest original figé dans le code, hors manifeste.
+ancrage de confiance comprend le digest du ZIP et les empreintes compressées et
+décompressées des trois logs supplémentaires, figés dans le code hors manifeste.
 Un futur jeu daté devra disposer d’un vérificateur/profil et d’un ancrage revus ;
 la politique d’ajout ne promet pas leur prise en charge par ce script.
 
@@ -59,7 +60,9 @@ python3 -m unittest discover -s tests/documentation -p 'TestAuditEvidence.py'
 
 Le vérificateur contrôle le digest original, l'inventaire complet, les tailles, les
 rapports et logs, le profil et les résultats requis. Le digest original est aussi
-figé dans le vérificateur, indépendamment d’un manifeste fourni. Les fichiers en
+figé dans le vérificateur, indépendamment d’un manifeste fourni. Les trois logs
+supplémentaires sont obligatoires, sans doublon, avec leurs runs et empreintes
+originaux ; recalculer le manifeste ne permet pas de les remplacer. Les fichiers en
 entrée et chaque log décompressé sont plafonnés à 16 Mio ; les logs sont hachés
 par morceaux bornés. Les membres ZIP sont également lus par morceaux ; les
 plafonds de 16 Mio par membre et 200 Mio au total portent sur les octets
