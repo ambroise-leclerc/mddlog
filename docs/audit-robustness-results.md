@@ -231,8 +231,8 @@ La campagne de fuzzing finale est `build-robustness-fuzz/120-releases/run-ftawng
 `build-120-asan/120-delivery/run-fg8vjs8a/report.json` (43,79 s), worker SHA-256
 `14861a326fbb32f01b43ee2933d4d7427d836c9ccc9e41fca84164f9462eafb6`.
 Le profil prolongé final est `build-clang/120-final/run-6xlfo1p7/report.json`
-(209.84 s), worker SHA-256
-`99219f32744cd66d1e143ab90eddbca7f073d1c4b14f92b36042559becc3c8e1` ; 14,848 records
+(209,84 s), worker SHA-256
+`99219f32744cd66d1e143ab90eddbca7f073d1c4b14f92b36042559becc3c8e1` ; 14 848 records
 relus après rétention/reprise. Les intégrations multi-UID et les deux corpus sont PASS.
 Les artefacts générés restent hors Git ; leur conservation définitive relève de GAP-003/#122.
 
