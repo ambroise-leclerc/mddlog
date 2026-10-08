@@ -116,7 +116,8 @@ mddlog-audit inspect --config reader.conf --update-retained
 
 Ordinary inspection loads the store and verifies a copy; it never saves it. Export includes
 the position **before** verification. `--update-retained` saves only an eligible candidate,
-refuses impossible/adverse results or an unavailable provider, and uses #115's generation
+requires an available authenticated Unix provider, refuses impossible/adverse results
+and the embedded-snapshot assumption, and uses #115's generation
 comparison. Restore failures never become empty state or automatic enrollment. Reload and
 reconcile after save failure. Output and checkpoint save are separate operations: an output
 may already exist when a subsequent checkpoint save fails; the error then returns 2.

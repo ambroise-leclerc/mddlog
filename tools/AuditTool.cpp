@@ -402,8 +402,8 @@ int run(std::span<char*> arguments) {
     const auto       report = verifier.verify();
     const auto       image  = LogImage::read(medium, evidence.verification.resources);
     const auto       result = auditToolExit(report, image);
-    if (update && (result == AuditToolExit::Impossible || result == AuditToolExit::Adverse || !evidence.provider))
-        throw std::runtime_error("checkpoint update refused: resolve verification findings or witness availability first");
+    if (update && (result == AuditToolExit::Impossible || result == AuditToolExit::Adverse || !evidence.provider || trust != "authenticated-unix-provider"))
+        throw std::runtime_error("checkpoint update refused: requires an available authenticated witness and no adverse findings");
     if (command == "export" && format == "evidence") {
         if (result == AuditToolExit::Impossible)
             throw std::runtime_error("verification impossible; package not exported; inspect the journal and resource limits");

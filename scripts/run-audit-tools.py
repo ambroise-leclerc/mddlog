@@ -119,6 +119,13 @@ def main():
             replay = json.loads(run(verify + ['--accept-embedded-provider']).stdout)
             assert replay['report'] == actual['report'] and replay['events'] == actual['events']
             assert replay['trust'] == 'accepted-embedded-assumption'
+            checkpoint = (retained / 'retained.bin').read_bytes()
+            refused = run(verify + ['--accept-embedded-provider', '--retained', retained,
+                                    '--provider-id', 'cli-witness', '--update-retained'], 2)
+            assert 'authenticated witness' in refused.stderr
+            assert (retained / 'retained.bin').read_bytes() == checkpoint, 'embedded witness advanced external reader'
+            run(verify + trust + ['--retained', retained, '--update-retained'])
+            assert (retained / 'retained.bin').read_bytes() != checkpoint, 'authenticated replay did not save reader'
             untrusted = json.loads(run(verify, 4).stdout)
             assert all(stream['report']['verdictId'] == 9 for stream in untrusted['report']['streams'])
             assert json.loads(run(verify + trust).stdout)['report'] == actual['report']
