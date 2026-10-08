@@ -200,3 +200,7 @@ revue/acceptation, aucune acceptation normative ou temps réel présumée.
 REQ-018/CTRL-018 ajoutent la capture intégrale de segments et la relecture via LogVerifier, avec fournisseur figé et budgets locaux. Projection lisible et paquet revérifiable sont distincts ; inspection sur copie de la position retenue, sauvegarde explicite et génération #115. VER-066–069 couvrent les parcours et refus. ADR-006 est proposée pour revue, aucun gel final implicite.
 
 Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).
+
+## Oracle de chaîne réelle #120
+
+Le [modèle](../../../docs/audit-chain-campaign.md) et VER-070–072 ajoutent une file abstraite et une reconstruction indépendante ADR-004/hashlib sur les requêtes originales. Les seams bornent les writes POSIX et injectent EIO ; le reclaim arme la faute au vrai unlink. Reprise après session interrompue, refus de réutilisation d’identité, réponse perdue et rollback combiné avec checkpoint rechargé sont contrôlés. Les générateurs séquentiels n’étendent aucun contrat concurrent et les snapshots ne deviennent pas des transactions. Revue proposée, limites dans GAP-003/013.

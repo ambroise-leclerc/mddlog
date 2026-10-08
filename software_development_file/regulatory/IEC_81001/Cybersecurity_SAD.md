@@ -78,3 +78,7 @@ les bornes locales ; aucune résistance exhaustive au déni de service n’est r
 RISK-013/CTRL-018 : le décodeur refuse versions/troncatures/doublons/budgets et ne restaure aucun chemin de l’archive. La confiance embarquée est une hypothèse explicitement acceptée ; le fournisseur Unix authentifié nécessite une indépendance de déploiement qualifiée. Checkpoint embarqué non authentifié, source externe privilégiée ; aucune signature ni mécanisme #123 ajouté.
 
 Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).
+
+## Campagnes de robustesse #120
+
+Le [complément](../../../docs/audit-chain-campaign.md) vérifie la reprise du checkpoint puis la détection d’un rollback combiné et réinjecte quatre segments originaux v0.2/v0.3 dans les lecteurs bornés. Les autorités du générateur fonctionnel partagent un UID ; la preuve d’isolation réelle VER-044 est répétée séparément sans généralisation. Les rapports gardent octets et requêtes synthétiques ; appliquer les règles de confidentialité/conservation du profil aux campagnes utilisant des données réelles. Aucun gel multi-releases #121 ni fermeture de GAP-003/013.

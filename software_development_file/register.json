@@ -1301,6 +1301,57 @@
       "scenario": null,
       "evidence": "docs/audit-tools-validation.md",
       "limits": "Journal réel temporaire, oracle direct LogVerifier, transport Unix sous un seul UID ; séparation des autorités vérifiée séparément par witness.deployment. Corpus issu de v0.2.0 ; matrice complète #120/#121 et adoption/acceptation #122 non acquises."
+    },
+    {
+      "id": "VER-070",
+      "title": "Oracle indépendant des admissions/octets/digests sur chaîne fichiers, témoin et checkpoint réels",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-003",
+        "CTRL-004",
+        "CTRL-005",
+        "CTRL-006",
+        "CTRL-007",
+        "CTRL-008",
+        "CTRL-009"
+      ],
+      "test": "tests/spec/AuditChainCampaign.cpp",
+      "scenario": null,
+      "evidence": "docs/audit-chain-campaign.md",
+      "limits": "Histoires séquentielles bornées, EIO injectés sur vrais descripteurs, checkpoint rechargé ; même UID pour les autorités fonctionnelles, pas une qualification physique. Oracle Python selon ADR-004, familles obligatoires, suffixes incertains explicités ; revue proposée."
+    },
+    {
+      "id": "VER-071",
+      "title": "Campagnes prolongées de flux/démarrages/saturation/indisponibilité avec intégrations requises et contrôles négatifs",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-003",
+        "CTRL-004",
+        "CTRL-006",
+        "CTRL-007",
+        "CTRL-008",
+        "CTRL-016",
+        "CTRL-018"
+      ],
+      "test": "scripts/run-audit-chain-campaign.py",
+      "scenario": null,
+      "evidence": "docs/audit-chain-campaign.md",
+      "limits": "32 seeds × 24 flux × 64 événements, 1000 refus/polls par flux au maximum. Multi-UID et CLI optionnels déclarés NOT_EXECUTED si omis, obligatoires sans SKIP si demandés ; limites numériques couvertes séparément par les fixtures existantes, durée de campagne finie. Archives v0.2/v0.3 relues ; politique des futures archives #121 et acceptation #122 ouvertes."
+    },
+    {
+      "id": "VER-072",
+      "title": "Corpus lecteurs enrichi des segments originaux produits par v0.2.0 et v0.3.0",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-005",
+        "CTRL-006",
+        "CTRL-008",
+        "CTRL-018"
+      ],
+      "test": "scripts/run-audit-robustness.py",
+      "scenario": null,
+      "evidence": "docs/audit-chain-campaign.md",
+      "limits": "Quatre segments identiques aux corpus originaux v0.2.0 et v0.3.0, reconstruits aux SHA publiés ; pas une politique complète de futures archives. Profil fuzz instrumenté séparé, budget et absence locale de LSan explicités ; revue proposée."
     }
   ],
   "risks": [
@@ -1563,7 +1614,9 @@
       "verifications": [
         "VER-003",
         "VER-030",
-        "VER-031"
+        "VER-031",
+        "VER-070",
+        "VER-071"
       ],
       "gaps": [
         "GAP-015"
@@ -1598,7 +1651,9 @@
         "VER-052",
         "VER-053",
         "VER-059",
-        "VER-060"
+        "VER-060",
+        "VER-070",
+        "VER-071"
       ],
       "gaps": [
         "GAP-009"
@@ -1618,7 +1673,9 @@
       "verifications": [
         "VER-005",
         "VER-032",
-        "VER-033"
+        "VER-033",
+        "VER-070",
+        "VER-072"
       ],
       "gaps": [
         "GAP-014",
@@ -1649,7 +1706,10 @@
         "VER-047",
         "VER-066",
         "VER-068",
-        "VER-069"
+        "VER-069",
+        "VER-070",
+        "VER-071",
+        "VER-072"
       ],
       "gaps": [
         "GAP-008",
@@ -1696,7 +1756,10 @@
         "VER-050",
         "VER-051",
         "VER-052",
-        "VER-053"
+        "VER-053",
+        "VER-070",
+        "VER-071",
+        "VER-072"
       ],
       "gaps": [
         "GAP-007",
@@ -1717,7 +1780,8 @@
       "verifications": [
         "VER-009",
         "VER-030",
-        "VER-031"
+        "VER-031",
+        "VER-070"
       ],
       "gaps": [
         "GAP-013"
@@ -1805,7 +1869,8 @@
       "verifications": [
         "VER-059",
         "VER-064",
-        "VER-065"
+        "VER-065",
+        "VER-071"
       ],
       "gaps": [
         "GAP-010",
@@ -1894,7 +1959,8 @@
         "VER-059",
         "VER-061",
         "VER-062",
-        "VER-063"
+        "VER-063",
+        "VER-071"
       ],
       "gaps": []
     },
@@ -1915,7 +1981,9 @@
         "VER-066",
         "VER-067",
         "VER-068",
-        "VER-069"
+        "VER-069",
+        "VER-071",
+        "VER-072"
       ],
       "gaps": [
         "GAP-012"

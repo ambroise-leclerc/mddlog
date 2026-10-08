@@ -95,3 +95,7 @@ durées de sinks ; GAP-011 conserve revue/acceptation et REQ-012 sa qualificatio
 RISK-013/CTRL-018 rendent explicite la confiance d’un paquet modifiable : aucun ancrage/checkpoint embarqué ne devient authentique par présence ou checksum. RISK-004/RISK-006 conservent leurs limites hors couverture et hors checkpoint indépendant ; RISK-009 exige une destination privée et des mesures hôte de confidentialité. Le filtre marque une sélection partielle sans masquer le rapport du journal complet.
 
 Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).
+
+## Preuves combinées #120
+
+VER-070–072 enrichissent les contrôles de pertes, couverture exagérée et reprise/retention : saturation, indisponibilité, writes courts, EIO, réponse perdue et suppression interrompue sont combinés. Un oracle de requêtes/octet/digest indépendant réduit le risque d’un accord circulaire encodeur/décodeur ; les contrôles négatifs refusent une fausse réussite du banc. Le [profil et ses limites](../../../docs/audit-chain-campaign.md) restent bornés ; aucune acceptation de risque ni qualification physique supplémentaire.

@@ -52,3 +52,7 @@ et VER-064/065 explicitent ces limites, sans modifier la qualification des dépe
 Le lot #119 n’ajoute aucune bibliothèque tierce déployée : C++23/libc++, SHA-256/codec existants, adaptateurs POSIX existants et Python pour le banc externe. Le codec témoin portable reste une dépendance interne ; la CLI est optionnelle Linux. Versions du profil local et corpus original v0.2 sont identifiés dans les preuves ; la matrice finale reste #121.
 
 Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).
+
+## Outillage du complément #120
+
+Le nouveau superviseur utilise Python standard (DEP-006), notamment hashlib pour l’oracle indépendant, et partage les limites de processus du runner existant. Aucune nouvelle dépendance liée à la bibliothèque. Le profil multi-UID reprend DEP-011 et les formats/lecteurs DEP-009 ; versions et empreintes sont collectées par campagne. Conservation et qualification des outils restent dans GAP-003/005.

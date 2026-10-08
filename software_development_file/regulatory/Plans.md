@@ -95,6 +95,10 @@ persistance et le profil réel, les écarts résiduels et le dossier final. Publ
 
 ## Lot outils et export #119
 
-REQ-018/CTRL-018/VER-066–069 sont livrés pour revue en #119, avec schéma candidat raccordé au jalon A de #121. GAP-012 reste ouvert pour la décision du mainteneur ; la décision historique de la base initiale reste inchangée. Archives additionnelles #120/#121 et acceptation finale #122 demeurent planifiées.
+REQ-018/CTRL-018/VER-066–069 sont livrés pour revue en #119, avec schéma candidat raccordé au jalon A de #121. GAP-012 reste ouvert pour la décision du mainteneur ; la décision historique de la base initiale reste inchangée. Les corpus v0.2/v0.3 sont complétés par #120 ; politique de futures archives #121 et acceptation finale #122 demeurent planifiées.
 
 Voir [contrat et usage](../../docs/audit-tools.md) et [preuves](../../docs/audit-tools-validation.md).
+
+## Complément génératif réel #120
+
+VER-070–072 et le [modèle/campagnes](../../docs/audit-chain-campaign.md) relient ADR, exigences et preuves des contrats #115–#119. Profils courts et prolongés séparés, mêmes invariants avec oracle Python des requêtes/octets/digests ; les intégrations non demandées restent NOT_EXECUTED. Révision/empreintes/logs et réserves sont conservés dans les rapports. Revue de ce lot proposée, GAP-003/013 ouverts ; aucune acceptation finale ni politique d’archives #121 inférée.

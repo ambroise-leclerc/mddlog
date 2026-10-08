@@ -86,3 +86,7 @@ Les limites de durée des sinks, mémoire propre hôte et qualification du profi
 La CLI optionnelle Linux reste hors du cœur ; les modules portables Evidence/Projection appartiennent aux adaptateurs. Les cibles source/installées restent séparées et le backend est obligatoire uniquement pour la CLI.
 
 Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).
+
+## Banc de robustesse réel #120
+
+VER-070/071 composent les adaptateurs existants et le service sous un consommateur unique ; aucun module déployé supplémentaire. Oracle et superviseur Python restent hors bibliothèque. Le témoin fonctionnel même UID et le profil multi-UID répété restent deux preuves différentes ; voir [campagnes](../../../docs/audit-chain-campaign.md).

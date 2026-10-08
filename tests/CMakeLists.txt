@@ -137,6 +137,13 @@ add_executable(mddlog_specs
 )
 
 if(MDDLOG_BUILD_FILE_STORAGE)
+    add_executable(mddlog_audit_chain_campaign spec/AuditChainCampaign.cpp)
+    target_link_libraries(mddlog_audit_chain_campaign PRIVATE mddlog::mddlog)
+    add_test(NAME audit.chain-campaign COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/scripts/run-audit-chain-campaign.py
+        --worker $<TARGET_FILE:mddlog_audit_chain_campaign>
+        --output ${CMAKE_CURRENT_BINARY_DIR}/audit-chain-campaign)
+    set_tests_properties(audit.chain-campaign PROPERTIES LABELS "audit;integration;robustness" TIMEOUT 150)
     add_executable(mddlog_witness_deployment spec/WitnessDeployment.cpp)
     target_link_libraries(mddlog_witness_deployment PRIVATE mddlog::mddlog)
     if(MDDLOG_BUILD_EXAMPLES)
@@ -265,4 +272,10 @@ if(MDDLOG_BUILD_AUDIT_TOOLS)
         --reference $<TARGET_FILE:mddlog_audit_tool_reference>
         --corpus ${PROJECT_SOURCE_DIR}/tests/archives/audit-export/v0.2.0.json)
     set_tests_properties(audit.tools PROPERTIES LABELS "audit;integration" TIMEOUT 60)
+    add_test(NAME audit.tools.v0.3.0 COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/scripts/run-audit-tools.py
+        --cli $<TARGET_FILE:mddlog_audit>
+        --reference $<TARGET_FILE:mddlog_audit_tool_reference>
+        --corpus ${PROJECT_SOURCE_DIR}/tests/archives/audit-export/v0.3.0.json)
+    set_tests_properties(audit.tools.v0.3.0 PROPERTIES LABELS "audit;integration;robustness" TIMEOUT 60)
 endif()
