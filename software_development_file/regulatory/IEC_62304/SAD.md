@@ -16,7 +16,8 @@ RingSinkAdapter, TransportConsumer et AuditSinkAdapter, les sinks et la chaîne 
 Canonical/Chain/Sha256 produisent les octets et digests ; Medium/Layout/Store structurent et
 synchronisent les segments ; Ledger/Log/LogVerifier assurent reprise, rétention et lecture ;
 Anchor/Verifier gèrent l'ancrage et la position retenue. La liste exhaustive des modules reste
-le FILE_SET CMake. Le logger diagnostique alloue et sa file asynchrone n'est pas bornée.
+le FILE_SET CMake. Le logger diagnostique alloue ; sa file asynchrone et ses admissions
+sont bornées par la configuration décrite dans la livraison #118 ci-dessous.
 
 ## Interfaces, responsabilités et confiance
 
@@ -39,8 +40,9 @@ et budgets du lecteur restent les lacunes des #114–#117.
 La capacité N des anneaux et les capacités des champs sont fixes ; le temps est fourni par l'hôte.
 Les détails chiffrés et leur définition restent dans les sources référencées par CTRL-002/003.
 Les allocations, I/O, reprises et formatages restent dans les adaptateurs. Les bornes du cœur
-ne bornent pas la mémoire du lecteur ni les temps du système entier. Les mesures de #117 et
-la maîtrise de surcharge #118 sont prévues. Les dépendances de construction et qualification
+ne bornent pas les temps du système entier. Les budgets du lecteur et leurs mesures de #117
+ainsi que la maîtrise de surcharge diagnostique de #118 sont livrés dans les profils décrits
+ci-dessous ; leur qualification reste distincte. Les dépendances de construction et qualification
 sont inventoriées par [SOUP](SOUP.md).
 
 Le premier lot #114 ajoute un adaptateur fichiers Linux optionnel, sans dépendance du cœur.

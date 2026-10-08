@@ -23,8 +23,9 @@ python3 -m unittest discover -s tests/documentation -p 'Test*.py'
 ```
 
 La première campagne construit effectivement bibliothèque, modules, exemples et consumers ;
-191/191 CTest passent, y compris consommateurs source/installation et les huit scénarios
-nouveaux. Cette campagne initiale précédait le réalignement sur `develop` : la campagne finale
+191/191 CTest passent, y compris consommateurs source/installation et un sous-ensemble initial
+de huit scénarios diagnostiques. Les douze scénarios de la livraison finale incluent les ajouts
+après cette campagne. Cette campagne initiale précédait le réalignement sur `develop` : la campagne finale
 ci-dessous porte sur la base `9e9f1b30a383f07c497cb03470fdf0f966ff8f1d`, après #116/#117. Les résultats de la campagne finale après revue des tests sont consignés ci-dessous.
 Les autres tuples publiés restent à la CI ; aucune réussite GCC, MSVC ou macOS n'est présumée.
 

@@ -1709,7 +1709,7 @@
     },
     {
       "id": "REQ-012",
-      "text": "Les budgets de lecture d’archives de REQ-017 et les bornes du diagnostic SimpleLogger sont implémentés ; les preuves locales du diagnostic sont livrées en #118, la revue et la qualification du profil diagnostique restent ouvertes.",
+      "text": "Les budgets de lecture d’archives de REQ-017 et les bornes du diagnostic SimpleLogger sont implémentés ; les preuves locales du diagnostic sont livrées en #118, REQ-012 reste au statut planned dans l’attente de la qualification du profil diagnostique global ; la revue et l’acceptation du lot restent ouvertes sous GAP-011.",
       "status": "planned",
       "risks": [
         "RISK-007"
