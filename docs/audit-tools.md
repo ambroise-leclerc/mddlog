@@ -36,6 +36,10 @@ For `verify`, use `replay.conf`: copy the provider/retained/budget settings from
 line values override configuration values. `--output` creates a new file with mode
 0600, refuses replacement/symlinks, synchronizes file and directory, and removes a
 partial output on failure. An output in the source journal directory is refused to preserve its strict inventory.
+The parent/source equivalence check precedes opening the output directory and is not
+atomic with creation. Concurrent directory renames or changes to ancestor paths can
+bypass it; `O_NOFOLLOW` protects the final parent component, not all ancestors. Use
+stable, reader-controlled directory paths during inspection/export.
 Destination confidentiality and filesystem durability
 remain host responsibilities. A nonzero exit can accompany a useful report/archive:
 inspect the exit policy before using shell `&&` for a partially covered journal.
@@ -44,6 +48,8 @@ The configuration is byte-oriented (UTF-8 recommended), maximum 64 KiB, strict `
 normalization; empty lines and lines starting with `#` are ignored. Values may contain
 `=`. There is no interpolation, environment substitution, include or secret storage.
 Relative file paths resolve against the current working directory; socket paths must be absolute.
+Command-line values beginning with `--` are refused as option-like; use an absolute
+path, a `./` prefix for relative paths, or the configuration file for such values.
 Paths containing newlines can only be passed as named command line values. Boolean
 configuration values are `true`/`false`; on the command line the two flags take no value.
 
@@ -74,7 +80,11 @@ max-archive-bytes=150994944
 `--verification-time-ns N` supplies signed Unix epoch nanoseconds. No clock is invented
 when omitted: age is NotChecked without a bound, Unknown if a bound cannot be evaluated.
 Packages retain this time/bound; explicit replay options override them. Input/archive,
-metadata, decoded record, provider and output budgets are finite. A package cannot raise
+metadata, decoded record, provider and output budgets are finite.
+`max-provider-text-bytes` also bounds each evidence `source` and `providerProvenance`
+field (1024 bytes by default); the latter includes the socket, UID and provider ID.
+Oversized fields are refused with their name, measured size and limit. Increase this
+explicit budget in both exporter and replay reader if needed; the v1 wire format is unchanged. A package cannot raise
 local resource limits: to replay a larger profile, deliberately supply all necessary
 larger named limits. The byte budget limits encoded size, not peak process RSS; snapshots,
 LogImage buffers and projection encoding allocate within the declared profile, and multiple
@@ -121,13 +131,22 @@ and the embedded-snapshot assumption, and uses #115's generation
 comparison. Restore failures never become empty state or automatic enrollment. Reload and
 reconcile after save failure. Output and checkpoint save are separate operations: an output
 may already exist when a subsequent checkpoint save fails; the error then returns 2.
+The report/archive is emitted before the save, so its presence never proves checkpoint persistence.
+
+A `Partial` exit (4) may still save an eligible candidate with an authenticated Unix
+provider. The candidate preserves earlier retained positions and adds anchors only for
+streams with `Anchored` or `Retired` verdicts; the provider head is retained when such
+a clean stream result is accepted. Unanchored tails and residual bytes do not become
+retained anchors. Unknown/stale age does not invalidate the verified digest, but remains
+a coverage caveat. Saving a checkpoint is not a claim of complete or fresh coverage.
 
 ## Projection and completeness
 
 `inspect --format json` and `export --format json` produce the
 [projection-v1 schema](audit-export-format.md). `--stream ID` selects only that stream's
 events and sets `selection.complete=false`, even if the selection happens to match every
-event. The full journal report is retained so the selection does not conceal other streams.
+event. An absent stream produces an empty event selection and a warning on stderr;
+the global exit policy is unchanged. The full journal report is retained so the selection does not conceal other streams.
 No filtered projection is a complete journal or an importable evidence package.
 `export --format evidence` preserves every original segment and refuses filtering.
 Events include canonical bytes/digests and decoded fields; unknown record versions are

@@ -307,8 +307,14 @@ decodeAuditEvidence(std::span<const std::uint8_t> bytes, AuditResourceLimits loc
 [[nodiscard]] inline std::vector<std::uint8_t> encodeAuditEvidence(const AuditEvidence& evidence, std::size_t maxBytes = defaultEvidenceBytes) {
     using namespace evidencecodec;
     const auto& limits = evidence.verification.resources;
-    if (!limits.valid() || evidence.source.size() > limits.maxProviderTextBytes || evidence.providerProvenance.size() > limits.maxProviderTextBytes
-        || evidence.retained.allHeads().size() > limits.maxProviderEntries || evidence.retained.allAnchors().size() > limits.maxProviderEntries
+    if (evidence.source.size() > limits.maxProviderTextBytes)
+        throw std::length_error(
+            std::format("evidence source exceeds maxProviderTextBytes: {} bytes, limit {}", evidence.source.size(), limits.maxProviderTextBytes));
+    if (evidence.providerProvenance.size() > limits.maxProviderTextBytes)
+        throw std::length_error(std::format("evidence providerProvenance exceeds maxProviderTextBytes: {} bytes, limit {}",
+                                            evidence.providerProvenance.size(),
+                                            limits.maxProviderTextBytes));
+    if (!limits.valid() || evidence.retained.allHeads().size() > limits.maxProviderEntries || evidence.retained.allAnchors().size() > limits.maxProviderEntries
         || evidence.segments.size() > limits.maxSegments)
         throw std::length_error("evidence metadata exceeds resource profile");
     std::size_t estimated = magic.size() + sha256DigestSize;

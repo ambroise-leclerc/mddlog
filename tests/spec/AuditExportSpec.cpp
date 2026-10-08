@@ -2,6 +2,7 @@
 import std;
 import speclab;
 import mddlog.core.auditevent;
+import mddlog.adapter.sha256;
 import mddlog.adapter.auditprojection;
 import mddlog.adapter.auditstore;
 
@@ -65,6 +66,14 @@ const speclab::Register roundTrip{
                       checks.expect(before.allHeads() == after.allHeads() && before.allAnchors() == after.allAnchors(), "candidate positions identical");
                       const auto image = LogImage::read(second);
                       checks.expect(auditToolExit(actual, image) == AuditToolExit::Partial, "residual region prevents complete-coverage exit");
+                      checks.expect(!after.allAnchors().empty(), "partial coverage still retains verified anchors");
+                      for (const auto& [id, retained] : after.allAnchors()) {
+                          const auto* stream = actual.find(id);
+                          checks.expect(stream != nullptr && stream->report.anchor.has_value()
+                                            && (stream->report.verdict == Verdict::Anchored || stream->report.verdict == Verdict::Retired)
+                                            && retained.position == stream->report.anchor->position && retained.digest == stream->report.anchor->digest,
+                                        "partial candidate contains only verified anchored positions");
+                      }
                       const auto projection = auditProjectionJson(imported, actual, image, "accepted-embedded-assumption", "export/producer");
                       checks.expect(projection.contains("\"complete\":false") && projection.contains("\"trailing\":{") && projection.contains("canonicalHex"),
                                     "filtered projection explicitly partial with full report");
@@ -122,6 +131,54 @@ const speclab::Register refusals{"Evidence decoder rejects unsupported, truncate
                                                })
                                          .Execute();
                                  }};
+
+const speclab::Register hostileCounts{
+    "Evidence counters and metadata refuse hostile short payloads with valid checksums",
+    "unit",
+    [] {
+        return speclab::Test("audit-export-hostile-counts")
+            .Then("head and anchor counters are bounded before records are decoded and oversized metadata names its field",
+                  [] {
+                      speclab::core::Checks checks;
+                      const AuditEvidence   empty;
+                      const auto            encoded = encodeAuditEvidence(empty);
+                      // An empty v1 package ends with three u64 counts: heads, anchors, segments.
+                      constexpr std::size_t countFields = 3;
+                      for (std::size_t field = 0; field < countFields - 1; ++field) {
+                          for (const auto count : {std::uint64_t{1},
+                                                   static_cast<std::uint64_t>(empty.verification.resources.maxProviderEntries) + 1,
+                                                   std::numeric_limits<std::uint64_t>::max()}) {
+                              const auto                offset = encoded.size() - sha256DigestSize - ((countFields - field) * sizeof(std::uint64_t));
+                              std::vector<std::uint8_t> hostile(encoded.begin(), encoded.begin() + static_cast<std::ptrdiff_t>(offset));
+                              for (unsigned byte = 0; byte < sizeof(count); ++byte)
+                                  hostile.push_back(static_cast<std::uint8_t>(count >> (byte * std::numeric_limits<std::uint8_t>::digits)));
+                              const auto digest = sha256(hostile);
+                              hostile.insert(hostile.end(), digest.begin(), digest.end());
+                              bool refused = false;
+                              try {
+                                  (void)decodeAuditEvidence(hostile);
+                              } catch (const std::exception&) {
+                                  refused = true;
+                              }
+                              checks.expect(refused, "valid checksum cannot legitimize huge counts or missing count payloads");
+                          }
+                      }
+                      for (const bool source : {true, false}) {
+                          auto  oversized = empty;
+                          auto& field     = source ? oversized.source : oversized.providerProvenance;
+                          field.assign(oversized.verification.resources.maxProviderTextBytes + 1, 'x');
+                          bool named = false;
+                          try {
+                              (void)encodeAuditEvidence(oversized);
+                          } catch (const std::length_error& error) {
+                              named = std::string_view(error.what()).contains(source ? "source exceeds" : "providerProvenance exceeds");
+                          }
+                          checks.expect(named, "oversized field has an actionable diagnostic");
+                      }
+                      checks.raise();
+                  })
+            .Execute();
+    }};
 
 const speclab::Register trustAndBudgets{"Trust and work budgets remain explicit during evidence verification", "unit", [] {
                                             return speclab::Test("audit-export-trust-budgets")

@@ -70,7 +70,7 @@ def main():
         originals = {path.name: path.read_bytes() for path in journal.iterdir()}
         socket = root / 'witness.sock'
         uid = os.getuid()
-        service = subprocess.Popen([str(args.reference), 'serve', str(socket), str(authority)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        service = subprocess.Popen([str(args.reference), 'serve', str(socket), str(authority)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             deadline = time.monotonic() + 5
             while not socket.exists():
@@ -132,6 +132,8 @@ def main():
             filtered = root / 'filtered.json'
             run([args.cli, 'export', '--source', journal, '--format', 'json', '--stream', 'cli/alpha', '--output', filtered] + trust)
             selection = json.loads(filtered.read_text())
+            missing = run(inspect + trust + ['--stream', 'cli/typo'])
+            assert not json.loads(missing.stdout)['events'] and 'absent from the journal' in missing.stderr
             assert not selection['selection']['complete'] and all(event['streamId'] == 'cli/alpha' for event in selection['events'])
             assert selection['report'] == actual['report'], 'filter changed full-log coverage'
             run([args.cli, 'verify', '--archive', filtered], 2)

@@ -399,9 +399,12 @@ int run(std::span<char*> arguments) {
     EvidenceProvider provider(evidence.provider);
     auto             candidate = evidence.retained;
     LogVerifier      verifier(medium, provider, candidate, evidence.verification);
-    const auto       report = verifier.verify();
-    const auto       image  = LogImage::read(medium, evidence.verification.resources);
-    const auto       result = auditToolExit(report, image);
+    const auto       report         = verifier.verify();
+    const auto       image          = LogImage::read(medium, evidence.verification.resources);
+    const auto       result         = auditToolExit(report, image);
+    const auto       selectedStream = get(options, "stream");
+    if (!selectedStream.empty() && !image.streams().contains(selectedStream))
+        std::println(std::cerr, "Warning: --stream '{}' is absent from the journal; event selection is empty", selectedStream);
     if (update && (result == AuditToolExit::Impossible || result == AuditToolExit::Adverse || !evidence.provider || trust != "authenticated-unix-provider"))
         throw std::runtime_error("checkpoint update refused: requires an available authenticated witness and no adverse findings");
     if (command == "export" && format == "evidence") {

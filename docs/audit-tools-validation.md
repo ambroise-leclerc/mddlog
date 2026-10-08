@@ -106,3 +106,23 @@ multiple bounded buffers coexist and no RSS/WCET claim is made. Persistent stora
 checkpoint durability remain host-qualified. The optional Linux CLI is exercised on this
 profile; the portable modules still need the release matrix's CI. GAP-012 stays open for
 review/adoption; GAP-013/#120, GAP-014/#121 and GAP-015/#122 keep their own closure criteria.
+
+## Review follow-up
+
+The deployment runner now copies the supplied worker and service into a temporary
+`/tmp` directory traversable by namespace UIDs before executing them. This removes
+the checkout-path dependency without broadening checkout permissions; the directory
+is removed after the processes exit. This Linux test requires an executable `/tmp`
+and the existing multi-UID namespace support. The initial failed invocation above
+is historical evidence, not the result of the revised runner.
+
+Follow-up validation: the revised `witness.deployment` CTest passes directly from
+the private checkout (4.14 s), alongside the five export/CLI CTests. Added cases
+cover checksum-valid short payloads declaring huge head/anchor counts, field-specific
+metadata refusals, absent-stream warnings, and verified retained anchors despite
+residual bytes and a `Partial` exit. The wire format and budgets are unchanged.
+
+The rebuilt Release suite passes all 236 CTests from the checkout, including
+`witness.deployment`. Format checking (117 files) and development-file structure
+and reference checks also pass. This supersedes the checkout-path limitation for
+the revised runner while preserving the earlier campaign record above.
