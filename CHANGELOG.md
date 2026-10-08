@@ -12,6 +12,12 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Bound diagnostic messages, text bytes, pending/active flushes and sink registrations
+  through `DiagnosticConfig`; refuse newest events with independent health counters.
+  Preserve short emission methods, report per-sink flush/stop failures, expire waits
+  without cancelling admitted commands, and protect registry callbacks and shutdown.
+  Add migration, overload/allocation evidence and centralized supervision example (#118).
+
 - Publish the Orin Nano power-cut campaign profile, cycle records and external image
   index, with template wording removed on maintainer confirmation. Record documentary
   review findings and remaining qualification reservations; keep images outside Git

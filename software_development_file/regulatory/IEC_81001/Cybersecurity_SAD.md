@@ -63,3 +63,12 @@ ACL/parents/montages et non-réaffectation des UID restent à qualifier. Root ou
 compromis restent hors résistance. Les frames sont bornées, mais saturation par clients
 autorisés et fsync lent requièrent la politique hôte. Aucune signature ou authentification
 de service réseau distant n'est fournie. GAP-008 reste ouvert pour revue/acceptation.
+
+## Surcharge diagnostique #118
+
+Des entrées très longues ou un débit excessif ne créent plus une file illimitée : CTRL-017
+refuse avant allocation au-delà des budgets, y compris les commandes de flush expirées.
+La boucle de diagnostic synchrone est refusée par thread et les erreurs sont dans la santé,
+sans sink secondaire. Les callbacks différés, données propres des sinks et leur durée restent
+des obligations hôte ; une panne peut encore supprimer l’observabilité. VER-064/065 vérifient
+les bornes locales ; aucune résistance exhaustive au déni de service n’est revendiquée.

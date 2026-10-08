@@ -64,7 +64,11 @@ public:
      * @brief Destructor - ensures final flush
      */
     ~ConsoleSink() override {
-        flush();
+        try {
+            flush();
+        } catch (...) {
+            recordFlushFailure();
+        }
     }
 
     ConsoleSink(const ConsoleSink&)            = delete;
@@ -125,6 +129,10 @@ public:
             }
 
             stream << "\n";
+            if (!stream.good()) {
+                recordDropped();
+                return;
+            }
 
             // Update statistics
             auto end       = std::chrono::high_resolution_clock::now();
@@ -134,7 +142,7 @@ public:
             std::size_t bytesWritten = record.message.length() + record.category.length() + estimatedFormattingOverheadBytes;
             updateStatistics(bytesWritten, writeTime);
 
-        } catch (const std::exception&) {
+        } catch (...) {
             // Record failure but don't throw - logging should not crash the application
             recordDropped();
         }
@@ -145,9 +153,18 @@ public:
      */
     void flush() override {
         std::scoped_lock lock(mutex);
-        std::cout.flush();
-        std::cerr.flush();
+        bool             failed = false;
+        for (auto* stream : {&std::cout, &std::cerr}) {
+            try {
+                stream->flush();
+                failed = !stream->good() || failed;
+            } catch (...) {
+                failed = true;
+            }
+        }
         recordFlush();
+        if (failed)
+            recordFlushFailure();
     }
 
     /**

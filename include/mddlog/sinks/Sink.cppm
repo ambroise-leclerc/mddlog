@@ -102,6 +102,11 @@ public:
         statistics.recordsDropped.fetch_add(1);
     }
 
+    /** @brief Record a caught flush exception separately from write losses. */
+    void recordFlushFailure() noexcept {
+        statistics.flushFailures.fetch_add(1);
+    }
+
 protected:
     /**
      * @brief Protected constructor for derived classes

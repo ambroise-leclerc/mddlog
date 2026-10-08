@@ -145,6 +145,8 @@ struct LogStatistics {
     std::atomic<std::uint64_t> flushCount{0};        ///< Number of flush operations
     std::atomic<std::uint64_t> totalWriteTimeNs{0};  ///< Total write time in nanoseconds
 
+    std::atomic<std::uint64_t> flushFailures{0};     ///< Flush exceptions caught by dispatch
+
     // Make non-copyable because of atomic members
     LogStatistics()                                = default;
     ~LogStatistics()                               = default;
@@ -161,6 +163,7 @@ struct LogStatistics {
         recordsDropped.store(0);
         bytesWritten.store(0);
         flushCount.store(0);
+        flushFailures.store(0);
         totalWriteTimeNs.store(0);
     }
 

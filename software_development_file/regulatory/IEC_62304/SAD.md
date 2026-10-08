@@ -16,7 +16,8 @@ RingSinkAdapter, TransportConsumer et AuditSinkAdapter, les sinks et la chaîne 
 Canonical/Chain/Sha256 produisent les octets et digests ; Medium/Layout/Store structurent et
 synchronisent les segments ; Ledger/Log/LogVerifier assurent reprise, rétention et lecture ;
 Anchor/Verifier gèrent l'ancrage et la position retenue. La liste exhaustive des modules reste
-le FILE_SET CMake. Le logger diagnostique alloue et sa file asynchrone n'est pas bornée.
+le FILE_SET CMake. Le logger diagnostique alloue ; sa file asynchrone et ses admissions
+sont bornées par la configuration décrite dans la livraison #118 ci-dessous.
 
 ## Interfaces, responsabilités et confiance
 
@@ -39,8 +40,9 @@ et budgets du lecteur restent les lacunes des #114–#117.
 La capacité N des anneaux et les capacités des champs sont fixes ; le temps est fourni par l'hôte.
 Les détails chiffrés et leur définition restent dans les sources référencées par CTRL-002/003.
 Les allocations, I/O, reprises et formatages restent dans les adaptateurs. Les bornes du cœur
-ne bornent pas la mémoire du lecteur ni les temps du système entier. Les mesures de #117 et
-la maîtrise de surcharge #118 sont prévues. Les dépendances de construction et qualification
+ne bornent pas les temps du système entier. Les budgets du lecteur et leurs mesures de #117
+ainsi que la maîtrise de surcharge diagnostique de #118 sont livrés dans les profils décrits
+ci-dessous ; leur qualification reste distincte. Les dépendances de construction et qualification
 sont inventoriées par [SOUP](SOUP.md).
 
 Le premier lot #114 ajoute un adaptateur fichiers Linux optionnel, sans dépendance du cœur.
@@ -70,3 +72,11 @@ candidat. Le [profil Linux x86_64](../../../docs/audit-resource-budgets.md) cons
 une image plafonnée du journal ; il ne garantit pas une mémoire constante ou un WCET.
 Les autres plateformes doivent mesurer leur propre profil avant de revendiquer ces
 budgets. La qualification indépendante reste en GAP-015.
+
+## Livraison diagnostique #118
+
+SimpleLogger possède désormais un tableau circulaire borné et une santé indépendante,
+avec configuration centralisée également accessible via Log. TextLogger reste synchrone et
+allouant. Aucun module, composant tiers, dépendance de déploiement ni chemin d’audit nouveau.
+CTRL-017 et VER-064/065 relient sources, conception et [preuves](../../../docs/diagnostic-validation.md).
+Les limites de durée des sinks, mémoire propre hôte et qualification du profil restent explicites.

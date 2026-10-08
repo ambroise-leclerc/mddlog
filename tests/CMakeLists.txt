@@ -241,3 +241,16 @@ target_link_libraries(mddlog_retention_allocation PRIVATE mddlog::mddlog)
 set_target_properties(mddlog_retention_allocation PROPERTIES CXX_MODULE_STD ON)
 add_test(NAME audit.retention.allocation COMMAND mddlog_retention_allocation)
 set_tests_properties(audit.retention.allocation PROPERTIES LABELS "storage;integration" TIMEOUT 30)
+
+# Diagnostic overload and lifecycle scenarios (#118), independent of application code.
+add_executable(mddlog_bounded_diagnostic_consumer consumer/BoundedDiagnosticConsumer.cpp)
+target_link_libraries(mddlog_bounded_diagnostic_consumer PRIVATE mddlog::mddlog)
+foreach(scenario IN ITEMS overload failures-sync failures-async callbacks-sync callbacks-async concurrent order active-flush configuration console global sync-refusals)
+    add_test(NAME diagnostic.bounded.${scenario} COMMAND mddlog_bounded_diagnostic_consumer ${scenario})
+    set_tests_properties(diagnostic.bounded.${scenario} PROPERTIES LABELS "diagnostic;concurrency" TIMEOUT 30)
+endforeach()
+
+add_executable(mddlog_diagnostic_memory_consumer consumer/DiagnosticMemoryConsumer.cpp)
+target_link_libraries(mddlog_diagnostic_memory_consumer PRIVATE mddlog::mddlog)
+add_test(NAME diagnostic.bounded.memory COMMAND mddlog_diagnostic_memory_consumer)
+set_tests_properties(diagnostic.bounded.memory PROPERTIES LABELS "diagnostic;resources" TIMEOUT 30)

@@ -1,7 +1,7 @@
 /**
  * @brief Logger implementation for medical device logging - C++23 Module
  *
- * Adapter-zone module (ADR-001 Decision 6): SimpleLogger stores sinks and an unbounded queue,
+ * Adapter-zone module (ADR-001 Decision 6): SimpleLogger stores sinks and a bounded allocating queue,
  * both allocating. The namespace stays mddlog::core for now: only the module name and file
  * location moved (#32), not the class itself.
  */
@@ -16,6 +16,58 @@ import mddlog.adapter.logrecord;
 import mddlog.sinks.sink;
 
 export namespace mddlog::core {
+
+/** @brief Centralized diagnostic budgets; saturation always refuses the newest event. */
+struct DiagnosticConfig {
+    static constexpr std::size_t defaultMessageCapacity = 1024;
+    static constexpr std::size_t defaultFlushCapacity   = 8;
+    static constexpr std::size_t defaultMaxRecordBytes  = 4096;
+    static constexpr std::size_t defaultSinkCapacity    = 16;
+    std::size_t                  messageCapacity        = defaultMessageCapacity;
+    std::size_t                  flushCapacity          = defaultFlushCapacity;
+    std::size_t                  maxRecordBytes         = defaultMaxRecordBytes;
+    std::size_t                  sinkCapacity           = defaultSinkCapacity;
+};
+
+/** @brief Observable admission and operation outcomes, independent of diagnostic sinks. */
+enum class DiagnosticStatus : std::uint8_t { Success, Filtered, Saturated, Oversized, Stopped, Reentrant, Timeout, SinkFailure, InternalFailure, Unsupported };
+
+/** @brief Identity and outcome for a sink participating in one flush. */
+struct DiagnosticSinkResult {
+    sinks::SinkPtr sink;
+    bool           succeeded = false;
+};
+
+/** @brief Success means every participating sink returned from flush without throwing. */
+struct DiagnosticFlushResult {
+    DiagnosticStatus                  status = DiagnosticStatus::Success;
+    std::vector<DiagnosticSinkResult> sinks;
+};
+
+/** @brief Consistent queue and lifetime counters; failures are never emitted as diagnostics. */
+struct DiagnosticHealth {
+    std::uint64_t admitted         = 0;
+    std::uint64_t processed        = 0;
+    std::uint64_t saturated        = 0;
+    std::uint64_t oversized        = 0;
+    std::uint64_t stopped          = 0;
+    std::uint64_t reentrant        = 0;
+    std::uint64_t writeFailures    = 0;
+    std::uint64_t flushFailures    = 0;
+    std::uint64_t flushAdmitted    = 0;
+    std::uint64_t flushCompleted   = 0;
+    std::uint64_t flushRefused     = 0;
+    std::uint64_t timeouts         = 0;
+    std::uint64_t shutdownRefused  = 0;
+    std::uint64_t internalFailures = 0;
+    std::uint64_t sinkRefused      = 0;
+    std::size_t   messages         = 0;
+    std::size_t   flushes          = 0;
+    std::size_t   messageHighWater = 0;
+    std::size_t   flushHighWater   = 0;
+    bool          closing          = false;
+    bool          shutdownComplete = false;
+};
 
 /**
  * @brief Simplified logger class with basic threading support
@@ -33,21 +85,33 @@ public:
      * @param loggerName Logger name/identifier
      * @param enableAsyncLogging Enable asynchronous logging (default: true)
      */
-    explicit SimpleLogger(std::string_view loggerName, bool enableAsyncLogging = true)
-        : name(loggerName), asyncLogging(enableAsyncLogging), enabled(true), minLevel(LogLevel::Info), shuttingDown(false) {
-        if (asyncLogging) {
-            // Start async logging thread
-            asyncThread = std::thread([this]() {
+    explicit SimpleLogger(std::string_view loggerName, bool enableAsyncLogging = true) : SimpleLogger(loggerName, DiagnosticConfig{}, enableAsyncLogging) {}
+
+    /** @brief Configure all bounds before starting the worker; zero budgets are invalid. */
+    SimpleLogger(std::string_view loggerName, DiagnosticConfig budgets, bool enableAsyncLogging = true)
+        : name(loggerName), asyncLogging(enableAsyncLogging), config(budgets) {
+        if (config.messageCapacity == 0 || config.flushCapacity == 0 || config.maxRecordBytes == 0 || config.sinkCapacity == 0
+            || config.messageCapacity > std::numeric_limits<std::size_t>::max() - config.flushCapacity)
+            throw std::invalid_argument("invalid diagnostic budgets");
+        commands.resize(config.messageCapacity + config.flushCapacity);
+        stopCompletion = std::make_shared<Completion>();
+        if (asyncLogging)
+            asyncThread = std::jthread([this] {
                 asyncLoggerThread();
             });
-        }
     }
 
-    /**
-     * @brief Destructor - ensures proper cleanup
-     */
+    /** @brief Drain admitted work and join; host sinks must eventually return. */
     ~SimpleLogger() {
-        shutdown();
+        startShutdown();
+        std::unique_lock lock(stopCompletion->mutex);
+        stopCompletion->condition.wait(lock, [this] {
+            return stopCompletion->done;
+        });
+        lock.unlock();
+        if (asyncThread.joinable())
+            asyncThread.join();
+        clearSinks();
     }
 
     // Disable copy and move for thread safety
@@ -61,30 +125,48 @@ public:
      * @param sink Sink to add
      */
     void addSink(SinkPtr sink) {
+        (void)tryAddSink(std::move(sink));
+    }
+
+    /** @brief Registration has a fixed budget; duplicates are refused. */
+    [[nodiscard]] bool tryAddSink(SinkPtr sink) {
         if (!sink)
-            return;
-
-        std::scoped_lock lock(sinksMutex);
+            return false;
+        std::scoped_lock lock(sinksMutex, queueMutex);
+        if (counters.closing || sinks.size() >= config.sinkCapacity || std::ranges::find(sinks, sink) != sinks.end()) {
+            ++counters.sinkRefused;
+            return false;
+        }
         sinks.push_back(std::move(sink));
+        return true;
     }
 
-    /**
-     * @brief Remove a sink from the logger
-     * @param sinkName Name of sink to remove
-     */
+    /** @brief Remove from future snapshots; an engaged snapshot retains shared ownership. */
     void removeSink(std::string_view sinkName) {
-        std::scoped_lock lock(sinksMutex);
-        std::erase_if(sinks, [sinkName](const SinkPtr& sink) {
-            return sink->getName() == sinkName;
+        auto candidates = sinkSnapshot();
+        std::erase_if(candidates, [sinkName](const SinkPtr& sink) {
+            return sink->getName() != sinkName;
         });
+        SinkContainer retired;
+        {
+            std::scoped_lock lock(sinksMutex);
+            for (auto it = sinks.begin(); it != sinks.end();) {
+                if (std::ranges::find(candidates, *it) != candidates.end()) {
+                    retired.push_back(std::move(*it));
+                    it = sinks.erase(it);
+                } else
+                    ++it;
+            }
+        }
     }
 
-    /**
-     * @brief Clear all sinks
-     */
+    /** @brief Release ownership outside the registry lock, including user destructors. */
     void clearSinks() {
-        std::scoped_lock lock(sinksMutex);
-        sinks.clear();
+        SinkContainer retired;
+        {
+            std::scoped_lock lock(sinksMutex);
+            retired.swap(sinks);
+        }
     }
 
     /**
@@ -101,21 +183,25 @@ public:
      */
     void
     log(LogLevel level, std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
-        if (!is(level))
-            return;
+        (void)tryLog(level, message, category, loc);
+    }
 
-        LogRecord record(level, message, category, loc);
-        processLogRecord(std::move(record));
+    /** @brief Return admission explicitly; compatibility methods retain their void signatures. */
+    [[nodiscard]] DiagnosticStatus
+    tryLog(LogLevel level, std::string_view message, std::string_view category = "default", const std::source_location& loc = std::source_location::current()) {
+        return submit(level, {message, category}, [&] {
+            return LogRecord(level, message, category, loc);
+        });
     }
 
     /** @brief Emit diagnostic context into structured fields, retaining the existing adapter clock. */
     void log(LogLevel level, const DiagnosticContext& context, std::string_view message, const std::source_location& loc = std::source_location::current()) {
-        if (!is(level))
-            return;
-        LogRecord record(level, message, context.component(), loc);
-        record.operationId   = context.operationId();
-        record.correlationId = context.correlationId();
-        processLogRecord(std::move(record));
+        (void)submit(level, {message, context.component(), context.operationId(), context.correlationId()}, [&] {
+            LogRecord record(level, message, context.component(), loc);
+            record.operationId   = context.operationId();
+            record.correlationId = context.correlationId();
+            return record;
+        });
     }
 
     /** @brief Snapshot diagnostic enablement and threshold; a concurrent change is not transactional. */
@@ -140,11 +226,9 @@ public:
                     std::string_view            sessionId,
                     std::string_view            deviceId,
                     const std::source_location& loc = std::source_location::current()) {
-        if (!is(level))
-            return;
-
-        LogRecord record(level, message, category, userId, sessionId, deviceId, loc);
-        processLogRecord(std::move(record));
+        (void)submit(level, {message, category, userId, sessionId, deviceId}, [&] {
+            return LogRecord(level, message, category, userId, sessionId, deviceId, loc);
+        });
     }
 
     /**
@@ -201,27 +285,57 @@ public:
         log(LogLevel::Fatal, message, category, loc);
     }
 
-    /**
-     * @brief Flush all sinks
-     */
+    /** @brief Compatibility flush; inspect health or use flushChecked for failures. */
     void flush() {
-        if (asyncLogging) {
-            // For async logging, add a flush command to the queue
-            std::promise<void> flushPromise;
-            auto               flushFuture = flushPromise.get_future();
+        (void)flushChecked();
+    }
 
-            {
-                std::scoped_lock lock(queueMutex);
-                flushPromises.push(std::move(flushPromise));
-            }
-            queueCondition.notify_one();
+    /** @brief FIFO barrier; waits for earlier admitted messages, then flushes one registry snapshot. */
+    [[nodiscard]] DiagnosticFlushResult flushChecked() {
+        return flushImpl(std::nullopt);
+    }
 
-            // Wait for flush to complete
-            flushFuture.wait();
-        } else {
-            // Synchronous flush
-            flushSinks();
+    /** @brief Bound the asynchronous caller's wait, without cancelling an admitted command. */
+    [[nodiscard]] DiagnosticFlushResult flushFor(std::chrono::milliseconds timeout) {
+        return flushImpl(timeout);
+    }
+
+    /** @brief Close admission and drain once; concurrent callers share the same completion. */
+    DiagnosticFlushResult shutdown() {
+        if (dispatching) {
+            std::scoped_lock lock(queueMutex);
+            ++counters.shutdownRefused;
+            return {.status = DiagnosticStatus::Reentrant, .sinks = {}};
         }
+        startShutdown();
+        return awaitCompletion(stopCompletion, std::nullopt);
+    }
+
+    /** @brief Async deadline only; destruction still joins and requires returning host sinks. */
+    [[nodiscard]] DiagnosticFlushResult shutdownFor(std::chrono::milliseconds timeout) {
+        if (dispatching) {
+            std::scoped_lock lock(queueMutex);
+            ++counters.shutdownRefused;
+            return {.status = DiagnosticStatus::Reentrant, .sinks = {}};
+        }
+        if (!asyncLogging)
+            return {.status = DiagnosticStatus::Unsupported, .sinks = {}};
+        startShutdown();
+        return awaitCompletion(stopCompletion, timeout);
+    }
+
+    [[nodiscard]] DiagnosticHealth health() const {
+        std::scoped_lock lock(queueMutex);
+        return counters;
+    }
+
+    /** @brief Lifecycle operations that destroy the logger are forbidden inside host callbacks. */
+    [[nodiscard]] static bool inSinkCallback() noexcept {
+        return dispatching;
+    }
+
+    [[nodiscard]] DiagnosticConfig configuration() const noexcept {
+        return config;
     }
 
     /**
@@ -277,154 +391,343 @@ public:
 private:
     mutable std::mutex                                 auditMutex;
     std::function<AuditWriteResult(const AuditInput&)> auditWriter;
-    /**
-     * @brief Process a log record (sync or async)
-     */
-    void processLogRecord(LogRecord record) {
-        if (asyncLogging) {
-            // Add to async queue
+    struct Completion {
+        std::mutex              mutex;
+        std::condition_variable condition;
+        bool                    done = false;
+        DiagnosticFlushResult   result;
+    };
+    struct Command {
+        std::optional<LogRecord>    record;
+        std::shared_ptr<Completion> completion;
+    };
+    struct DispatchGuard {
+        DispatchGuard() {
+            dispatching = true;
+        }
+        ~DispatchGuard() {
+            dispatching = previous;
+        }
+        DispatchGuard(const DispatchGuard&)            = delete;
+        DispatchGuard& operator=(const DispatchGuard&) = delete;
+        DispatchGuard(DispatchGuard&&)                 = delete;
+        DispatchGuard& operator=(DispatchGuard&&)      = delete;
+        bool           previous                        = dispatching;
+    };
+
+    template <typename Factory>
+    DiagnosticStatus submit(LogLevel level, std::initializer_list<std::string_view> fields, Factory factory) {
+        if (!is(level))
+            return DiagnosticStatus::Filtered;
+        if (dispatching) {
+            std::scoped_lock lock(queueMutex);
+            ++counters.reentrant;
+            return DiagnosticStatus::Reentrant;
+        }
+        // Check refusals before waiting for synchronous delivery, then recheck admission
+        // after serialization: shutdown may close admission while this caller waits.
+        const auto refusal = [&]() -> std::optional<DiagnosticStatus> {
+            if (counters.closing) {
+                ++counters.stopped;
+                return DiagnosticStatus::Stopped;
+            }
+            std::size_t remaining = config.maxRecordBytes;
+            for (auto field : fields) {
+                if (field.size() > remaining) {
+                    ++counters.oversized;
+                    return DiagnosticStatus::Oversized;
+                }
+                remaining -= field.size();
+            }
+            if (counters.messages == config.messageCapacity) {
+                ++counters.saturated;
+                return DiagnosticStatus::Saturated;
+            }
+            return std::nullopt;
+        };
+        std::unique_lock deliveryLock(deliveryMutex, std::defer_lock);
+        if (!asyncLogging) {
             {
                 std::scoped_lock lock(queueMutex);
-                logQueue.push(std::move(record));
+                if (auto status = refusal())
+                    return *status;
             }
+            deliveryLock.lock();
+        }
+        // Construct under admission so producers cannot accumulate records outside the budget.
+        std::unique_lock lock(queueMutex);
+        if (auto status = refusal())
+            return *status;
+        std::optional<LogRecord> prepared;
+        try {
+            prepared.emplace(factory());
+        } catch (...) {
+            ++counters.internalFailures;
+            return DiagnosticStatus::InternalFailure;
+        }
+        auto& record = *prepared;
+        ++counters.admitted;
+        ++counters.messages;
+        counters.messageHighWater = std::max(counters.messageHighWater, counters.messages);
+        if (asyncLogging) {
+            push({.record = std::move(record), .completion = {}});
+            lock.unlock();
             queueCondition.notify_one();
         } else {
-            // Process synchronously
+            lock.unlock();
             writeToSinks(record);
+            std::scoped_lock healthLock(queueMutex);
+            --counters.messages;
+            ++counters.processed;
+            queueCondition.notify_all();
         }
+        return DiagnosticStatus::Success;
     }
 
-    /**
-     * @brief Write log record to all sinks
-     */
-    void writeToSinks(const LogRecord& record) {
+    SinkContainer sinkSnapshot() const {
         std::scoped_lock lock(sinksMutex);
-        for (auto& sink : sinks) {
-            if (sink && sink->shouldLog(record.level) && sink->isEnabled()) {
+        return sinks;
+    }
+
+    void writeToSinks(const LogRecord& record) {
+        DispatchGuard guard;
+        try {
+            for (const auto& sink : sinkSnapshot()) {
+                if (!sink->shouldLog(record.level) || !sink->isEnabled())
+                    continue;
+                const auto before = sink->getStatistics().recordsDropped.load();
+                bool       threw  = false;
                 try {
                     sink->write(record);
                 } catch (...) {
-                    // A throwing sink must not stop delivery to the remaining sinks, nor
-                    // propagate into the async worker thread. The failure is still made
-                    // explicit and observable (rather than silently swallowed) through the
-                    // sink's own statistics.
-                    sink->recordWriteFailure();
+                    threw = true;
+                    if (sink->getStatistics().recordsDropped.load() == before)
+                        sink->recordWriteFailure();
+                }
+                const auto after = sink->getStatistics().recordsDropped.load();
+                if (after > before || threw) {
+                    std::scoped_lock lock(queueMutex);
+                    counters.writeFailures += after > before ? after - before : 1;
                 }
             }
+        } catch (...) {
+            std::scoped_lock lock(queueMutex);
+            ++counters.internalFailures;
         }
     }
 
-    /**
-     * @brief Flush all sinks
-     */
-    void flushSinks() {
-        std::scoped_lock lock(sinksMutex);
-        for (auto& sink : sinks) {
-            if (sink) {
-                try {
-                    sink->flush();
-                } catch (...) {  // NOLINT(bugprone-empty-catch): a failing flush must never propagate from shutdown or flush()
-                    // Ignore flush errors
-                }
-            }
+    DiagnosticFlushResult flushSinks() {
+        DispatchGuard         guard;
+        DiagnosticFlushResult result;
+        SinkContainer         snapshot;
+        try {
+            snapshot = sinkSnapshot();
+            result.sinks.resize(snapshot.size());
+        } catch (...) {
+            std::scoped_lock lock(queueMutex);
+            ++counters.internalFailures;
+            return {.status = DiagnosticStatus::InternalFailure, .sinks = {}};
         }
+        std::size_t index = 0;
+        for (const auto& sink : snapshot) {
+            bool       succeeded = true;
+            const auto before    = sink->getStatistics().flushFailures.load();
+            try {
+                sink->flush();
+            } catch (...) {
+                result.status = DiagnosticStatus::SinkFailure;
+                succeeded     = false;
+                if (sink->getStatistics().flushFailures.load() == before)
+                    sink->recordFlushFailure();
+            }
+            const auto after = sink->getStatistics().flushFailures.load();
+            if (after > before || !succeeded) {
+                succeeded     = false;
+                result.status = DiagnosticStatus::SinkFailure;
+                std::scoped_lock lock(queueMutex);
+                counters.flushFailures += after > before ? after - before : 1;
+            }
+            result.sinks[index++] = {.sink = sink, .succeeded = succeeded};
+        }
+        return result;
     }
 
-    /**
-     * @brief Async logger thread function
-     */
-    void asyncLoggerThread() {
-        while (!shuttingDown.load()) {
-            std::unique_lock<std::mutex> lock(queueMutex);
-
-            // Wait for log records or flush requests
-            queueCondition.wait(lock, [this] {
-                return !logQueue.empty() || !flushPromises.empty() || shuttingDown.load();
-            });
-
-            // Take the pending flush requests BEFORE draining: every record a flush() call must wait
-            // for was queued before its request, so it is delivered by the drain below. A request
-            // that arrives while the lock is released during that drain stays queued for the next
-            // pass; fulfilling it here could release it ahead of records still in the queue.
-            std::queue<std::promise<void>> dueFlushes;
-            dueFlushes.swap(flushPromises);
-
-            // Process all queued log records
-            while (!logQueue.empty()) {
-                auto record = std::move(logQueue.front());
-                logQueue.pop();
-                lock.unlock();
-
-                writeToSinks(record);
-
-                lock.lock();
-            }
-
-            // Complete the flush requests taken above
-            if (!dueFlushes.empty()) {
-                lock.unlock();
-
-                flushSinks();
-                while (!dueFlushes.empty()) {
-                    dueFlushes.front().set_value();
-                    dueFlushes.pop();
-                }
-
-                lock.lock();
-            }
-        }
-
-        // Process remaining items before shutdown
-        std::scoped_lock lock(queueMutex);
-        while (!logQueue.empty()) {
-            writeToSinks(logQueue.front());
-            logQueue.pop();
-        }
-        flushSinks();
+    void push(Command command) {
+        commands[(head + size) % commands.size()] = std::move(command);
+        ++size;
     }
 
-    /**
-     * @brief Shutdown the logger
-     */
-    void shutdown() {
+    Command pop() {
+        auto command   = std::move(commands[head]);
+        commands[head] = {};
+        head           = (head + 1) % commands.size();
+        --size;
+        return command;
+    }
+
+    static void complete(const std::shared_ptr<Completion>& completion, DiagnosticFlushResult result) {
         {
-            // Use the waiter's mutex when changing its predicate: otherwise notify_all()
-            // may happen between its false predicate check and entry into wait().
-            const std::scoped_lock lock{queueMutex};
-            if (shuttingDown.exchange(true))
-                return;
+            std::scoped_lock lock(completion->mutex);
+            completion->result = std::move(result);
+            completion->done   = true;
         }
-
-        if (asyncThread.joinable()) {
-            queueCondition.notify_all();
-            asyncThread.join();
-        }
-
-        // Final flush
-        flushSinks();
+        completion->condition.notify_all();
     }
 
-    std::string           name;          ///< Logger name
-    bool                  asyncLogging;  ///< Async logging enabled
-    std::atomic<bool>     enabled;       ///< Logger enabled state
-    std::atomic<LogLevel> minLevel;      ///< Minimum log level
-    std::atomic<bool>     shuttingDown;  ///< Set once shutdown() has been entered
+    DiagnosticFlushResult awaitCompletion(const std::shared_ptr<Completion>& completion, std::optional<std::chrono::milliseconds> timeout) {
+        std::unique_lock lock(completion->mutex);
+        if (timeout) {
+            if (!completion->condition.wait_for(lock, *timeout, [&] {
+                    return completion->done;
+                })) {
+                std::scoped_lock healthLock(queueMutex);
+                ++counters.timeouts;
+                return {.status = DiagnosticStatus::Timeout, .sinks = {}};
+            }
+        } else
+            completion->condition.wait(lock, [&] {
+                return completion->done;
+            });
+        try {
+            return completion->result;
+        } catch (...) {
+            std::scoped_lock healthLock(queueMutex);
+            ++counters.internalFailures;
+            return {.status = DiagnosticStatus::InternalFailure, .sinks = {}};
+        }
+    }
 
-    // Sinks management
-    mutable std::mutex sinksMutex;  ///< Sinks container mutex
-    SinkContainer      sinks;       ///< Collection of sinks
+    DiagnosticFlushResult flushImpl(std::optional<std::chrono::milliseconds> timeout) {
+        if (dispatching) {
+            std::scoped_lock lock(queueMutex);
+            ++counters.flushRefused;
+            return {.status = DiagnosticStatus::Reentrant, .sinks = {}};
+        }
+        if (timeout && !asyncLogging)
+            return {.status = DiagnosticStatus::Unsupported, .sinks = {}};
+        const auto refusal = [&]() -> std::optional<DiagnosticStatus> {
+            if (counters.closing || counters.flushes == config.flushCapacity) {
+                ++counters.flushRefused;
+                return counters.closing ? DiagnosticStatus::Stopped : DiagnosticStatus::Saturated;
+            }
+            return std::nullopt;
+        };
+        std::unique_lock deliveryLock(deliveryMutex, std::defer_lock);
+        if (!asyncLogging) {
+            {
+                std::scoped_lock lock(queueMutex);
+                if (auto status = refusal())
+                    return {.status = *status, .sinks = {}};
+            }
+            deliveryLock.lock();
+        }
+        std::shared_ptr<Completion> completion;
+        {
+            std::scoped_lock lock(queueMutex);
+            if (auto status = refusal())
+                return {.status = *status, .sinks = {}};
+            if (asyncLogging) {
+                try {
+                    completion = std::make_shared<Completion>();
+                } catch (...) {
+                    ++counters.internalFailures;
+                    ++counters.flushRefused;
+                    return {.status = DiagnosticStatus::InternalFailure, .sinks = {}};
+                }
+            }
+            ++counters.flushAdmitted;
+            ++counters.flushes;
+            counters.flushHighWater = std::max(counters.flushHighWater, counters.flushes);
+            if (asyncLogging)
+                push({.record = {}, .completion = completion});
+        }
+        if (asyncLogging) {
+            queueCondition.notify_one();
+            return awaitCompletion(completion, timeout);
+        }
+        auto result = flushSinks();
+        {
+            std::scoped_lock lock(queueMutex);
+            --counters.flushes;
+            ++counters.flushCompleted;
+            queueCondition.notify_all();
+        }
+        return result;
+    }
 
-    // Async logging
-    std::thread             asyncThread;     ///< Async logging thread
-    std::mutex              queueMutex;      ///< Queue mutex
-    std::condition_variable queueCondition;  ///< Queue condition variable
-    // Unbounded by design/limitation: a producer that logs faster than the sinks can drain
-    // grows this queue without bound rather than blocking or dropping records. That gives the
-    // current implementation no real-time delivery guarantee under sustained overload; a
-    // bounded, real-time-safe queue is out of scope for this change (see the build/test issue
-    // that introduced this comment) and tracked separately.
-    std::queue<LogRecord>          logQueue;       ///< Log record queue
-    std::queue<std::promise<void>> flushPromises;  ///< Flush promises queue
+    void asyncLoggerThread() {
+        for (;;) {
+            std::unique_lock lock(queueMutex);
+            queueCondition.wait(lock, [this] {
+                return size != 0 || counters.closing;
+            });
+            if (size == 0)
+                break;
+            auto command = pop();
+            lock.unlock();
+            if (command.record) {
+                writeToSinks(*command.record);
+                lock.lock();
+                --counters.messages;
+                ++counters.processed;
+            } else {
+                auto result = flushSinks();
+                lock.lock();
+                --counters.flushes;
+                ++counters.flushCompleted;
+                lock.unlock();
+                complete(command.completion, std::move(result));
+            }
+        }
+        finishShutdown();
+    }
+
+    void finishShutdown() {
+        auto result = flushSinks();
+        {
+            std::scoped_lock lock(queueMutex);
+            counters.shutdownComplete = true;
+        }
+        complete(stopCompletion, std::move(result));
+    }
+
+    void startShutdown() {
+        bool first = false;
+        {
+            std::scoped_lock lock(queueMutex);
+            first            = !counters.closing;
+            counters.closing = true;
+        }
+        queueCondition.notify_all();
+        if (!asyncLogging && first) {
+            std::unique_lock lock(queueMutex);
+            queueCondition.wait(lock, [this] {
+                return counters.messages == 0 && counters.flushes == 0;
+            });
+            lock.unlock();
+            std::scoped_lock deliveryLock(deliveryMutex);
+            finishShutdown();
+        }
+    }
+
+    std::string           name;
+    bool                  asyncLogging;
+    DiagnosticConfig      config;
+    std::atomic<bool>     enabled{true};
+    std::atomic<LogLevel> minLevel{LogLevel::Info};
+    mutable std::mutex    sinksMutex;
+    SinkContainer         sinks;
+    // std::jthread joins only on destruction; shutdown deadlines never detach this object's worker.
+    mutable std::mutex              queueMutex;
+    std::mutex                      deliveryMutex;
+    std::condition_variable         queueCondition;
+    DiagnosticHealth                counters;
+    std::vector<Command>            commands;
+    std::size_t                     head = 0;
+    std::size_t                     size = 0;
+    std::shared_ptr<Completion>     stopCompletion;
+    inline static thread_local bool dispatching = false;
+    std::jthread                    asyncThread;
 };
 
 }  // namespace mddlog::core

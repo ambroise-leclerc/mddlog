@@ -37,10 +37,15 @@ public:
      * @param asyncLogging Enable asynchronous logging (default: true)
      */
     static void initialize(std::string_view loggerName = "GlobalLogger", bool enableColors = true, bool asyncLogging = true) {
+        initializeWithConfig(loggerName, core::DiagnosticConfig{}, enableColors, asyncLogging);
+    }
+
+    /** @brief Select centralized budgets before first use; existing instances are not reconfigured. */
+    static void initializeWithConfig(std::string_view loggerName, core::DiagnosticConfig config, bool enableColors = true, bool asyncLogging = true) {
         std::scoped_lock lock(mutex);
 
         if (!globalLogger) {
-            globalLogger = std::make_shared<core::SimpleLogger>(loggerName, asyncLogging);
+            globalLogger = std::make_shared<core::SimpleLogger>(loggerName, config, asyncLogging);
 
             // Add default console sink
             auto consoleSink = sinks::createConsoleSink(enableColors, true);
@@ -80,6 +85,27 @@ public:
      */
     static void flush() {
         snapshot()->flush();
+    }
+
+    /** @brief Inspect the current global instance without auto-initialization or sink dispatch. */
+    [[nodiscard]] static std::optional<core::DiagnosticHealth> health() {
+        std::shared_ptr<core::SimpleLogger> logger;
+        {
+            std::scoped_lock lock(mutex);
+            logger = globalLogger;
+        }
+        if (!logger)
+            return std::nullopt;
+        return logger->health();
+    }
+
+    [[nodiscard]] static core::DiagnosticFlushResult flushChecked() {
+        auto logger = currentSnapshot();
+        return logger ? logger->flushChecked() : core::DiagnosticFlushResult{.status = core::DiagnosticStatus::Stopped, .sinks = {}};
+    }
+    [[nodiscard]] static core::DiagnosticFlushResult flushFor(std::chrono::milliseconds timeout) {
+        auto logger = currentSnapshot();
+        return logger ? logger->flushFor(timeout) : core::DiagnosticFlushResult{.status = core::DiagnosticStatus::Stopped, .sinks = {}};
     }
 
     // Convenience logging methods
@@ -183,6 +209,21 @@ public:
      * binding on that object too, so retained handles cannot use it after shutdown returns.
      */
     static void shutdown() {
+        (void)shutdownChecked();
+    }
+
+    /** @brief Stop the current instance without initializing one; callbacks return Reentrant. */
+    [[nodiscard]] static core::DiagnosticFlushResult shutdownChecked() {
+        if (core::SimpleLogger::inSinkCallback()) {
+            std::shared_ptr<core::SimpleLogger> retained;
+            {
+                std::scoped_lock lock(mutex);
+                retained = globalLogger;
+            }
+            if (retained)
+                return retained->shutdown();
+            return {.status = core::DiagnosticStatus::Reentrant, .sinks = {}};
+        }
         std::shared_ptr<core::SimpleLogger> toShutdown;
         {
             std::scoped_lock lock(mutex);
@@ -191,8 +232,9 @@ public:
         }
         if (toShutdown) {
             toShutdown->clearAuditRing();
-            toShutdown->flush();
+            return toShutdown->shutdown();
         }
+        return {.status = core::DiagnosticStatus::Stopped, .sinks = {}};
     }
 
     // Delete copy/move constructors for static class
@@ -204,10 +246,15 @@ public:
     Log& operator=(Log&&)      = delete;
 
 private:
+    static std::shared_ptr<core::SimpleLogger> currentSnapshot() {
+        std::scoped_lock lock(mutex);
+        return globalLogger;
+    }
+
     /**
      * @brief Ensure the global logger is initialized and return a shared handle to it
      *
-     * Every public method routes through this rather than dereferencing globalLogger
+     * Emission and legacy configuration methods route through this rather than dereferencing globalLogger
      * directly: taking the shared_ptr copy while holding mutex is what prevents a concurrent
      * shutdown() from destroying the logger out from under a call already in progress.
      */

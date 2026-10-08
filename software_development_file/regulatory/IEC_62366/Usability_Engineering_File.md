@@ -29,3 +29,13 @@ réelle à deux producteurs (VER-044). `inspect(AuditBinding&)` conserve l’ém
 son résultat ; réglages, budgets, rétention et arrêt sont au point de composition.
 Les rapports distinguent backlog, confirmation, ancrage et dépassement du délai souple.
 Cette revue d’ergonomie du code ne remplace pas une évaluation applicative indépendante.
+
+## Ergonomie du diagnostic borné #118
+
+L’exemple `BoundedDiagnostic.cpp` garde une ligne métier `Log::info` avant/après ; budgets,
+flush avec résultat et consultation de santé sont regroupés dans la composition. Les
+raccourcis void existants restent utilisables, mais ne permettent pas de déduire une
+admission ni un flush réussi ; `tryLog`, `flushChecked` et santé portent cette distinction.
+[La migration](../../../docs/migration/bounded-diagnostics.md) rend visibles le refus Fatal,
+l’expiration sans annulation et l’obligation de retour des sinks. Revue locale livrée ;
+ni essai d’utilisabilité représentatif des opérateurs ni acceptation indépendante présumés.

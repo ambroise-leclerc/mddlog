@@ -86,7 +86,7 @@ La v0.1.0 livrait un cœur de journalisation borné, sans allocation (ADR-001). 
 | Persistance d'audit (`mddlog::mddlog`) | `PersistingAuditSink` stocke, confirme durablement, tient un registre, fait tourner et retient ; `LogVerifier` rend un verdict par flux | La durabilité dépend du support ; la détection d'altération dépend d'un ancrage indépendant ; rien n'est signé |
 | Pilotage d’audit (`mddlog::mddlog`) | `AuditService` compose drain avec budgets et rotation, sync/ancrage inactif, rétention déclarée, santé et arrêt borné | Un consommateur ; délais souples, quiescence et qualification du support restent à l’hôte ([contrat](docs/audit-service.md)) |
 | Intégration applicative (`mddlog::mddlog`) | `SinkRegistry`, `TransportConsumer` et `TextLogger` | `TextLogger` rend et rappelle de façon synchrone, avec allocation |
-| Adaptateur de diagnostic (`mddlog::mddlog`) | `SimpleLogger`, `LogRecord`, `ConsoleSink` et la façade `Log` | Sa file asynchrone alloue et n'est pas bornée : ce n'est pas le chemin gouverné |
+| Adaptateur de diagnostic (`mddlog::mddlog`) | `SimpleLogger`, `LogRecord`, `ConsoleSink` et la façade `Log` | Sa file asynchrone alloue avec budgets messages/flush/octets/sinks ; refus et échecs consultables, voir [contrat](docs/diagnostic-budgets.md) et [migration](docs/migration/bounded-diagnostics.md) |
 
 Chaque anneau a **un producteur et un consommateur**. L'hôte fournit une identité de flux distincte pour chaque producteur et chaque session de démarrage, et décide de sa réponse à un refus, à un échec de transmission ou à une coupure d'alimentation.
 

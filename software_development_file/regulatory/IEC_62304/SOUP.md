@@ -36,3 +36,13 @@ DEP-011 couvre util-linux (`unshare`) et les helpers uidmap de la campagne du t�
 outils de vérification hors bibliothèque déployée. Leurs versions, mappings et conditions
 de SKIP/échec sont consignés dans [la campagne](../../../docs/independent-witness-validation.md).
 L’exécution CI requiert l’isolation ; sa réussite ne qualifie pas les comptes d’un dispositif.
+
+## Dépendances du lot diagnostic #118
+
+Aucun composant tiers ni changement de pin n’est ajouté. La bibliothèque standard et le
+runtime threads existants assurent tableau circulaire, snapshots possédés, `jthread` et
+conditions de complétion ; promise/future n’intervient plus dans ce worker. L’injection
+d’allocations défaillantes et le plateau sous surcharge sont des consumers de vérification,
+sans instrumentation dans la bibliothèque déployée. La durée et la mémoire propres des
+sinks hôte restent à qualifier ; [le contrat](../../../docs/diagnostic-budgets.md)
+et VER-064/065 explicitent ces limites, sans modifier la qualification des dépendances.

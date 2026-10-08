@@ -25,11 +25,10 @@ sont des déclarations explicites. AuditSinkAdapter rend refus et reprise de tra
 ## Adaptation et persistance
 
 SinkRegistry protège inscription et retrait ; TransportConsumer découple producteur et transport
-avec une file bornée. Cela ne borne pas automatiquement la file de SimpleLogger. TextLogger
+avec une file bornée. SimpleLogger possède ses propres budgets CTRL-017. TextLogger
 fournit groupes et callbacks synchrones ; le contexte réutilisable unifié de #113 reste prévu.
-REQ-015 relie la file bornée du transport à CTRL-010/VER-010. REQ-012 ne revendique aucune
-couverture de ces tests pour la mémoire de SimpleLogger ou la lecture d'archives ; ces budgets
-restent à qualifier dans GAP-010/GAP-011. Les champs bornés de REQ-002 conservent leur couverture
+REQ-015 relie la file bornée du transport à CTRL-010/VER-010. Les tests de transport ne couvrent pas les budgets de SimpleLogger : VER-064/065 en
+établissent les preuves locales dédiées. La qualification diagnostique REQ-012 reste ouverte. Les champs bornés de REQ-002 conservent leur couverture
 unitaire existante et une qualification du profil explicitement ouverte dans GAP-018.
 
 Le contrat canonique versionné et le chaînage déterministe sont contrôlés par vecteurs de
@@ -105,7 +104,8 @@ Les budgets, le corpus et les limites sont dans le
 [plan de robustesse](../../../docs/audit-robustness-test-plan.md). L’arrêt de SimpleLogger
 change son prédicat sous le mutex de la condition pour ne pas perdre une notification.
 Cette synchronisation est CTRL-015, vérifiée par VER-035. Elle ne vérifie ni le transport
-borné de CTRL-010/REQ-015 ni les budgets de surcharge de SimpleLogger encore ouverts.
+borné de CTRL-010/REQ-015 ni les budgets de surcharge de SimpleLogger livrés par CTRL-017
+et VER-064/065 ; leur revue et leur acceptation restent ouvertes sous GAP-011.
 Le [résultat Orin Nano](../../../docs/orin-nano-electrical-results.md) consigne la réussite
 électrique déclarée, sans inventer le tuple ni les artefacts nécessaires à sa revue.
 
@@ -178,3 +178,19 @@ explicites, mesure des passes/arrêt sous saturation et retour du témoin, et re
 de ressources conservé dans `Degraded` après fermeture. Le dernier critère logiciel
 de GAP-009 dispose ainsi de sa preuve de budget ; revue/fusion restent distinctes
 de la qualification et de l’acceptation système de GAP-015.
+
+## Diagnostic borné (#118)
+
+CTRL-017 réserve une file circulaire et impose budgets messages, flush, octets et sinks.
+Refus immédiat mesuré à tous les niveaux, commandes FIFO et état réservé unique d’arrêt.
+La santé ne dépend d’aucun sink ; erreurs de flush séparées des pertes d’écriture, résultats
+par sink, expiration sans annulation. Les snapshots sont possédés et les appels de sinks
+sans verrou de registre ; retrait non quiescent, diagnostics/flush/arrêt réentrants refusés.
+Le mode synchrone vérifie les refus avant attente de livraison puis revérifie sous admission ;
+ses callbacks sont sérialisés sous deliveryMutex. Les erreurs de préparation renvoient
+InternalFailure sans admission. Log::shutdownChecked rend le refus réentrant observable ;
+les flush vérifiés ne réinitialisent pas une instance absente.
+[Contrat](../../../docs/diagnostic-budgets.md), [migration](../../../docs/migration/bounded-diagnostics.md)
+et VER-064/065 remplacent la limite de file non bornée ci-dessus pour SimpleLogger.
+REQ-012 reste planned pour la qualification globale du profil ; GAP-011 reste ouvert pour
+revue/acceptation, aucune acceptation normative ou temps réel présumée.

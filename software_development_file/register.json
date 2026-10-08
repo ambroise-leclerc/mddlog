@@ -118,7 +118,7 @@
       "status": "open",
       "issue": 118,
       "owner": "Ambroise Leclerc",
-      "closure": "Politiques de saturation et de panne mesurées, compteurs observables, file diagnostique maîtrisée."
+      "closure": "Implémentation bornée et preuves locales livrées en #118 (CTRL-017, VER-064/065). Revoir et accepter capacités, refus, compteurs, migration, plateau mémoire et obligations de durée/quiescence des sinks sur le profil ; livraison distincte de l’acceptation de l’épique."
     },
     {
       "id": "GAP-012",
@@ -409,6 +409,22 @@
         "include/mddlog/adapter/AuditLog.cppm",
         "include/mddlog/adapter/AuditLogVerifier.cppm",
         "include/mddlog/adapter/AuditStore.cppm"
+      ]
+    },
+    {
+      "id": "CTRL-017",
+      "title": "Budgets centralisés du diagnostic et santé hors sinks",
+      "status": "implemented",
+      "design": [
+        "docs/diagnostic-budgets.md",
+        "docs/migration/bounded-diagnostics.md"
+      ],
+      "implementation": [
+        "include/mddlog/adapter/Logger.cppm",
+        "include/mddlog/sinks/Sink.cppm",
+        "include/mddlog/Log.cppm",
+        "examples/BoundedDiagnostic.cpp",
+        "include/mddlog/sinks/ConsoleSink.cppm"
       ]
     }
   ],
@@ -1198,6 +1214,30 @@
       "scenario": "audit-resource-startup-refusal",
       "evidence": "docs/audit-resource-validation.md",
       "limits": "Assertions de type et doubles logiciels ; aucun délai externe maximal ou qualification physique déduit."
+    },
+    {
+      "id": "VER-064",
+      "title": "Saturation, barrières, pannes, registre et arrêt du diagnostic",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-017"
+      ],
+      "test": "tests/consumer/BoundedDiagnosticConsumer.cpp",
+      "scenario": null,
+      "evidence": "docs/diagnostic-validation.md",
+      "limits": "Sinks hôte à durée bornée ; refus synchrones avant attente, façade sans réinitialisation et concurrence diagnostique sous TSan ciblé ; pas tous les interleavings ni interruption hôte."
+    },
+    {
+      "id": "VER-065",
+      "title": "Plateau des allocations sous surcharge diagnostique",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-017"
+      ],
+      "test": "tests/consumer/DiagnosticMemoryConsumer.cpp",
+      "scenario": null,
+      "evidence": "docs/diagnostic-validation.md",
+      "limits": "Un million de refus avec drain immobile et injections d’échecs de préparation record/flush ; allocations C++ ordinaires, pas RSS global, allocations sinks ou qualification temps réel."
     }
   ],
   "risks": [
@@ -1301,12 +1341,13 @@
     {
       "id": "RISK-007",
       "title": "Saturation et épuisement de ressources",
-      "effect": "Queue diagnostique non bornée, lecteur allouant ou consommateur lent : mémoire ou service épuisés. Connexions lentes répétées d'un UID enrôlé et réécriture de l'inventaire avec fsync synchrones peuvent épuiser la disponibilité du témoin ; aucun quota par UID ni WCET n'est garanti.",
+      "effect": "Budgets diagnostiques mal dimensionnés ou pertes ignorées, lecteurs/observateurs allouants hors budgets, sink hôte bloqué : observabilité ou service épuisés malgré une file bornée.",
       "controls": [
         "CTRL-003",
         "CTRL-009",
         "CTRL-010",
-        "CTRL-016"
+        "CTRL-016",
+        "CTRL-017"
       ],
       "gaps": [
         "GAP-010",
@@ -1325,7 +1366,8 @@
         "CTRL-011",
         "CTRL-012",
         "CTRL-013",
-        "CTRL-014"
+        "CTRL-014",
+        "CTRL-017"
       ],
       "gaps": [
         "GAP-006",
@@ -1667,16 +1709,19 @@
     },
     {
       "id": "REQ-012",
-      "text": "Les budgets de lecture d’archives de REQ-017 sont implémentés ; le diagnostic SimpleLogger sous surcharge reste à borner et mesurer sur le profil retenu en #118.",
+      "text": "Les budgets de lecture d’archives de REQ-017 et les bornes du diagnostic SimpleLogger sont implémentés ; les preuves locales du diagnostic sont livrées en #118, REQ-012 reste au statut planned dans l’attente de la qualification du profil diagnostique global ; la revue et l’acceptation du lot restent ouvertes sous GAP-011.",
       "status": "planned",
       "risks": [
         "RISK-007"
       ],
       "controls": [
-        "CTRL-016"
+        "CTRL-016",
+        "CTRL-017"
       ],
       "verifications": [
-        "VER-059"
+        "VER-059",
+        "VER-064",
+        "VER-065"
       ],
       "gaps": [
         "GAP-010",
