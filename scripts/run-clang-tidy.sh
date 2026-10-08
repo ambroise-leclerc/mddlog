@@ -76,6 +76,9 @@ collect_scope include/mddlog '*.cppm'
 collect_scope tests/spec '*.cpp'
 collect_scope tests/bench '*.cpp'
 collect_scope examples '*.cpp'
+if grep -q '^MDDLOG_BUILD_AUDIT_TOOLS:BOOL=ON$' "$build_dir/CMakeCache.txt"; then
+    collect_scope tools '*.cpp'
+fi
 if ! grep -q '^MDDLOG_BUILD_FUZZERS:BOOL=ON$' "$build_dir/CMakeCache.txt"; then
     enabled_scope=()
     for f in "${scope[@]}"; do
@@ -93,7 +96,7 @@ if grep -q '^MDDLOG_BUILD_FILE_STORAGE:BOOL=OFF$' "$build_dir/CMakeCache.txt"; t
     enabled_scope=()
     for f in "${scope[@]}"; do
         case "$f" in
-            include/mddlog/adapter/FileStorageMedium.cppm|include/mddlog/adapter/FileRetainedPosition.cppm|include/mddlog/adapter/WitnessCodec.cppm|include/mddlog/adapter/FileAnchorAuthority.cppm|include/mddlog/adapter/UnixAnchorProvider.cppm|tests/spec/WitnessSpec.cpp|tests/spec/WitnessDeployment.cpp|examples/WitnessService.cpp|tests/spec/FileRetainedPositionSpec.cpp|tests/spec/FileStorageSpec.cpp|tests/spec/FileStorageCampaign.cpp|examples/FileAudit.cpp)
+            include/mddlog/adapter/FileStorageMedium.cppm|include/mddlog/adapter/FileRetainedPosition.cppm|include/mddlog/adapter/FileAnchorAuthority.cppm|include/mddlog/adapter/UnixAnchorProvider.cppm|tests/spec/WitnessSpec.cpp|tests/spec/WitnessDeployment.cpp|examples/WitnessService.cpp|tests/spec/FileRetainedPositionSpec.cpp|tests/spec/FileStorageSpec.cpp|tests/spec/FileStorageCampaign.cpp|examples/FileAudit.cpp)
                 echo "run-clang-tidy: excluded disabled file backend: $f" ;;
             *) enabled_scope+=("$f") ;;
         esac

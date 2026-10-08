@@ -80,3 +80,9 @@ avec configuration centralisée également accessible via Log. TextLogger reste 
 allouant. Aucun module, composant tiers, dépendance de déploiement ni chemin d’audit nouveau.
 CTRL-017 et VER-064/065 relient sources, conception et [preuves](../../../docs/diagnostic-validation.md).
 Les limites de durée des sinks, mémoire propre hôte et qualification du profil restent explicites.
+
+## Lot outils et export #119
+
+La CLI optionnelle Linux reste hors du cœur ; les modules portables Evidence/Projection appartiennent aux adaptateurs. Les cibles source/installées restent séparées et le backend est obligatoire uniquement pour la CLI.
+
+Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).

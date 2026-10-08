@@ -46,3 +46,9 @@ d’allocations défaillantes et le plateau sous surcharge sont des consumers de
 sans instrumentation dans la bibliothèque déployée. La durée et la mémoire propres des
 sinks hôte restent à qualifier ; [le contrat](../../../docs/diagnostic-budgets.md)
 et VER-064/065 explicitent ces limites, sans modifier la qualification des dépendances.
+
+## Lot outils et export #119
+
+Le lot #119 n’ajoute aucune bibliothèque tierce déployée : C++23/libc++, SHA-256/codec existants, adaptateurs POSIX existants et Python pour le banc externe. Le codec témoin portable reste une dépendance interne ; la CLI est optionnelle Linux. Versions du profil local et corpus original v0.2 sont identifiés dans les preuves ; la matrice finale reste #121.
+
+Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs/audit-tools-validation.md).

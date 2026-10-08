@@ -181,7 +181,7 @@ Pour aller plus loin : [admission et transmission d'audit](docs/migration/audit-
 
 - **Détection d'altération, relative à un ancrage.** Une réécriture, une troncature ou une restauration ancienne est signalée lorsqu'elle touche des enregistrements que couvre un ancrage indépendant, ou une position que le lecteur a retenue. Le journal reste modifiable par quiconque peut écrire le support : mddlog ne l'empêche pas.
 - **Au-delà du dernier ancrage, rien n'est détectable.** Les enregistrements postérieurs ne sont que cohérents entre eux, et le rapport le dit.
-- **Aucune preuve d'auteur.** Rien n'est signé : le chaînage montre la cohérence, pas l'identité de l'auteur. Signature, gestion des clés et format d'export sont différés (ADR-004, décision 11).
+- **Aucune preuve d'auteur.** Rien n'est signé : le chaînage montre la cohérence, pas l'identité de l'auteur. Signature et gestion des clés restent différées (ADR-004, décision 11) ; la CLI et les exports candidats sont décrits par [ADR-006](docs/adr/ADR-006-audit-tools-and-export.md).
 - **Le backend fichiers Linux est optionnel et non qualifié par défaut.** `FileStorageMedium` fournit un support réel ([contrat et limites](docs/file-storage.md)). `InMemoryStorageMedium` et `InMemoryAnchorProvider` restent des doubles de test ; aucun fournisseur indépendant réel n'est livré. La pile de stockage et le fournisseur restent à qualifier par l'intégrateur.
 - **Un seul thread consommateur** pour l'adaptateur d'audit, le consommateur de transport et le sink persistant.
 
@@ -215,7 +215,7 @@ pour le dispositif et son profil réel.
 - **Livré (v0.2.0), preuves en revue :** confirmation durable sur un support éligible, détection d'altération relative à un ancrage indépendant, redémarrage, rotation et rétention ([ADR-004](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md) ; épique [#11](https://github.com/ambroise-leclerc/mddlog/issues/11)). L'acceptation de ces preuves est une décision de revue distincte.
 - **Livré (v0.3.0) :** contextes et liaisons de diagnostic/audit, filtrage paresseux et usages vérifiés ([ADR-005](docs/adr/ADR-005-contextual-logging-api.md) ; [#113](https://github.com/ambroise-leclerc/mddlog/issues/113)). L’intégration du composant local est acceptée ; application indépendante #122, robustesse #120 et gel #121 restent ouverts ; les [budgets logiciels #117](docs/audit-resource-budgets.md) sont proposés pour revue.
 - **Implémenté, en revue (#114) :** support fichiers Linux optionnel, suite commune de conformité et exemple de réouverture. Qualification matérielle, campagnes de coupure et clôture de #114 restent ouvertes ([contrat](docs/file-storage.md)).
-- **Différé :** signature et gestion des clés, format d'export ([ADR-004, décision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
+- **Différé :** signature et gestion des clés ([ADR-004, décision 11](docs/adr/ADR-004-audit-persistence-and-tamper-evidence.md)).
 
 ## Compiler et vérifier
 
@@ -257,3 +257,12 @@ le checkpoint du lecteur. Voir les [budgets](docs/audit-resource-budgets.md) et 
 [relevé de validation](docs/audit-resource-validation.md). Le profil logiciel Linux
 x86_64 mesuré ne constitue ni un WCET, ni une revendication MCU, ni une qualification
 physique de durabilité.
+
+### Optional audit tools (#119)
+
+The Linux `mddlog-audit` CLI inspects journals, exports JSON projections or complete
+evidence packages, and replays packages with explicit anchor trust and reader-state
+provenance. Build with `-DMDDLOG_BUILD_AUDIT_TOOLS=ON`; see [usage](docs/audit-tools.md),
+[candidate schemas](docs/audit-export-format.md) and [local verification](docs/audit-tools-validation.md).
+Projection/evidence v1 is proposed for maintainer review; no compliance attestation or
+self-authenticating package is claimed. Final schema/support acceptance remains #121/#122.

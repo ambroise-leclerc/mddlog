@@ -239,6 +239,9 @@ target_sources(mddlog
         include/mddlog/adapter/AuditLedger.cppm
         include/mddlog/adapter/AuditLog.cppm
         include/mddlog/adapter/AuditLogVerifier.cppm
+        include/mddlog/adapter/WitnessCodec.cppm
+        include/mddlog/adapter/AuditEvidence.cppm
+        include/mddlog/adapter/AuditProjection.cppm
         include/mddlog/adapter/AuditStore.cppm
         include/mddlog/adapter/AuditService.cppm
         include/mddlog/sinks/ConsoleSink.cppm
@@ -260,7 +263,6 @@ if(MDDLOG_BUILD_FILE_STORAGE)
     target_sources(mddlog PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
         include/mddlog/adapter/FileStorageMedium.cppm
         include/mddlog/adapter/FileRetainedPosition.cppm
-        include/mddlog/adapter/WitnessCodec.cppm
         include/mddlog/adapter/FileAnchorAuthority.cppm
         include/mddlog/adapter/UnixAnchorProvider.cppm)
 endif()
@@ -357,6 +359,16 @@ if(MDDLOG_BUILD_FUZZERS)
         "-fprofile-instr-generate=${_mddlog_fuzz_default_profile}")
 endif()
 
+option(MDDLOG_BUILD_AUDIT_TOOLS "Build the optional Linux audit CLI" OFF)
+if(MDDLOG_BUILD_AUDIT_TOOLS)
+    if(NOT MDDLOG_BUILD_FILE_STORAGE)
+        message(FATAL_ERROR "MDDLOG_BUILD_AUDIT_TOOLS requires the Linux file adapters (MDDLOG_BUILD_FILE_STORAGE=ON).")
+    endif()
+    add_executable(mddlog_audit tools/AuditTool.cpp)
+    set_target_properties(mddlog_audit PROPERTIES OUTPUT_NAME mddlog-audit)
+    target_link_libraries(mddlog_audit PRIVATE mddlog::mddlog)
+endif()
+
 # Add subdirectories
 if(MDDLOG_BUILD_EXAMPLES)
     add_subdirectory(examples)
@@ -407,6 +419,9 @@ endif()
 
 # Installation
 include(GNUInstallDirs)
+if(MDDLOG_BUILD_AUDIT_TOOLS)
+    install(TARGETS mddlog_audit RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 install(TARGETS mddlog mddlog-core mddlog_options mddlog_warnings
     EXPORT mddlogTargets

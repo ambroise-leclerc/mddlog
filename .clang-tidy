@@ -185,4 +185,4 @@ CheckOptions:
 # Header filter for mddlog's own sources: module interfaces under include/mddlog, spec and
 # framework files under tests/, and the examples. CPM dependencies and build-*/ output are
 # excluded implicitly - they never fall under these paths.
-HeaderFilterRegex: '^.*/(include/mddlog|tests/spec|tests/framework|examples)/.*\.(cppm|cpp|hpp)$'
+HeaderFilterRegex: '^.*/(include/mddlog|tests/spec|tests/framework|examples|tools)/.*\.(cppm|cpp|hpp)$'
