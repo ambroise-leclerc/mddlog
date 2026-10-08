@@ -43,7 +43,14 @@ du ZIP : aucun chemin absolu, statut ou chiffre n'a été réécrit pour les pub
 
 ## Vérification hors ligne
 
-Depuis la racine du dépôt, avec Python standard uniquement :
+Le vérificateur est propre au jeu du **2026-10-08** et à son profil. `--evidence`
+permet de vérifier une copie déplacée de ce jeu, pas une nouvelle campagne. Son
+ancrage de confiance est le digest original figé dans le code, hors manifeste.
+Un futur jeu daté devra disposer d’un vérificateur/profil et d’un ancrage revus ;
+la politique d’ajout ne promet pas leur prise en charge par ce script.
+
+Depuis la racine du dépôt, le vérificateur utilise Python standard uniquement ;
+les tests de protection du checkout utilisent aussi Git :
 
 ```bash
 python3 scripts/verify-audit-evidence.py
@@ -54,11 +61,20 @@ Le vérificateur contrôle le digest original, l'inventaire complet, les tailles
 rapports et logs, le profil et les résultats requis. Le digest original est aussi
 figé dans le vérificateur, indépendamment d’un manifeste fourni. Les fichiers en
 entrée et chaque log décompressé sont plafonnés à 16 Mio ; les logs sont hachés
-par morceaux bornés. Il refuse les chemins sortant
-du répertoire, les membres dupliqués et les archives hors budget. Il ne déploie pas
+par morceaux bornés. Les membres ZIP sont également lus par morceaux ; les
+plafonds de 16 Mio par membre et 200 Mio au total portent sur les octets
+effectivement lus, en plus du contrôle des tailles déclarées. Il refuse les chemins
+sortant du répertoire, les membres dupliqués et les archives hors budget. Il ne déploie pas
 le témoin et n'exécute pas de worker C++ ni sudo : il rejoue les 32 traces par
-l'oracle Python de file, d'octets canoniques et de digests. Les tests négatifs
-corrompent ZIP, rapport, inventaire et provenance ; la CI documentaire les exécute.
+l'oracle Python de file, d'octets canoniques et de digests. Ce rejeu charge et
+exécute `scripts/run-audit-chain-campaign.py` du dépôt via `exec_module` ; il suppose
+donc une révision du dépôt de confiance, au-delà des seuls octets de l’archive.
+Les tests négatifs couvrent corruption et provenance, ainsi que profil, isolation,
+comptes du stockage, fuzz/couverture et divergence de rejeu avec des fixtures
+sémantiques dont les empreintes sont recalculées. La CI documentaire les exécute.
+Les erreurs de vérification sont rendues en JSON FAIL à la frontière CLI, y compris
+les types mal formés et erreurs des codecs ; les interruptions du processus et
+erreurs d’usage argparse gardent leur comportement habituel.
 
 Pour reproduire les campagnes C++, reconstruire la révision fusionnée citée avec
 son tuple, puis suivre [le profil prolongé](../../../audit-chain-campaign.md).
@@ -71,6 +87,11 @@ ne remplace pas les octets de ce répertoire.
 Durée : conserver ces preuves avec l'historique du projet, y compris après la
 clôture de #120 et l'expiration des artefacts CI. Pas d'expiration automatique,
 de remplacement par une campagne ultérieure, ni de Git LFS externe nécessaire.
+Ce jeu représente environ 11 Mo conservés dans l’historique, dont 7,5 Mo de ZIP
+et un rapport de stockage de 81 941 lignes. Ce poids est assumé sans LFS. Les
+attributs Git désactivent la conversion de fins de ligne pour `docs/validation/**`
+et traitent ZIP/gzip comme binaires ; les copies exactes restent identiques avec
+`core.autocrlf=true` ou `core.eol=crlf`.
 Les nouveaux jeux acceptés prennent un nouveau répertoire daté ; une correction
 de lecture ajoute une note de revue sans altérer les fichiers originaux. Les
 répertoires de build restent hors Git ; ce ZIP est une sélection de résultats de

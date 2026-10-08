@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the preserved #120 evidence offline, including hashes and the real-chain oracle."""
+"""Check the #120 evidence from 2026-10-08 offline, including hashes and the real-chain oracle."""
 import argparse
 import gzip
 import hashlib
@@ -38,14 +38,21 @@ def checked_file(root, entry):
 
 def verify_log(root, entry, maximum=16 * 1024 * 1024):
     require(maximum > 0, 'invalid workflow log budget')
+    with gzip.GzipFile(fileobj=io.BytesIO(checked_file(root, entry))) as source:
+        length, digest = bounded_digest(source, maximum, 'workflow log')
+    require(length > 0 and digest == entry['uncompressed_sha256'], 'workflow log content mismatch')
+
+
+def bounded_digest(source, maximum, label):
+    """Count actual output bytes, independently of compressed-file metadata."""
+    require(maximum >= 0, 'invalid decompression budget')
     digest = hashlib.sha256()
     length = 0
-    with gzip.GzipFile(fileobj=io.BytesIO(checked_file(root, entry))) as source:
-        while block := source.read(min(65536, maximum - length + 1)):
-            length += len(block)
-            require(length <= maximum, 'workflow log exceeds decompression budget')
-            digest.update(block)
-    require(length > 0 and digest.hexdigest() == entry['uncompressed_sha256'], 'workflow log content mismatch')
+    while block := source.read(min(65536, maximum - length + 1)):
+        length += len(block)
+        require(length <= maximum, f'{label} exceeds decompression budget')
+        digest.update(block)
+    return length, digest.hexdigest()
 
 
 def verify_evidence(root):
@@ -74,7 +81,7 @@ def verify_evidence(root):
         require(name not in inventory, 'duplicate inventory member')
         inventory[name] = digest
     # Never extract arbitrary ZIP paths. Only the checked traces enter a private temporary directory.
-    with zipfile.ZipFile(root / descriptor['file']) as archive:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
         members = archive.infolist()
         names = [safe_name(member.filename) for member in members]
         require(len(names) == len(set(names)) == len(inventory) == descriptor['entries']
@@ -82,9 +89,16 @@ def verify_evidence(root):
         total = sum(member.file_size for member in members)
         require(total == descriptor['uncompressed_bytes'] and total <= 200 * 1024 * 1024
                 and all(member.file_size <= 16 * 1024 * 1024 for member in members), 'archive exceeds evidence budget')
+        observed = 0
         for member in members:
-            require(hashlib.sha256(archive.read(member)).hexdigest() == inventory[member.filename],
+            budget = min(16 * 1024 * 1024, 200 * 1024 * 1024 - observed)
+            with archive.open(member) as source:
+                length, digest = bounded_digest(source, budget, 'archive member')
+            observed += length
+            require(length == member.file_size, 'archive member size mismatch')
+            require(digest == inventory[member.filename],
                     'archive member SHA-256 mismatch')
+        require(observed == total, 'archive decompressed total mismatch')
         reports = {}
         require(set(manifest['reports']) == {'chain', 'readers', 'storage', 'volume'}, 'missing campaign report')
         for kind, entry in manifest['reports'].items():
@@ -146,12 +160,15 @@ def verify_evidence(root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--evidence', type=Path, default=DEFAULT)
+    parser.add_argument('--evidence', type=Path, default=DEFAULT,
+                        help='location of the preserved 2026-10-08 set; other campaigns are not supported')
     args = parser.parse_args()
     try:
         print(json.dumps(verify_evidence(args.evidence)))
         return 0
-    except (OSError, ValueError, KeyError, AssertionError, EOFError, zipfile.BadZipFile) as error:
+    # This CLI boundary reports malformed inputs and backend/codec failures consistently.
+    # Process-level interrupts and argparse usage errors retain their usual behavior.
+    except Exception as error:
         print(json.dumps({'status': 'FAIL', 'error': str(error)}))
         return 1
 
