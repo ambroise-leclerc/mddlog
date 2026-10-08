@@ -258,11 +258,13 @@ le checkpoint du lecteur. Voir les [budgets](docs/audit-resource-budgets.md) et 
 x86_64 mesuré ne constitue ni un WCET, ni une revendication MCU, ni une qualification
 physique de durabilité.
 
-### Optional audit tools (#119)
+### Outils d’audit optionnels (#119)
 
-The Linux `mddlog-audit` CLI inspects journals, exports JSON projections or complete
-evidence packages, and replays packages with explicit anchor trust and reader-state
-provenance. Build with `-DMDDLOG_BUILD_AUDIT_TOOLS=ON`; see [usage](docs/audit-tools.md),
-[candidate schemas](docs/audit-export-format.md) and [local verification](docs/audit-tools-validation.md).
-Projection/evidence v1 is proposed for maintainer review; no compliance attestation or
-self-authenticating package is claimed. Final schema/support acceptance remains #121/#122.
+La commande Linux `mddlog-audit` inspecte les journaux, exporte des projections JSON
+ou des archives complètes de preuves et rejoue ces archives en explicitant la confiance
+dans les ancres et la provenance de l’état du lecteur. Activez
+`-DMDDLOG_BUILD_AUDIT_TOOLS=ON` ; consultez le [guide](docs/audit-tools.md), les
+[schémas candidats](docs/audit-export-format.md) et la [validation locale](docs/audit-tools-validation.md).
+Les formats projection/preuves v1 sont proposés à la revue des mainteneurs ; ils
+ne constituent ni une attestation de conformité ni une archive auto-authentifiante.
+L’acceptation finale des schémas et du support reste rattachée à #121/#122.
