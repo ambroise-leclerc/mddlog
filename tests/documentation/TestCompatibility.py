@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -121,6 +122,32 @@ class CompatibilityTest(unittest.TestCase):
         self.assertEqual(COMPATIBILITY.check(self.root, True), [])
         (self.root / 'tests/archives/audit-export/v0.2.0.json').unlink()
         self.assertRefused('release v0.2.0: no audit archive fixture', use_git=True)
+
+    @unittest.skipUnless(shutil.which('git'), 'git is required')
+    def test_version_in_preparation_is_accepted_only_once_declared(self):
+        git(self.root, 'init', '-q')
+        git(self.root, 'add', '-A')
+        git(self.root, 'commit', '-q', '-m', 'fixture')
+        git(self.root, 'tag', 'v0.2.0')
+        self.surface(lambda data: [entry.update(since='0.2.0')
+                                   for section in (data['modules'], data['umbrella']['names'])
+                                   for entry in section.values()])
+        self.edit('include/mddlog/mddlog.cppm', 'using core::WriteResult;\n', 'using core::WriteResult;\nusing core::Prepared;\n')
+        self.surface(lambda data: data['umbrella']['names'].update(
+            Prepared={'tier': 'stable-candidate', 'since': '0.4.0'}))
+        # Step 3a before step 3: 0.4.0 is neither tagged nor declared.
+        self.assertRefused('umbrella name Prepared: since 0.4.0, but absent from every release tag', use_git=True)
+        cmake = (self.root / 'CMakeLists.txt').read_text(encoding='utf-8')
+        version = re.search(r'project\(mddlog VERSION (\S+)', cmake).group(1)
+        self.edit('CMakeLists.txt', f'project(mddlog VERSION {version}', 'project(mddlog VERSION 0.4.0')
+        self.assertEqual(COMPATIBILITY.check(self.root, True), [])
+        # A published name cannot be relabelled with the prepared version.
+        self.surface(lambda data: data['umbrella']['names']['AuditChain'].update(since='0.4.0'))
+        self.assertRefused('umbrella name AuditChain: since 0.4.0, first released in 0.2.0', use_git=True)
+        # A declared version not newer than the tags is not "in preparation".
+        self.surface(lambda data: data['umbrella']['names']['AuditChain'].update(since='0.2.0'))
+        self.edit('CMakeLists.txt', 'project(mddlog VERSION 0.4.0', 'project(mddlog VERSION 0.1.0')
+        self.assertRefused('umbrella name Prepared: since 0.4.0', use_git=True)
 
     @unittest.skipUnless(shutil.which('git'), 'git is required')
     def test_release_without_umbrella_is_reported_not_raised(self):

@@ -224,6 +224,16 @@ def check(root, use_git=False):
     return errors
 
 
+def prepared_version(root):
+    """Version declared by project(mddlog VERSION ...), or None."""
+    try:
+        text = (root / 'CMakeLists.txt').read_text(encoding='utf-8')
+    except OSError:
+        return None
+    match = re.search(r'project\(\s*mddlog\s+VERSION\s+(\d+)\.(\d+)\.(\d+)\b', text)
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
 def check_history(root, surface):
     """Compare the inventory with the published release tags."""
     errors = []
@@ -235,6 +245,14 @@ def check_history(root, surface):
     if not tags:
         return ['--git: no release tag available (fetch tags or omit --git)']
     removed = {entry['name'] for entry in surface['removed'] if isinstance(entry, dict)}
+    # The version being prepared: project(VERSION) once bumped by the release procedure, before its
+    # tag exists. New entries may already name it; every published version is still checked.
+    accepted = {'unreleased'}
+    declared = prepared_version(root)
+    if declared is None:
+        fail('CMakeLists.txt: no project(mddlog VERSION X.Y.Z)')
+    elif declared > max(version for version, _ in tags):
+        accepted.add('.'.join(map(str, declared)))
     first_names, first_modules = {}, {}
     for version, tag in tags:
         try:
@@ -263,8 +281,9 @@ def check_history(root, surface):
             elif current[name]['since'] != since:
                 fail(f'{kind} {name}: since {current[name]["since"]}, first released in {since}')
         for name, entry in sorted(current.items()):
-            if name not in released and entry['since'] != 'unreleased':
-                fail(f'{kind} {name}: since {entry["since"]}, but absent from every release tag')
+            if name not in released and entry['since'] not in accepted:
+                fail(f'{kind} {name}: since {entry["since"]}, but absent from every release tag '
+                     f'and not the version in preparation')
     return errors
 
 

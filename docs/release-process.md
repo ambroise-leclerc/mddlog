@@ -82,7 +82,9 @@ $ python3 -B scripts/check-compatibility.py --git    # inventory vs. CMake, sour
 ```
 
 - Replace `"since": "unreleased"` with `X.Y.Z` in [`docs/api/public-surface.json`](api/public-surface.json);
-  a removal needs its `removed[]` record, deprecation version and migration guide.
+  a removal needs its `removed[]` record, deprecation version and migration guide. Before the tag
+  exists, the checker accepts `X.Y.Z` only because step 3 made it the `project(VERSION)` and it is
+  newer than every tag; names already published keep the version of their first tag.
 - When the version produces audit journals, add `tests/archives/audit-export/vX.Y.Z.json` with
   its generator and provenance, from the release revision, as v0.2.0/v0.3.0 were. After tagging,
   `check-compatibility.py --git` refuses a release tag without its fixture.

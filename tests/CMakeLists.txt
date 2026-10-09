@@ -39,6 +39,19 @@ add_test(NAME build.cache.classifier
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompilerCacheClassifierTest.cmake)
 set_tests_properties(build.cache.classifier PROPERTIES LABELS "build")
 
+# #121: mddlog-build-info.json names the revision built, refreshed by every build.
+find_package(Git QUIET)
+if(GIT_FOUND)
+    add_test(NAME build.package.buildInfoRevision
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DGENERATOR=${CMAKE_GENERATOR}
+            -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildInfoRevisionTest.cmake)
+    set_tests_properties(build.package.buildInfoRevision PROPERTIES LABELS "build" TIMEOUT 300)
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
    MDDLOG_CACHE_KIND STREQUAL "ccache" AND
    MDDLOG_CACHE_CAN_HASH_BMIS)

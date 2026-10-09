@@ -22,13 +22,14 @@ Configuration, construction et tests sont relevés séparément.
 | --- | --- | --- |
 | Configuration | réussie | réussie |
 | Construction complète | réussie | réussie |
-| CTest complet | 241/241 | 242/242 (dont `build.cache.namedModuleIntegrity`) |
+| CTest complet | 242/242 | 243/243 (dont `build.cache.namedModuleIntegrity`) |
 | `InstallTreeConsumer` (Release installé → consommateur Debug, composants core/full/file_storage/audit_tool) | réussi | réussi |
 | `InstallTreeCoreConsumer` (composant core seul) | réussi | réussi |
 | `SourceSubdirectoryConsumer` | réussi | réussi |
 | `SourceArchiveConsumer` (`package-source.py --worktree`, extraction, sous-répertoire) | réussi | réussi |
 | `build.package.refusals`, dont compilateur différent (`MDDLOG_TEST_OTHER_CXX_COMPILER`) | réussi (autre : clang++-21) | réussi (autre : g++) |
 | `SourceTreeMigrationExamples` | réussi | réussi |
+| `build.package.buildInfoRevision` (commit puis modification sans reconfiguration) | réussi | réussi |
 | `build.core.*` (frontière gouvernée inchangée) | réussis | réussis |
 
 Contrôles sans compilation C++ :
@@ -36,8 +37,8 @@ Contrôles sans compilation C++ :
 - `python3 -B scripts/check-compatibility.py --git` : cohérent, y compris historique v0.1.0–v0.3.0
   (aucun nom ni module publié retiré, `since` conforme, archives v0.2.0/v0.3.0 présentes).
 - `python3 scripts/check-development-file.py` : structure et références valides.
-- `python3 -B -m unittest discover -s tests/documentation -p 'Test*.py'` : 95 tests réussis,
-  dont 10 de `TestCompatibility.py` et 6 de `TestSourcePackage.py` avec contrôles négatifs.
+- `python3 -B -m unittest discover -s tests/documentation -p 'Test*.py'` : 97 tests réussis,
+  dont 12 de `TestCompatibility.py` et 6 de `TestSourcePackage.py` avec contrôles négatifs.
 - `scripts/check-format.sh` : 121 fichiers conformes à clang-format 21.
 - Deux exécutions de `package-source.py --ref HEAD` produisent des octets identiques.
 
@@ -55,7 +56,11 @@ Contrôles sans compilation C++ :
 3. **Contrainte d’avertissements.** `-Wextra` de GCC 16.1 et Clang 21 signale
    `-Wmissing-field-initializers` sur les initialiseurs désignés des structures d’options. Le
    consommateur de référence le désactive explicitement ; aucun changement d’API n’est fait.
-4. **Configuration du paquet.** `mddlogConfig.cmake` ne modifie plus le consommateur ; un
+4. **Provenance du manifeste.** Une première version capturait la révision à la configuration.
+   Après un commit suivi de `cmake --build` sans reconfiguration, le manifeste nommait donc
+   l’ancien commit. La révision est désormais apposée à chaque construction, après les
+   bibliothèques ; `build.package.buildInfoRevision` échoue sur l’ancienne implémentation.
+5. **Configuration du paquet.** `mddlogConfig.cmake` ne modifie plus le consommateur ; un
    consommateur qui active lui-même C++23 et `import std` compile sans aucun réglage hérité.
 
 ## Limites

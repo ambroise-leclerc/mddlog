@@ -28,7 +28,8 @@ is a certification, a validation for medical-device use, or a production-readine
 - The project's `-Werror` warning target is neither installed nor exported, so it no longer
   governs a consumer's rebuild of the installed BMIs. The package offers components `core`,
   `full`, `file_storage` and `audit_tool` (new imported executable `mddlog::audit_tool`), writes
-  `mddlog-build-info.json`, and refuses an unknown component, a non-Ninja generator or a compiler
+  `mddlog-build-info.json` (source revision stamped at every build, flags of the built
+  configuration, MSVC runtime), and refuses an unknown component, a non-Ninja generator or a compiler
   other than its build's, with the remedy in the message.
 - An independent consumer project (`tests/consumer/package`) builds with its own strict warnings
   against the installed full and core packages, a source subdirectory and a source archive;

@@ -510,7 +510,13 @@ configure_package_config_file(
 
 # Build manifest: the exact toolchain, options and dependencies of this package (ADR-007).
 include(MddlogBuildInfo)
-mddlog_write_build_info("${CMAKE_CURRENT_BINARY_DIR}/mddlog-build-info-$<CONFIG>.json")
+# The revision is stamped after the installed binaries are built, on every build.
+set(_mddlog_built_targets mddlog mddlog-core)
+if(MDDLOG_BUILD_AUDIT_TOOLS)
+    list(APPEND _mddlog_built_targets mddlog_audit)
+endif()
+mddlog_write_build_info("${CMAKE_CURRENT_BINARY_DIR}/mddlog-build-info-$<CONFIG>.json" ${_mddlog_built_targets})
+unset(_mddlog_built_targets)
 
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/mddlogConfig.cmake"
