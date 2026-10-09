@@ -65,6 +65,9 @@ def snippet_regions(source):
 
 def git_lines(root, *arguments):
     result = subprocess.run(['git', '-C', str(root), *arguments], capture_output=True, text=True)
+    # git grep exits with 1 when nothing matches: an empty listing, not a failure.
+    if result.returncode == 1 and arguments[0] == 'grep' and not result.stderr.strip():
+        return ''
     if result.returncode:
         raise RuntimeError(f'git {" ".join(arguments)}: {result.stderr.strip()}')
     return result.stdout
@@ -234,10 +237,14 @@ def check_history(root, surface):
     removed = {entry['name'] for entry in surface['removed'] if isinstance(entry, dict)}
     first_names, first_modules = {}, {}
     for version, tag in tags:
-        text = git_lines(root, 'show', f'{tag}:include/mddlog/mddlog.cppm')
+        try:
+            text = git_lines(root, 'show', f'{tag}:include/mddlog/mddlog.cppm')
+            listing = git_lines(root, 'grep', '-h', '-E', '^export module ', tag, '--', 'include')
+        except RuntimeError as error:
+            fail(f'release {tag}: {error}')
+            continue
         for name in umbrella_names(text):
             first_names.setdefault(name, version)
-        listing = git_lines(root, 'grep', '-h', '-E', '^export module ', tag, '--', 'include')
         for line in listing.splitlines():
             name = module_name(line.split(':', 1)[-1])
             if name:

@@ -42,8 +42,9 @@ il compile aussi en mode source avec `-DMDDLOG_CONSUMER_MODE=source -DMDDLOG_SOU
 | Composants optionnels demandés explicitement | `file_storage` et `audit_tool` n’existent que si la construction les a activés (Linux) | « component ... was not enabled » ou « Unknown mddlog component » |
 
 `mddlog-build-info.json`, installé à côté de `mddlogConfig.cmake`, consigne la révision source,
-la chaîne exacte (compilateur, CMake, générateur, `CMAKE_CXX_FLAGS`, manifeste des modules std),
-la configuration, les options et les dépendances liées. Les variables
+la chaîne exacte (compilateur, CMake, générateur, `CMAKE_CXX_FLAGS` et ceux de la configuration
+construite, runtime MSVC sous MSVC, manifeste des modules std), la configuration, les options et
+les dépendances liées. Le runtime MSVC y est consigné mais pas comparé à celui du consommateur. Les variables
 `mddlog_BUILD_CXX_COMPILER_ID`, `mddlog_BUILD_CXX_COMPILER_VERSION`, `mddlog_BUILD_INFO_FILE`,
 `mddlog_FILE_STORAGE` et `mddlog_AUDIT_TOOL` en exposent l’essentiel après `find_package`.
 

@@ -125,10 +125,11 @@ $ gh pr merge <pr> --merge
 $ git fetch origin
 $ git tag -a vX.Y.Z -m "mddlog vX.Y.Z" origin/master
 $ git push origin vX.Y.Z
-$ gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — <subject>" --notes-file <notes>
-# reproducible source archive and manifest of the tagged commit, attached to the release:
+# reproducible source archive and manifest of the tagged commit, built before the release exists:
 $ python3 scripts/package-source.py --ref vX.Y.Z --output dist
-$ gh release upload vX.Y.Z dist/mddlog-X.Y.Z-src.tar.gz dist/mddlog-X.Y.Z-src.tar.gz.sha256 dist/mddlog-X.Y.Z-src.manifest.json
+# the release is created with its source artifacts attached, so it is never public without them:
+$ gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — <subject>" --notes-file <notes> \
+    dist/mddlog-X.Y.Z-src.tar.gz dist/mddlog-X.Y.Z-src.tar.gz.sha256 dist/mddlog-X.Y.Z-src.manifest.json
 ```
 
 **A green check is not evidence that CI ran.** GitHub does not run `pull_request` workflows when it

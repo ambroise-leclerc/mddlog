@@ -122,6 +122,17 @@ class CompatibilityTest(unittest.TestCase):
         (self.root / 'tests/archives/audit-export/v0.2.0.json').unlink()
         self.assertRefused('release v0.2.0: no audit archive fixture', use_git=True)
 
+    @unittest.skipUnless(shutil.which('git'), 'git is required')
+    def test_release_without_umbrella_is_reported_not_raised(self):
+        git(self.root, 'init', '-q')
+        (self.root / 'README').write_text('pre-module release\n')
+        git(self.root, 'add', 'README')
+        git(self.root, 'commit', '-q', '-m', 'no modules')
+        git(self.root, 'tag', 'v0.0.1')
+        # Both git show (no umbrella) and git grep (no module) fail for this tag: one checker error.
+        self.assertRefused('release v0.0.1: git show', use_git=True)
+        self.assertEqual(COMPATIBILITY.git_lines(self.root, 'grep', '-h', 'no-such-text', 'v0.0.1'), '')
+
     def test_snippet_regions_require_matching_markers(self):
         regions = COMPATIBILITY.snippet_regions('// [migration:a]\nx\n// [/migration:b]\n// [migration:c]\ny\n// [/migration:c]\n')
         self.assertEqual(regions, {'c': 'y'})

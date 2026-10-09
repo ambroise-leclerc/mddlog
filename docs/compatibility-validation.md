@@ -65,7 +65,8 @@ Contrôles sans compilation C++ :
   confirmé par la CI Windows de la PR.
 - Le cas « autre compilateur » de `build.package.refusals` n’existe que si
   `MDDLOG_TEST_OTHER_CXX_COMPILER` est fourni ; la CI ne le fournit pas.
-- Les options ABI de la bibliothèque standard (`_GLIBCXX_DEBUG`, `/MT`…) ne sont pas détectées.
+- Les options ABI de la bibliothèque standard (`_GLIBCXX_DEBUG`, `/MT`…) ne sont pas détectées ;
+  `mddlog-build-info.json` consigne les drapeaux de la configuration et le runtime MSVC sans les comparer.
 - Les sources consommateurs (`tests/consumer/`) restent hors du périmètre clang-tidy, comme avant.
 - Les niveaux restent candidats ; les `reduction-candidate`, l’épinglage des jobs Clang Linux et
   MSVC et le signalement #147 sont ouverts (GAP-014).

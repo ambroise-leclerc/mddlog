@@ -50,6 +50,31 @@ function(_mddlog_json_bool out value)
     endif()
 endfunction()
 
+# JSON-escapes a value, then protects the characters a generator expression would interpret, so
+# the value can sit inside a $<$<CONFIG:...>:...> branch.
+function(_mddlog_genex_json_string out value)
+    string(REPLACE "\\" "\\\\" value "${value}")
+    string(REPLACE "\"" "\\\"" value "${value}")
+    string(REPLACE ">" "$<ANGLE-R>" value "${value}")
+    string(REPLACE "," "$<COMMA>" value "${value}")
+    string(REPLACE ";" "$<SEMICOLON>" value "${value}")
+    set(${out} "${value}" PARENT_SCOPE)
+endfunction()
+
+# Flags CMake adds for the configuration being generated: CMAKE_CXX_FLAGS_<CONFIG> of each known
+# configuration, selected by $<CONFIG> when the manifest is written.
+function(_mddlog_config_flags_genex out)
+    set(configurations ${CMAKE_CONFIGURATION_TYPES} ${CMAKE_BUILD_TYPE})
+    list(REMOVE_DUPLICATES configurations)
+    set(genex "")
+    foreach(configuration IN LISTS configurations)
+        string(TOUPPER "${configuration}" upper)
+        _mddlog_genex_json_string(flags "${CMAKE_CXX_FLAGS_${upper}}")
+        string(APPEND genex "$<$<CONFIG:${configuration}>:${flags}>")
+    endforeach()
+    set(${out} "${genex}" PARENT_SCOPE)
+endfunction()
+
 function(mddlog_write_build_info output)
     _mddlog_source_revision(revision revision_state)
     set(json "{}")
@@ -76,6 +101,12 @@ function(mddlog_write_build_info output)
         string(JSON json SET "${json}" toolchain ${key} "\"${value}\"")
     endforeach()
     string(JSON json SET "${json}" toolchain configuration "\"@MDDLOG_CONFIG@\"")
+    string(JSON json SET "${json}" toolchain cxxConfigurationFlags "\"@MDDLOG_CONFIG_FLAGS@\"")
+    # The MSVC runtime (/MD, /MT, debug or not) is part of the ABI a consumer must match. CMake
+    # selects it from CMAKE_MSVC_RUNTIME_LIBRARY, or MultiThreaded[Debug]DLL when that is unset.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+        string(JSON json SET "${json}" toolchain msvcRuntimeLibrary "\"@MDDLOG_MSVC_RUNTIME@\"")
+    endif()
 
     string(JSON json SET "${json}" options "{}")
     foreach(option IN ITEMS MDDLOG_BUILD_FILE_STORAGE MDDLOG_BUILD_AUDIT_TOOLS
@@ -100,6 +131,14 @@ function(mddlog_write_build_info output)
     string(JSON json SET "${json}" dependencies
         "[{\"name\":\"C++ standard library and its std module\",\"scope\":\"deployed\",\"provider\":\"toolchain\"},{\"name\":\"Threads::Threads\",\"scope\":\"deployed\",\"provider\":\"toolchain\"}]")
 
+    _mddlog_config_flags_genex(config_flags)
+    if(DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(msvc_runtime "${CMAKE_MSVC_RUNTIME_LIBRARY}")
+    else()
+        set(msvc_runtime "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
     string(REPLACE "@MDDLOG_CONFIG@" "$<CONFIG>" json "${json}")
+    string(REPLACE "@MDDLOG_CONFIG_FLAGS@" "${config_flags}" json "${json}")
+    string(REPLACE "@MDDLOG_MSVC_RUNTIME@" "${msvc_runtime}" json "${json}")
     file(GENERATE OUTPUT "${output}" CONTENT "${json}\n")
 endfunction()

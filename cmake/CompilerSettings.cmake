@@ -17,7 +17,8 @@ endif()
 # BMIs with the definitions the modules were compiled with.
 function(configure_compiler_settings target_name)
   target_compile_options(${target_name} PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/EHsc /permissive->
+    $<$<CXX_COMPILER_ID:MSVC>:/EHsc>
+    $<$<CXX_COMPILER_ID:MSVC>:/permissive->
     $<$<CXX_COMPILER_ID:GNU>:-fconcepts-diagnostics-depth=2>
   )
 endfunction()
