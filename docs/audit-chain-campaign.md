@@ -119,8 +119,8 @@ longue sont distincts ; leur configuration ne constitue pas un résultat exécut
 
 Les résultats locaux du 8 octobre 2026 sont consignés dans le
 [rapport de robustesse](audit-robustness-results.md). VER-070–072 complètent les
-preuves logicielles de GAP-013 ; le présent lot conserve les résultats et propose
-sa clôture pour ces profils. GAP-003 reste ouvert sous #122
+preuves logicielles de GAP-013 ; le lot #148 conserve les résultats, et la
+décision nominative AM-L : PR #148 approuvée le 2026-10-08 à 21:58:47 UTC sur `f5b015c08a0fb9bda55ee792f039309d86debc5e`, fusionnée à `2b606df47d5bf2d7db5e021a8bf359173ee5490e` clôt GAP-013 pour ces profils. GAP-003 reste ouvert sous #122
 pour le déploiement réel et la décision finale. Les requêtes `detail`,
 admissions et compteurs observés proviennent de la trace du worker ; l’oracle contrôle
 leur cohérence avec sa file abstraite et avec les octets et digests stockés. Il ne

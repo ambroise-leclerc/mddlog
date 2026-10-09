@@ -21,6 +21,7 @@ capability as delivered from an ADR's existence alone.
 | [004](ADR-004-audit-persistence-and-tamper-evidence.md) | Audit persistence and tamper evidence | Accepted |
 | [005](ADR-005-contextual-logging-api.md) | Explicit contexts and producer bindings (#113/#127) | Accepted |
 | [006](ADR-006-audit-tools-and-export.md) | Audit CLI and versioned projection/evidence (#119/#121) | Proposed for review |
+| [007](ADR-007-compatibility-and-distribution.md) | Compatibility, formats and distribution commitments (#121) | Proposed for review |
 
 ## How the five relate
 
@@ -47,6 +48,10 @@ Decision 11 records as deferred work with the reason for each. The root `README.
 them as a delivered feature. ADR-006 now proposes the export format around implemented canonical/layout/witness contracts.
 Its optional CLI and codecs are a candidate implementation with local evidence, awaiting
 maintainer schema review; this does not amend the preceding four contracts.
+ADR-007 proposes the 1.0 commitments around them: surface tiers recorded in a checked
+inventory, SemVer and deprecation without an ABI/BMI promise, format read duration and
+unknown-version refusal, the qualified matrix and a side-effect-free installed package. Its
+tiers stay candidates until the #122 feedback; it amends none of ADR-001 to ADR-006.
 
 ## Relationship to MduX
 

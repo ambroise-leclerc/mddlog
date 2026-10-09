@@ -70,7 +70,7 @@
       "status": "open",
       "issue": 121,
       "owner": "Ambroise Leclerc et intégrateur du profil",
-      "closure": "Versions exactes, licences, anomalies et justification de classement examinées sur la chaîne réellement utilisée."
+      "closure": "Versions exactes, licences, anomalies et justification de classement examinées sur la chaîne réellement utilisée. Depuis #121, chaque paquet installé consigne sa chaîne exacte dans mddlog-build-info.json et chaque archive source ses dépendances épinglées ; ces relevés ne remplacent pas l’examen des licences, anomalies et classement sur le profil."
     },
     {
       "id": "GAP-006",
@@ -131,10 +131,10 @@
     {
       "id": "GAP-013",
       "title": "Étendre robustesse et concurrence",
-      "status": "open",
+      "status": "closed",
       "issue": 120,
       "owner": "Ambroise Leclerc",
-      "closure": "Disposition de clôture logicielle de #120 soumise dans le lot de conservation demandé par le mainteneur ; GAP reste ouvert jusqu’à enregistrement de la décision nominative sur ce lot. L’approbation #146 porte sur les campagnes logicielles précédentes, pas sur la présente conservation. Modèles génératifs, fuzzing, concurrence et chaîne fichiers/témoin/checkpoint réels livrés par #146, approuvée par AM-L le 2026-10-08 sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32 et fusionnée à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. VER-070–072 : 32 histoires, 49152 événements, 32 déploiements isolés requis et archives v0.2/v0.3 ; fuzz CI 1000000 entrées, sans nouveau résultat C++ revendiqué par la conservation. Preuves, empreintes, limites et contrôles négatifs conservés dans docs/validation/audit-robustness/2026-10-08/README.md. Oracle fondé sur une trace du worker, profils finis, absence de qualification physique ; suivi autonome TSan/libc++ explicitement conservé dans #147 avant qualification du tuple #121/#122. GAP-003 et acceptation finale restent #122 ; politique des archives et matrice restent #121. Aucun défaut libc++ ni faux positif déclaré résolu."
+      "closure": "Clos par la décision nominative AM-L sur le lot de conservation : PR #148 approuvée le 2026-10-08 à 21:58:47 UTC sur f5b015c08a0fb9bda55ee792f039309d86debc5e, fusionnée à 21:58:57 UTC dans develop au commit 2b606df47d5bf2d7db5e021a8bf359173ee5490e, contrôles CI de la tête revue réussis ; décision consignée dans #120, fermée comme réalisée. Elle accepte la conservation et la disposition de clôture logicielle pour les profils finis de #146, approuvée par AM-L le 2026-10-08 sur 6bf13770bd7732ab2640fc6fe28a06ccf5d38d32 et fusionnée à b73ab46acb7e6d008535b3871c1980e1f7b94fc3. VER-070–072 : 32 histoires, 49152 événements, 32 déploiements isolés et archives v0.2/v0.3 ; fuzz CI 1000000 entrées. Preuves, empreintes, limites et contrôles négatifs conservés dans docs/validation/audit-robustness/2026-10-08/README.md. Portée bornée : oracle fondé sur une trace du worker, profils finis, aucune exhaustivité des interleavings ni qualification physique. Le signalement autonome TSan/libc++ reste ouvert dans #147 et non qualifié pour la matrice #121 ; GAP-003, le profil réel et l’acceptation finale restent #122 ; politique des archives et matrice : GAP-014. Synchronisé dans le registre par le lot compatibilité de #121."
     },
     {
       "id": "GAP-014",
@@ -142,7 +142,7 @@
       "status": "open",
       "issue": 121,
       "owner": "Ambroise Leclerc",
-      "closure": "Matrice exacte, compatibilité, migrations et consommateurs source/installés validés."
+      "closure": "Matrice exacte, compatibilité, migrations et consommateurs source/installés validés. Lot #121 livré pour revue : ADR-007 candidate (niveaux de surface, SemVer, dépréciation, absence de promesse ABI/BMI, durée de lecture et refus des formats inconnus), inventaire docs/api/public-surface.json contrôlé, paquet assaini avec composants et refus, consommateurs indépendants installés/sources/archive, guide de migration compilé, archive source reproductible, matrice et procédure de qualification (VER-073–077). Reste ouvert jusqu’au gel : décisions sur les reduction-candidate, épinglage exact des jobs Clang Linux et MSVC, évaluation #147, acceptation des engagements après #122."
     },
     {
       "id": "GAP-015",
@@ -440,6 +440,27 @@
         "include/mddlog/adapter/AuditEvidence.cppm",
         "include/mddlog/adapter/AuditProjection.cppm",
         "tools/AuditTool.cpp"
+      ]
+    },
+    {
+      "id": "CTRL-019",
+      "title": "Surface inventoriée, paquet sans effet de bord, refus explicites et consommateurs indépendants",
+      "status": "implemented",
+      "design": [
+        "docs/adr/ADR-007-compatibility-and-distribution.md",
+        "docs/consumer-requirements.md",
+        "docs/compatibility-matrix.md",
+        "docs/api/README.md"
+      ],
+      "implementation": [
+        "docs/api/public-surface.json",
+        "scripts/check-compatibility.py",
+        "CMakeLists.txt",
+        "cmake/mddlogConfig.cmake.in",
+        "cmake/MddlogBuildInfo.cmake",
+        "cmake/CompilerSettings.cmake",
+        "scripts/package-source.py",
+        "tests/consumer/package/CMakeLists.txt"
       ]
     }
   ],
@@ -1352,6 +1373,66 @@
       "scenario": null,
       "evidence": "docs/audit-chain-campaign.md",
       "limits": "Quatre segments identiques aux corpus originaux v0.2.0 et v0.3.0, reconstruits aux SHA publiés ; pas une politique complète de futures archives. Profil fuzz instrumenté séparé, budget et absence locale de LSan explicités ; revue logicielle #146 approuvée sur la révision citée ; conservation et limites dans docs/validation/audit-robustness/2026-10-08/README.md, acceptation finale #122 ouverte."
+    },
+    {
+      "id": "VER-073",
+      "title": "Inventaire de surface, versions de formats et historique des releases",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-019"
+      ],
+      "test": "tests/documentation/TestCompatibility.py",
+      "scenario": null,
+      "evidence": "docs/compatibility-validation.md",
+      "limits": "Cohérence de l’inventaire avec CMake, le parapluie, les constantes de format, les tags et les extraits ; aucune vérification des signatures C++ ni de la compatibilité binaire."
+    },
+    {
+      "id": "VER-074",
+      "title": "Consommateurs indépendants installés, sous-répertoire et archive source",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-019"
+      ],
+      "test": "cmake/TestInstallConsumer.cmake",
+      "scenario": null,
+      "evidence": "docs/compatibility-validation.md",
+      "limits": "Programmes représentatifs sous avertissements stricts du consommateur, sur les chaînes exécutées ; ne couvre ni toutes les options d’un intégrateur ni une chaîne non qualifiée."
+    },
+    {
+      "id": "VER-075",
+      "title": "Refus de configuration du paquet installé",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-019"
+      ],
+      "test": "cmake/TestPackageRefusals.cmake",
+      "scenario": null,
+      "evidence": "docs/compatibility-validation.md",
+      "limits": "Version, composant inconnu, générateur non Ninja hors Windows ; compilateur différent seulement si MDDLOG_TEST_OTHER_CXX_COMPILER est fourni. Options ABI de la bibliothèque standard non détectées."
+    },
+    {
+      "id": "VER-076",
+      "title": "Archive source reproductible et manifeste des dépendances",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-019"
+      ],
+      "test": "tests/documentation/TestSourcePackage.py",
+      "scenario": null,
+      "evidence": "docs/compatibility-validation.md",
+      "limits": "Flux tar reproductible pour un commit avec la même version de Python ; octets gzip dépendants de zlib ; pas de signature de l’archive."
+    },
+    {
+      "id": "VER-077",
+      "title": "Exemples de migration v0.2 compilés et exécutés",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-019"
+      ],
+      "test": "tests/consumer/package/MigrationExamples.cpp",
+      "scenario": null,
+      "evidence": "docs/compatibility-validation.md",
+      "limits": "Cinq usages représentatifs avant/après ; les autres guides de migration gardent leurs propres exemples."
     }
   ],
   "risks": [
@@ -1529,7 +1610,9 @@
       "id": "RISK-011",
       "title": "Chaîne de construction ou dépendance défectueuse",
       "effect": "BMI corrompu, outil ou dépendance compromis : logiciel ou preuves incorrects.",
-      "controls": [],
+      "controls": [
+        "CTRL-019"
+      ],
       "gaps": [
         "GAP-004",
         "GAP-005",
@@ -1884,8 +1967,16 @@
       "risks": [
         "RISK-011"
       ],
-      "controls": [],
-      "verifications": [],
+      "controls": [
+        "CTRL-019"
+      ],
+      "verifications": [
+        "VER-073",
+        "VER-074",
+        "VER-075",
+        "VER-076",
+        "VER-077"
+      ],
       "gaps": [
         "GAP-014",
         "GAP-015"
@@ -2055,7 +2146,7 @@
       "provenance": "CMakePresets.json",
       "license": "CMake BSD-3-Clause ; Ninja Apache-2.0 ; distribution exacte à confirmer GAP-005.",
       "classification": "Outils de génération/construction, non déployés.",
-      "knownIssues": "Gate expérimental import std dépendant de version CMake.",
+      "knownIssues": "Gate expérimental import std dépendant de version CMake. Avec Clang, CMake passe un -c redondant à la précompilation des BMIs (avertissement Clang) ; le module std est créé à l’activation de CXX, d’où CMAKE_CXX_EXTENSIONS OFF avant project() côté consommateur (docs/consumer-requirements.md).",
       "monitoring": "Plan : mainteneur examine avant mise à jour et release https://cmake.org/cmake/help/latest/release/index.html pour les changements import std/FILE_SET et https://github.com/ninja-build/ninja/releases pour le scanning/modules ; vérifier le gate CMake, la génération et les consommateurs sur le tuple retenu.",
       "gaps": [
         "GAP-005"

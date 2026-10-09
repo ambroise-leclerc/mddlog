@@ -204,3 +204,7 @@ Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs
 ## Oracle de chaîne réelle #120
 
 Le [modèle](../../../docs/audit-chain-campaign.md) et VER-070–072 ajoutent une file abstraite et une reconstruction indépendante ADR-004/hashlib sur les requêtes originales. Les seams bornent les writes POSIX et injectent EIO ; le reclaim arme la faute au vrai unlink. Reprise après session interrompue, refus de réutilisation d’identité, réponse perdue et rollback combiné avec checkpoint rechargé sont contrôlés. Les générateurs séquentiels n’étendent aucun contrat concurrent et les snapshots ne deviennent pas des transactions. Revue proposée, limites dans GAP-003/013.
+
+## Paquet CMake et consommateurs #121
+
+Avertissements, options MSVC et définitions de version sont privés aux cibles de mddlog ; `mddlog_warnings` n’est ni installé ni exporté. CMake reconstruit les BMIs avec les définitions enregistrées pour les modules. `mddlogConfig.cmake` contrôle générateur, porte `import std`, compilateur et composants ; `mddlog-build-info.json` décrit la construction. Le projet [tests/consumer/package](../../../tests/consumer/package/CMakeLists.txt) est consommé installé, en sous-répertoire et depuis une archive (VER-074/075). Voir [exigences du consommateur](../../../docs/consumer-requirements.md).

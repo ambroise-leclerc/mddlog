@@ -72,6 +72,25 @@ A test that derived its expectation from the same macro would assert nothing; th
 is what catches a build reporting a version other than the one declared. `InstallTreeConsumer`
 separately checks that the installed module reports `PROJECT_VERSION`.
 
+### 3a. Record the compatibility evidence of the version
+
+The release names what it adds to the public surface and keeps every older journal readable
+([ADR-007](adr/ADR-007-compatibility-and-distribution.md)):
+
+```console
+$ python3 -B scripts/check-compatibility.py --git    # inventory vs. CMake, sources and every tag
+```
+
+- Replace `"since": "unreleased"` with `X.Y.Z` in [`docs/api/public-surface.json`](api/public-surface.json);
+  a removal needs its `removed[]` record, deprecation version and migration guide. Before the tag
+  exists, the checker accepts `X.Y.Z` only because step 3 made it the `project(VERSION)` and it is
+  newer than every tag; names already published keep the version of their first tag.
+- When the version produces audit journals, add `tests/archives/audit-export/vX.Y.Z.json` with
+  its generator and provenance, from the release revision, as v0.2.0/v0.3.0 were. After tagging,
+  `check-compatibility.py --git` refuses a release tag without its fixture.
+- Before 1.0 the package accepts only the same minor version (`SameMinorVersion`); say so in the
+  changelog when a minor version breaks source compatibility.
+
 ### 4. Finish the changelog entry
 
 [`CHANGELOG.md`](../CHANGELOG.md)'s top entry moves from `unreleased` to the date. Its **known
@@ -94,7 +113,9 @@ $ ctest --preset <your-preset> --output-on-failure --no-tests=error
 ```
 
 Report configuration, build and test results separately: a successful configuration is not a
-successful build.
+successful build. The `build;consumer` tests (`InstallTreeConsumer`, `InstallTreeCoreConsumer`,
+`SourceSubdirectoryConsumer`, `SourceArchiveConsumer`, `build.package.refusals`) must pass on
+every leg of the [compatibility matrix](compatibility-matrix.md).
 
 ### 7. Merge to `master`, tag there, and publish the release
 
@@ -106,7 +127,11 @@ $ gh pr merge <pr> --merge
 $ git fetch origin
 $ git tag -a vX.Y.Z -m "mddlog vX.Y.Z" origin/master
 $ git push origin vX.Y.Z
-$ gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — <subject>" --notes-file <notes>
+# reproducible source archive and manifest of the tagged commit, built before the release exists:
+$ python3 scripts/package-source.py --ref vX.Y.Z --output dist
+# the release is created with its source artifacts attached, so it is never public without them:
+$ gh release create vX.Y.Z --verify-tag --title "vX.Y.Z — <subject>" --notes-file <notes> \
+    dist/mddlog-X.Y.Z-src.tar.gz dist/mddlog-X.Y.Z-src.tar.gz.sha256 dist/mddlog-X.Y.Z-src.manifest.json
 ```
 
 **A green check is not evidence that CI ran.** GitHub does not run `pull_request` workflows when it

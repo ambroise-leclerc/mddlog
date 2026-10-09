@@ -99,3 +99,7 @@ Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs
 ## Preuves combinées #120
 
 VER-070–072 enrichissent les contrôles de pertes, couverture exagérée et reprise/retention : saturation, indisponibilité, writes courts, EIO, réponse perdue et suppression interrompue sont combinés. Un oracle de requêtes/octet/digest indépendant réduit le risque d’un accord circulaire encodeur/décodeur ; les contrôles négatifs refusent une fausse réussite du banc. Le [profil et ses limites](../../../docs/audit-chain-campaign.md) restent bornés ; aucune acceptation de risque ni qualification physique supplémentaire.
+
+## Chaîne de construction et compatibilité #121
+
+CTRL-019 réduit RISK-011. Le paquet refuse un compilateur, un générateur, une version ou un composant non servis, au lieu d’échouer dans le scan des modules. Les avertissements de mddlog ne gouvernent plus la reconstruction des BMIs du consommateur. Une constante de format modifiée sans l’inventaire est refusée en revue, et chaque release productrice d’audit doit conserver son archive. Les options ABI de la bibliothèque standard restent non détectées ; aucune acceptation de risque n’est déduite ([validation](../../../docs/compatibility-validation.md)).
