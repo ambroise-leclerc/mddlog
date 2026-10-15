@@ -11,43 +11,23 @@ if(CMAKE_GENERATOR STREQUAL "Ninja")
   message(STATUS "Using Ninja build system with optimizations")
 endif()
 
-# MSVC specific compiler settings
-function(configure_msvc_settings target_name)
-  if(MSVC)
-    target_compile_options(${target_name} INTERFACE
-      /EHsc  # Enable exception handling
-      /W4    # Warning level 4
-      /wd4530  # Disable C4530 warning about exception handling
-    )
-    message(STATUS "Applied MSVC-specific compiler settings to ${target_name}")
-  endif()
-endfunction()
-
-# Function to apply compiler-specific settings and definitions to a target
+# Settings used to compile mddlog's own targets. They are PRIVATE: a consumer chooses its own
+# warning level, exception model and diagnostics, and never inherits this project's (#121). CMake
+# still records them in IMPORTED_CXX_MODULES_COMPILE_* so an installed consumer rebuilds mddlog's
+# BMIs with the definitions the modules were compiled with.
 function(configure_compiler_settings target_name)
-  # Apply MSVC settings if applicable
-  configure_msvc_settings(${target_name})
-
-  # Medical device specific compile options
-  target_compile_options(${target_name} INTERFACE
+  target_compile_options(${target_name} PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/EHsc>
     $<$<CXX_COMPILER_ID:MSVC>:/permissive->
     $<$<CXX_COMPILER_ID:GNU>:-fconcepts-diagnostics-depth=2>
   )
-
-  # Platform-specific definitions
-  target_compile_definitions(${target_name} INTERFACE
-    $<$<PLATFORM_ID:Windows>:MDDLOG_PLATFORM_WINDOWS;WIN32_LEAN_AND_MEAN;NOMINMAX>
-    $<$<PLATFORM_ID:Linux>:MDDLOG_PLATFORM_LINUX>
-    $<$<PLATFORM_ID:Darwin>:MDDLOG_PLATFORM_MACOS>
-  )
 endfunction()
 
-# Function to configure medical device compliance definitions
+# Version and compliance definitions read by the module interfaces (mddlog::getVersion(),
+# mddlog::isMedicalComplianceEnabled()). PRIVATE since #121: they are not a macro API of a consumer
+# translation unit; consumers query the exported functions instead.
 function(configure_medical_compliance target_name version_major version_minor version_patch)
-  target_compile_definitions(${target_name} INTERFACE
-    MDDLOG_VERSION_MAJOR=${version_major}
-    MDDLOG_VERSION_MINOR=${version_minor}
-    MDDLOG_VERSION_PATCH=${version_patch}
+  target_compile_definitions(${target_name} PRIVATE
     # project(mddlog VERSION ...) is the single definition of the version; getVersion() reads it
     # from here rather than repeating the literal (docs/release-process.md, step 3).
     MDDLOG_VERSION_STRING="${version_major}.${version_minor}.${version_patch}"

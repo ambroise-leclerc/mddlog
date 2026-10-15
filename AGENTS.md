@@ -19,6 +19,9 @@ The published branch includes `examples/` and `tests/`. Enable their CMake optio
 examples and run CTest; tests fetch a pinned SpecLab revision. `SourceTreeCoreConsumer` and
 `InstallTreeCoreConsumer` separately verify the governed-only target in source and installed
 contexts. See `docs/migration/governed-core.md` before moving direct imports or producers.
+The independent project `tests/consumer/package` is exercised against the installed package, a
+source subdirectory and a source archive (CTest label `consumer`); `docs/api/public-surface.json`
+inventories the public surface and `scripts/check-compatibility.py` checks it (ADR-007).
 `import std` support is experimental and tied to the CMake/compiler tuple. Report configuration or
 module-import failures honestly; do not claim a build passed from configuration success alone.
 

@@ -19,7 +19,10 @@ if(${USER_LINKER_OPTION_INDEX} EQUAL -1)
       "Using custom linker: '${USER_LINKER_OPTION}', explicitly supported entries are ${USER_LINKER_OPTION_VALUES}")
 endif()
 
-function(configure_linker project_name)
+# A linker choice concerns the executables this build links (tests, examples, tools), not a
+# consumer of the installed package: apply it to this directory's links, never as an exported
+# usage requirement (#121). It used to be added as a compile option, where it selected nothing.
+function(configure_linker)
   if(NOT ENABLE_USER_LINKER)
     return()
   endif()
@@ -28,6 +31,6 @@ function(configure_linker project_name)
 
   check_cxx_compiler_flag(${LINKER_FLAG} CXX_SUPPORTS_USER_LINKER)
   if(CXX_SUPPORTS_USER_LINKER)
-    target_compile_options(${project_name} INTERFACE ${LINKER_FLAG})
+    add_link_options(${LINKER_FLAG})
   endif()
 endfunction()

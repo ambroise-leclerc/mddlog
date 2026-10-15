@@ -56,3 +56,7 @@ Voir [contrat et usage](../../../docs/audit-tools.md) et [preuves](../../../docs
 ## Outillage du complément #120
 
 Le nouveau superviseur utilise Python standard (DEP-006), notamment hashlib pour l’oracle indépendant, et partage les limites de processus du runner existant. Aucune nouvelle dépendance liée à la bibliothèque. Le profil multi-UID reprend DEP-011 et les formats/lecteurs DEP-009 ; versions et empreintes sont collectées par campagne. Conservation et qualification des outils restent dans GAP-003/005.
+
+## Manifestes de construction et de sources #121
+
+`mddlog-build-info.json` consigne pour chaque paquet installé la révision, le compilateur, CMake, le générateur, les drapeaux, la configuration et les options. `scripts/package-source.py` produit une archive reproductible et un manifeste des empreintes et dépendances épinglées (SpecLab par commit, CPM.cmake intégré). Ces relevés alimentent GAP-005 sans le clore : licences, anomalies et classement restent à examiner sur le profil. Aucune dépendance nouvelle n’est liée ; voir la [matrice](../../../docs/compatibility-matrix.md).

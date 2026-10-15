@@ -200,6 +200,27 @@ These checks do not accept content or qualify a deployment. A maintainer's decis
 the reviewed revision, date and reservations; #124 accepts the initial baseline and #122 the final
 release dossier. Follow the dossier README's [integration and traceability section](software_development_file/README.md#utilisation-et-traçabilité) when reusing its templates.
 
+## Public surface and compatibility
+
+[`docs/api/public-surface.json`](docs/api/public-surface.json) inventories every module, umbrella
+name, installed target, package component and format version, with the tier of
+[ADR-007](docs/adr/ADR-007-compatibility-and-distribution.md). A change that adds, moves or removes
+one of them, or changes a format's bytes or meaning, updates the inventory in the same review:
+
+- a new public name or module gets `"since": "unreleased"` and a tier;
+- a removal follows the ADR-007 deprecation path and adds a `removed[]` record with its migration;
+- a format change increments that format's version constant and the inventory together;
+- a migration example quoted by `docs/migration/v0.2-to-1.0.md` changes only in
+  `tests/consumer/package/MigrationExamples.cpp`, and the guide quotes the region verbatim.
+
+```bash
+python3 -B scripts/check-compatibility.py --git
+```
+
+Package and consumer changes are exercised by the `build;consumer` CTest label: the independent
+project of `tests/consumer/package` builds against the installed package, a source subdirectory
+and a source archive, and `build.package.refusals` checks the package's configure-time refusals.
+
 ## Pull Requests
 
 - **Branches.** Work on an `<issue-number>-<slug>` branch and target `develop`, the default
