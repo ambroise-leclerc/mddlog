@@ -70,10 +70,10 @@ class AuditChainCampaignTest(unittest.TestCase):
     def test_contract_vector_and_detail_truncation(self):
         # Fixed contract bytes: version, stream length/name, sequence, category, phase, unavailable time.
         value = CAMPAIGN.canonical('p', 1, '')
-        self.assertEqual(value.hex(), '00010001700000000000000001010100000f63616d706169676e2e7265636f7264'
-                         '0000000474657374000000000000010000000000000001000000')
-        self.assertEqual(CAMPAIGN.canonical('p', 1, 'x' * 161)[-1], 1)
-        self.assertEqual(CAMPAIGN.canonical('p', 1, 'x' * 160)[-1], 0)
+        self.assertEqual(value.hex(), '00020001700000000000000001010100000f63616d706169676e2e7265636f7264'
+                         '000000047465737400000000000001000000000000000100000000')
+        self.assertEqual(CAMPAIGN.canonical('p', 1, 'x' * 161)[-2], 1)
+        self.assertEqual(CAMPAIGN.canonical('p', 1, 'x' * 160)[-2], 0)
 
     def test_release_seeds_preserve_original_archive_bytes(self):
         repository = SOURCE.parents[1]

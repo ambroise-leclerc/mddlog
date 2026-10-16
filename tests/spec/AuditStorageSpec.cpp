@@ -135,7 +135,7 @@ const speclab::Register layoutBytes{
                                                                   0x78, 0x0d, 0x8e, 0x4f};                                     // check
                       checks.expect(std::ranges::equal(opening, expected), "the first 45 bytes of the vector's first segment");
                       checks.expect(encodeSegmentOpening("not a valid id", 0, 1).empty(), "no opening for an identity AuditEvent rejects");
-                      checks.expect(maxSegmentOpeningSize == 125 && maxRecordFrameSize == 813, "the sizes 9.6 counts the reserve in");
+                      checks.expect(maxSegmentOpeningSize == 125 && maxRecordFrameSize == 822, "the sizes 9.6 counts the reserve in");
                       checks.raise();
                   })
             .Then("a segment scans back to its header and records, and nothing else",
@@ -240,10 +240,10 @@ const speclab::Register configuration{
     "unit",
     [] {
         return speclab::Test("audit-storage-configuration")
-            .Then("the reserve is the segments that hold N + S + 3 frames of 813 bytes, plus one",
+            .Then("the reserve is the segments that hold N + S + 3 frames of 822 bytes, plus one",
                   [] {
                       speclab::core::Checks checks;
-                      // 4096-byte segments hold floor((4096 - 125) / 813) = 4 frames: N=16, S=2 gives 21 frames, 6 segments, plus one.
+                      // 4096-byte segments hold floor((4096 - 125) / 822) = 4 frames: N=16, S=2 gives 21 frames, 6 segments, plus one.
                       checks.expect(ledgerReserveSegments(4096, 16, 2) == 7, "7 segments");
                       checks.expect(ledgerReserveSegments(2048, 12, 1) == 9, "2 frames per segment: 16 frames, 8 segments, plus one");
                       checks.expect(ledgerReserveSegments(900, 12, 1) == 0, "a segment that cannot hold one frame has no reserve");
@@ -267,7 +267,7 @@ const speclab::Register configuration{
                       auto                  rig      = makeRig();
                       auto                  declared = Rig::config();
                       declared.segmentSize           = 937;
-                      checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::SegmentTooSmall, "937 < 125 + 813");
+                      checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::SegmentTooSmall, "937 < 125 + 822");
                       declared                    = Rig::config();
                       declared.maxProducerStreams = 0;
                       checks.expect(PersistingAuditSink::create(rig->medium, declared).error() == StorageConfigError::NoProducerStreams, "S of 0");

@@ -17,13 +17,13 @@ inline constexpr std::size_t operationIdCapacity        = 32;
 inline constexpr std::size_t correlationIdCapacity      = 40;
 inline constexpr std::size_t maximumStandardRecordBytes = 384;
 
-/** @brief Whether the host supplied a usable Unix-time value. */
-enum class TimeAvailability : std::uint8_t { Available, Unavailable };
+/** @brief Host assessment of the supplied Unix-time value; Doubtful retains the supplied time. */
+enum class TimeAvailability : std::uint8_t { Available, Unavailable, Doubtful };
 
 /**
- * @brief Host-supplied UTC time, or an explicit unavailable state.
+ * @brief Host-supplied UTC time with an explicit available, doubtful or unavailable state.
  *
- * Only the two factories can construct this type. Neither reads a clock or validates the
+ * Only the factories can construct this type. None reads a clock or validates the
  * plausibility of an available timestamp; no value can produce MalformedTime under ADR-001
  * Decision 7. An unavailable timestamp is admitted and rendered later by the adapter.
  */
@@ -32,6 +32,11 @@ public:
     /** @brief Wrap nanoseconds since the Unix epoch supplied by the host. */
     [[nodiscard]] static constexpr RawTime available(std::chrono::sys_time<std::chrono::nanoseconds> value) noexcept {
         return {value, TimeAvailability::Available};
+    }
+
+    /** @brief Preserve a civil time the host considers unreliable (for example after a clock jump). */
+    [[nodiscard]] static constexpr RawTime doubtful(std::chrono::sys_time<std::chrono::nanoseconds> value) noexcept {
+        return {value, TimeAvailability::Doubtful};
     }
 
     /** @brief Represent a host without a usable clock. */
@@ -43,7 +48,7 @@ public:
         return tag;
     }
 
-    /** @brief Return the supplied time; meaningful only when availability() is Available. */
+    /** @brief Return the supplied time; meaningful for Available and Doubtful; the latter is not reliable civil time. */
     [[nodiscard]] constexpr std::chrono::sys_time<std::chrono::nanoseconds> value() const noexcept {
         return timestamp;
     }

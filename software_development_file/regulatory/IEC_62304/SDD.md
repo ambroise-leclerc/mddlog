@@ -13,6 +13,18 @@ par anneau ; ni ordre global entre anneaux ni permission de plusieurs producteur
 
 ## Audit
 
+Depuis #154/#155 (non encore accepté comme qualification de déploiement), RawTime distingue
+Available, Doubtful et Unavailable sans lire ni valider une horloge ; Doubtful conserve la valeur.
+AuditInput et AuditEventOptions portent monotonicTime facultatif en nanosecondes depuis le
+démarrage du producteur. AuditEvent en possède la copie hors détail tronquable ; seul un flux
+d’un démarrage est comparable. Le canonique v2 chaîne les tags et valeurs ; le lecteur conserve
+v1 (temps monotone absent), refuse les tags invalides et un changement de version dans un flux.
+La projection v2 rend la qualité explicite ; les adaptateurs texte marquent le temps douteux.
+Le témoin et l’export v2 préservent la qualité ; état témoin et export v1 restent relisibles,
+mais les pairs réseau doivent être mis à jour ensemble. Voir VER-078–081 et
+[la migration](../../../docs/migration/audit-time.md). La détection des sauts, la remise à l’heure,
+l’unicité des flux au redémarrage et la qualification des horloges appartiennent à l’hôte.
+
 AuditInput sépare catégorie et phase. AuditEvent exige les identifiants conformes aux champs
 et conserve une identité de flux et une séquence. `AuditEvent::assign` autorise les actions
 préfixées par `mddlog.` pour permettre à l'adaptateur de construire les enregistrements du ledger.

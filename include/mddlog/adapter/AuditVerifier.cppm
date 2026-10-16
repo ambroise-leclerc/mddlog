@@ -146,7 +146,9 @@ enum class VerdictCause : std::uint8_t {
     TrimDiffersFromRetirement,
     /** @brief The provider retired the stream past the highest recorded trim: anchored records went with no trim (10.5, 10.6). Set by the log reader. */
     RetirementBeyondTrim,
-    ResourceLimit
+    ResourceLimit,
+    /** @brief The anchor and stored stream name different canonical versions, both known to this reader. */
+    AnchorVersionMismatch
 };
 
 /** @brief Outcome of the retained-position check of 7.4. */
@@ -294,8 +296,8 @@ struct StreamReport {
  * the provider says. Then the verdicts of 7.5 apply in their listed order. Only a clean Anchored or Retired result raises the
  * retained position (7.4), so a rollback that was reported cannot be accepted silently afterwards.
  *
- * With one contract version known, an anchor naming another canonicalVersion is unusable (CannotVerify) before any comparison, so
- * the Altered-by-version case of 7.5 cannot arise here; it needs a second known version.
+ * Canonical versions 1 and 2 remain verifiable. A known anchor version differing from the stored
+ * stream version is Altered; unknown anchor versions remain CannotVerify.
  */
 class AnchorVerifier {
 public:
@@ -445,7 +447,9 @@ public:
         if (before.has_value() && start.afterSequence > checkpoint && report.retained == RetainedOutcome::Passed)
             report.retained = RetainedOutcome::CheckpointTrimmed;
 
-        // 5. Altered: a recomputed digest differs from the one that was anchored or retained.
+        // 5. Altered: a known anchor version or recomputed digest differs from the stored stream.
+        if (effective && !records.empty() && effective->canonicalVersion != canonicalVersionOf(records.front().bytes))
+            return finish(report, Verdict::Altered, VerdictCause::AnchorVersionMismatch);
         if (effective.has_value() && effective->position <= present && digestAtAnchor.has_value() && *digestAtAnchor != effective->digest)
             return finish(report, Verdict::Altered, VerdictCause::AnchorDigestMismatch);
         if (checkpointApplies && checkpoint <= present && digestAtCheckpoint.has_value() && *digestAtCheckpoint != before->digest)

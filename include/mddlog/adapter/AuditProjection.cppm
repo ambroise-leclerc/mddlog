@@ -5,7 +5,7 @@ import mddlog.core.auditevent;
 export import mddlog.adapter.auditevidence;
 
 export namespace mddlog::adapter {
-inline constexpr std::uint64_t auditProjectionVersion = 1;
+inline constexpr std::uint64_t auditProjectionVersion = 2;
 enum class AuditToolExit : std::uint8_t { Covered = 0, Impossible = 2, Adverse = 3, Partial = 4 };
 
 /** @brief Operation failures take precedence; adverse findings take precedence over coverage reservations. */
@@ -88,6 +88,18 @@ enum class AuditToolExit : std::uint8_t { Covered = 0, Impossible = 2, Adverse =
 }
 
 namespace projection {
+/** @brief Explicit civil-time quality; numeric civil time alone cannot express doubt. */
+[[nodiscard]] constexpr std::string_view timeStatus(core::RawTime value) {
+    switch (value.availability()) {
+        case core::TimeAvailability::Available:
+            return "available";
+        case core::TimeAvailability::Doubtful:
+            return "doubtful";
+        case core::TimeAvailability::Unavailable:
+            return "unavailable";
+    }
+    throw std::invalid_argument("unknown time quality");
+}
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers): return literals are the frozen projection v1 IDs in
 // docs/audit-export-format.md.
 /** @brief Stable projection-v1 IDs, independent of C++ enumerator ordering. */
@@ -179,6 +191,8 @@ namespace projection {
             return 28;
         case VerdictCause::ResourceLimit:
             return 29;
+        case VerdictCause::AnchorVersionMismatch:
+            return 30;
     }
     throw std::invalid_argument("unknown VerdictCause in projection");
 }
@@ -422,13 +436,13 @@ template <typename T>
     return value ? std::to_string(*value) : "null";
 }
 [[nodiscard]] inline std::string time(core::RawTime value) {
-    return value.availability() == core::TimeAvailability::Available ? std::to_string(value.value().time_since_epoch().count()) : "null";
+    return value.availability() != core::TimeAvailability::Unavailable ? std::to_string(value.value().time_since_epoch().count()) : "null";
 }
 [[nodiscard]] inline std::string anchor(const std::optional<Anchor>& value) {
     if (!value)
         return "null";
     return std::format(
-        R"({{"anchorFormat":{},"canonicalVersion":{},"streamId":{},"position":{},"digest":{},"providerId":{},"counter":{},"acceptedTimeNs":{}}})",
+        R"({{"anchorFormat":{},"canonicalVersion":{},"streamId":{},"position":{},"digest":{},"providerId":{},"counter":{},"acceptedTimeNs":{},"acceptedTimeStatus":{}}})",
         value->anchorFormat,
         value->canonicalVersion,
         quote(value->streamId),
@@ -436,7 +450,8 @@ template <typename T>
         quote(hex(value->digest)),
         quote(value->providerId),
         value->counter,
-        time(value->acceptedTime));
+        time(value->acceptedTime),
+        quote(timeStatus(value->acceptedTime)));
 }
 [[nodiscard]] inline std::string stream(const StreamReport& value) {
     return std::format(
@@ -472,7 +487,7 @@ template <typename T>
     const auto  exit = auditToolExit(report, image);
     std::string out  = std::format(
         R"({{"retainedTrust":{},"schema":"mddlog.audit.projection","version":{},"libraryVersion":{},"textEncoding":"byte-latin1","source":{},)"
-         R"("providerProvenance":{},"trust":{},"selection":{{"complete":{},"streamId":{}}},"verificationTimeNs":{},"maxAnchorAgeNs":{},"exitCode":)"
+         R"("providerProvenance":{},"trust":{},"selection":{{"complete":{},"streamId":{}}},"verificationTimeNs":{},"verificationTimeStatus":{},"maxAnchorAgeNs":{},"exitCode":)"
          R"({},"report":{{"mediumUnreadable":{},"resourceIssueId":{},"unknownLayoutVersion":{},"segmentsWithoutHeader":{},"providerCalls":{},)"
          R"("usage":{{"segments":{},"totalBytes":{},"bytesRead":{},"readCalls":{},"records":{}}},"streams":[)",
         quote(retainedTrust),
@@ -484,6 +499,7 @@ template <typename T>
         streamFilter.empty(),
         streamFilter.empty() ? "null" : quote(streamFilter),
         time(evidence.verification.verificationTime),
+        quote(timeStatus(evidence.verification.verificationTime)),
         evidence.verification.maxAnchorAge ? std::to_string(evidence.verification.maxAnchorAge->count()) : "null",
         std::to_underlying(exit),
         report.mediumUnreadable,
@@ -556,21 +572,24 @@ template <typename T>
                 append("null}");
                 continue;
             }
-            append(std::format(R"({{"sequence":{},"categoryId":{},"phaseId":{},"timeNs":{},"action":{},"actor":{},"target":{},"requirementRef":{})"
-                               R"(,"riskRef":{},"correlationId":{},"sourceSequence":{},"detail":{},"detailTruncated":{}}}}})",
-                               event.sequence,
-                               wireId(event.category),
-                               wireId(event.phase),
-                               time(event.time),
-                               quote(event.action),
-                               quote(event.actor),
-                               quote(event.target),
-                               quote(event.requirementRef),
-                               quote(event.riskRef),
-                               quote(event.correlationId),
-                               optionalNumber(event.sourceSequence),
-                               quote(event.detail),
-                               event.detailTruncated));
+            append(std::format(
+                R"({{"sequence":{},"categoryId":{},"phaseId":{},"timeNs":{},"timeStatus":{},"monotonicTimeNs":{},"action":{},"actor":{},"target":{},"requirementRef":{})"
+                R"(,"riskRef":{},"correlationId":{},"sourceSequence":{},"detail":{},"detailTruncated":{}}}}})",
+                event.sequence,
+                wireId(event.category),
+                wireId(event.phase),
+                time(event.time),
+                quote(timeStatus(event.time)),
+                event.monotonicTime ? std::to_string(event.monotonicTime->count()) : "null",
+                quote(event.action),
+                quote(event.actor),
+                quote(event.target),
+                quote(event.requirementRef),
+                quote(event.riskRef),
+                quote(event.correlationId),
+                optionalNumber(event.sourceSequence),
+                quote(event.detail),
+                event.detailTruncated));
         }
     }
     append("]}\n");

@@ -103,3 +103,10 @@ VER-070–072 enrichissent les contrôles de pertes, couverture exagérée et re
 ## Chaîne de construction et compatibilité #121
 
 CTRL-019 réduit RISK-011. Le paquet refuse un compilateur, un générateur, une version ou un composant non servis, au lieu d’échouer dans le scan des modules. Les avertissements de mddlog ne gouvernent plus la reconstruction des BMIs du consommateur. Une constante de format modifiée sans l’inventaire est refusée en revue, et chaque release productrice d’audit doit conserver son archive. Les options ABI de la bibliothèque standard restent non détectées ; aucune acceptation de risque n’est déduite ([validation](../../../docs/compatibility-validation.md)).
+
+#154/#155 précisent RISK-010 : un temps numérique ne prouve pas une heure fiable, et deux
+valeurs monotones de producteurs ou démarrages différents ne sont pas comparables. CTRL-003 et
+VER-078–080 conservent l’état Doubtful, le temps monotone hors détail tronquable et leur couverture
+par le chaînage ; le lecteur/texte expose le doute. L’hôte détecte les sauts d’horloge, décide de
+la remise à l’heure et garantit l’identité de flux par démarrage. Ces scénarios logiciels ne
+qualifient ni horloges ni politique de synchronisation et ne ferment aucune réserve système.

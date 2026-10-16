@@ -1,8 +1,29 @@
-# Audit export formats v1 — candidate contract
+# Audit export formats — candidate contract
 
 The two formats below are independent of canonical/layout/anchor and C++ API versions.
 [ADR-006](adr/ADR-006-audit-tools-and-export.md) records the design proposed for review.
 Do not interpret this candidate as #121's final stability commitment.
+
+## Version 2 additions (#154, #155, unreleased)
+
+Current writers emit projection, evidence and witness format version 2. All existing projection
+IDs retain their v1 meanings; v2 adds VerdictCause ID 30 (`AnchorVersionMismatch`). Projection v2 adds `timeStatus` (`available`, `doubtful`,
+`unavailable`) and `monotonicTimeNs` (signed startup nanoseconds or null) to decoded event fields.
+`timeNs` retains the supplied civil nanoseconds for both available and doubtful time. The root
+adds `verificationTimeStatus`, and anchor objects add `acceptedTimeStatus`, with the same strings.
+Never infer reliability from a non-null numeric time. V1 event records render absent monotonic
+values, and their original canonical bytes remain in the projection.
+
+Evidence v2 preserves the v1 layout, but its witness-encoded time tags are `u64le` 0 unavailable,
+1 available, 2 doubtful; all have an i64le nanosecond slot (zero for unavailable). The same tag
+extension applies to witness protocol/state v2. Other time tags are invalid. Evidence readers
+accept v1 with only its original tags 0 and 1 and v2 with all three tags. The file witness reads
+its old v1 durable state and writes v2 on the next update. Live witness client and service must
+be upgraded together: the protocol version check explicitly refuses a mismatched peer. No
+old archive is rewritten, and the segment layout, anchor claim and retained-position formats
+remain unchanged.
+
+The following sections preserve the original v1 contracts; v2 differs only as described above.
 
 ## Projection JSON
 

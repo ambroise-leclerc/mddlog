@@ -30,11 +30,11 @@ inline constexpr std::size_t framePayloadMax  = 65'536;
 
 /** @brief Largest preamble plus header frame: 6 + 9 + (4 + 8 + 2 + stream identity at capacity) (9.6, 125 bytes). */
 inline constexpr std::size_t maxSegmentOpeningSize = segmentPreambleSize + frameOverhead + 4 + 8 + 2 + core::auditStreamCapacity;
-/** @brief Largest record frame of a contract-version-1 record under layout version 1 (9.6, 813 bytes). */
+/** @brief Largest record frame of a contract-version-2 record under layout version 1 (822 bytes). */
 inline constexpr std::size_t maxRecordFrameSize = frameOverhead + canonicalMaxSize + sha256DigestSize;
 
 static_assert(maxSegmentOpeningSize == 125, "ADR-004 9.6 counts the largest preamble and header frame at 125 bytes");
-static_assert(maxRecordFrameSize == 813, "ADR-004 9.6 counts the largest record frame at 813 bytes");
+static_assert(maxRecordFrameSize == 822, "Canonical v2 adds nine monotonic-time bytes to the v1 maximum frame");
 
 namespace detail {
 

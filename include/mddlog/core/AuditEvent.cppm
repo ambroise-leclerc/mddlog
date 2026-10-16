@@ -92,6 +92,8 @@ struct AuditInput {
     std::string_view             correlationId;
     std::optional<std::uint64_t> sourceSequence;
     std::string_view             detail;
+    /** @brief Host-supplied elapsed time since producer startup, comparable only within this stream instance. */
+    std::optional<std::chrono::nanoseconds> monotonicTime;
 };
 
 /**
@@ -121,6 +123,7 @@ public:
         next.categoryValue       = input.category;
         next.phaseValue          = input.phase;
         next.timeValue           = input.time;
+        next.monotonicTimeValue  = input.monotonicTime;
         next.sequenceValue       = sequence;
         next.sourceSequenceValue = input.sourceSequence;
         next.shortenedValue      = next.detailValue.assignTruncating(input.detail);
@@ -187,6 +190,10 @@ public:
     [[nodiscard]] constexpr RawTime time() const noexcept {
         return timeValue;
     }
+    /** @brief Elapsed host time since startup; absent differs from zero. No clock is read or checked here. */
+    [[nodiscard]] constexpr std::optional<std::chrono::nanoseconds> monotonicTime() const noexcept {
+        return monotonicTimeValue;
+    }
     [[nodiscard]] constexpr std::string_view action() const noexcept {
         return actionValue.view();
     }
@@ -231,20 +238,21 @@ private:
         });
     }
 
-    AuditCategory                          categoryValue = AuditCategory::Lifecycle;
-    AuditPhase                             phaseValue    = AuditPhase::Requested;
-    RawTime                                timeValue     = RawTime::unavailable();
-    InlineString<auditActionCapacity>      actionValue;
-    InlineString<auditActorCapacity>       actorValue;
-    InlineString<auditTargetCapacity>      targetValue;
-    InlineString<auditReferenceCapacity>   requirementValue;
-    InlineString<auditReferenceCapacity>   riskValue;
-    InlineString<auditCorrelationCapacity> correlationValue;
-    InlineString<auditStreamCapacity>      streamValue;
-    std::uint64_t                          sequenceValue = 0;
-    std::optional<std::uint64_t>           sourceSequenceValue;
-    InlineString<auditDetailCapacity>      detailValue;
-    bool                                   shortenedValue = false;
+    AuditCategory                           categoryValue = AuditCategory::Lifecycle;
+    AuditPhase                              phaseValue    = AuditPhase::Requested;
+    RawTime                                 timeValue     = RawTime::unavailable();
+    std::optional<std::chrono::nanoseconds> monotonicTimeValue;
+    InlineString<auditActionCapacity>       actionValue;
+    InlineString<auditActorCapacity>        actorValue;
+    InlineString<auditTargetCapacity>       targetValue;
+    InlineString<auditReferenceCapacity>    requirementValue;
+    InlineString<auditReferenceCapacity>    riskValue;
+    InlineString<auditCorrelationCapacity>  correlationValue;
+    InlineString<auditStreamCapacity>       streamValue;
+    std::uint64_t                           sequenceValue = 0;
+    std::optional<std::uint64_t>            sourceSequenceValue;
+    InlineString<auditDetailCapacity>       detailValue;
+    bool                                    shortenedValue = false;
 };
 
 static_assert(std::is_trivially_copyable_v<AuditEvent>);

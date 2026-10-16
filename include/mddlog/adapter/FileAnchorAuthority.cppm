@@ -225,11 +225,16 @@ private:
             return false;
         }
         try {
-            witness::Decoder decoder{payload};
-            if (decoder.text() != "mddlog-witness" || decoder.number() != witness::protocolVersion) {
+            witness::Decoder header{payload};
+            const auto       magic   = header.text();
+            const auto       version = header.number();
+            if (magic != "mddlog-witness" || (version != 1 && version != witness::protocolVersion)) {
                 (void)fail(WitnessStoreIssue::Invalid);
                 return false;
             }
+            witness::Decoder decoder{payload, version != 1};
+            (void)decoder.text();
+            (void)decoder.number();
             auto restored = decoder.listing();
             decoder.end();
             if (restored.providerId != identity) {

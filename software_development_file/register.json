@@ -218,11 +218,14 @@
       "status": "implemented",
       "design": [
         "docs/adr/ADR-002-regulatory-audit-event-model.md",
-        "docs/audit-robustness-test-plan.md"
+        "docs/audit-robustness-test-plan.md",
+        "docs/migration/audit-time.md"
       ],
       "implementation": [
         "include/mddlog/core/AuditEvent.cppm",
-        "include/mddlog/core/AuditRing.cppm"
+        "include/mddlog/core/AuditRing.cppm",
+        "include/mddlog/core/Record.cppm",
+        "include/mddlog/core/AuditBinding.cppm"
       ]
     },
     {
@@ -1433,6 +1436,57 @@
       "scenario": null,
       "evidence": "docs/compatibility-validation.md",
       "limits": "Cinq usages représentatifs avant/après ; les autres guides de migration gardent leurs propres exemples."
+    },
+    {
+      "id": "VER-078",
+      "title": "Temps civil qualifié et temps monotone après persistance et export",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-003",
+        "CTRL-005"
+      ],
+      "test": "tests/spec/AuditTimeSpec.cpp",
+      "scenario": "audit-host-time-persistence",
+      "evidence": "docs/migration/audit-time.md",
+      "limits": "Scénarios logiciels ciblés #154/#155 ; horloges fournies par l’hôte, aucune détection de saut ni qualification de déploiement."
+    },
+    {
+      "id": "VER-079",
+      "title": "Altération des champs temporels et refus des encodages tronqués",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-005",
+        "CTRL-003"
+      ],
+      "test": "tests/spec/AuditTimeSpec.cpp",
+      "scenario": "audit-host-time-tampering",
+      "evidence": "docs/migration/audit-time.md",
+      "limits": "Scénarios logiciels ciblés #154/#155 ; horloges fournies par l’hôte, aucune détection de saut ni qualification de déploiement."
+    },
+    {
+      "id": "VER-080",
+      "title": "Restitution du temps douteux par les adaptateurs texte",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-002",
+        "CTRL-004"
+      ],
+      "test": "tests/spec/AuditTimeSpec.cpp",
+      "scenario": "diagnostic-doubtful-time",
+      "evidence": "docs/migration/audit-time.md",
+      "limits": "Scénarios logiciels ciblés #154/#155 ; horloges fournies par l’hôte, aucune détection de saut ni qualification de déploiement."
+    },
+    {
+      "id": "VER-081",
+      "title": "Relecture état témoin v1 et mise à jour v2",
+      "status": "coverage-existing",
+      "controls": [
+        "CTRL-005"
+      ],
+      "test": "tests/spec/WitnessSpec.cpp",
+      "scenario": "witness-durable-authority",
+      "evidence": "docs/migration/audit-time.md",
+      "limits": "Scénarios logiciels ciblés #154/#155 ; horloges fournies par l’hôte, aucune détection de saut ni qualification de déploiement."
     }
   ],
   "risks": [
@@ -1591,7 +1645,7 @@
     {
       "id": "RISK-010",
       "title": "Mauvaise utilisation de l’API",
-      "effect": "Contexte implicite ou destruction de portée interprétée comme réussite ; orchestration oubliée.",
+      "effect": "Contexte implicite ou destruction de portée interprétée comme réussite ; orchestration oubliée. Temps civil douteux pris pour fiable, ou temps monotones comparés entre producteurs/démarrages.",
       "controls": [
         "CTRL-003",
         "CTRL-004",
@@ -1604,7 +1658,7 @@
         "GAP-009"
       ],
       "status": "open",
-      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif."
+      "systemAssessment": "Gravité, probabilité et acceptabilité à établir par le fabricant pour son dispositif. #154/#155 : l’hôte détecte les sauts, définit la remise à l’heure et limite la comparaison monotone au flux ; VER-078–080 établissent la conservation logicielle, sans qualifier les horloges."
     },
     {
       "id": "RISK-011",
@@ -1676,7 +1730,8 @@
         "CTRL-002"
       ],
       "verifications": [
-        "VER-002"
+        "VER-002",
+        "VER-080"
       ],
       "gaps": [
         "GAP-018"
@@ -1684,7 +1739,7 @@
     },
     {
       "id": "REQ-003",
-      "text": "L’audit expose admission explicite, identité et ordre par flux sans preuve d’exécution.",
+      "text": "L’audit expose admission explicite, identité et ordre par flux sans preuve d’exécution. Le temps monotone facultatif et la qualité du temps civil fournis par l’hôte sont conservés.",
       "status": "implemented",
       "risks": [
         "RISK-001",
@@ -1699,7 +1754,9 @@
         "VER-030",
         "VER-031",
         "VER-070",
-        "VER-071"
+        "VER-071",
+        "VER-078",
+        "VER-079"
       ],
       "gaps": [
         "GAP-015"
@@ -1758,7 +1815,10 @@
         "VER-032",
         "VER-033",
         "VER-070",
-        "VER-072"
+        "VER-072",
+        "VER-078",
+        "VER-079",
+        "VER-081"
       ],
       "gaps": [
         "GAP-014",

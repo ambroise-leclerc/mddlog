@@ -1,4 +1,4 @@
-/** @brief Bounded v1 wire and durable-state encoding for the Linux witness (#115). */
+/** @brief Bounded v2 wire and durable-state encoding (v1 state remains readable) for the Linux witness (#115). */
 export module mddlog.adapter.witnesscodec;
 import std;
 import mddlog.core.auditevent;
@@ -8,7 +8,7 @@ export namespace mddlog::adapter::witness {
 inline constexpr std::size_t   maxBytes        = std::size_t{1024} * 1024;
 inline constexpr std::size_t   maxStreams      = 4096;
 inline constexpr std::size_t   maxTextBytes    = 1024;
-inline constexpr std::uint64_t protocolVersion = 1;
+inline constexpr std::uint64_t protocolVersion = 2;
 inline constexpr unsigned      byteBits        = 8;
 enum class Operation : std::uint8_t { Advance = 1, Retire, Latest, Streams };
 enum class Reply : std::uint8_t { Accepted = 1, PositionNotIncreasing, Conflict, Malformed, UnknownStream, Unavailable, Denied, Listing };
@@ -39,8 +39,11 @@ public:
         bytes.insert(bytes.end(), value.begin(), value.end());
     }
     void time(core::RawTime value) {
-        const bool available = value.availability() == core::TimeAvailability::Available;
-        number(available ? 1 : 0);
+        const bool available = value.availability() != core::TimeAvailability::Unavailable;
+        if (value.availability() == core::TimeAvailability::Doubtful)
+            number(2);
+        else
+            number(available ? 1 : 0);
         number(available ? std::bit_cast<std::uint64_t>(static_cast<std::int64_t>(value.value().time_since_epoch().count())) : 0);
     }
     void anchor(const Anchor& value) {
@@ -71,7 +74,7 @@ public:
 };
 class Decoder {
 public:
-    explicit Decoder(std::span<const std::uint8_t> input) : bytes(input) {}
+    explicit Decoder(std::span<const std::uint8_t> input, bool allowDoubtful = true) : bytes(input), doubtfulAllowed(allowDoubtful) {}
     [[nodiscard]] std::uint64_t number() {
         const auto    value = raw(sizeof(std::uint64_t));
         std::uint64_t out   = 0;
@@ -117,11 +120,12 @@ public:
     [[nodiscard]] core::RawTime time() {
         const auto available = number();
         const auto value     = number();
-        if (available > 1 || (available == 0 && value != 0))
+        if (available > (doubtfulAllowed ? 2U : 1U) || (available == 0 && value != 0))
             throw std::invalid_argument("witness time");
-        return available == 0
-                   ? core::RawTime::unavailable()
-                   : core::RawTime::available(std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(value)}});
+        if (available == 0)
+            return core::RawTime::unavailable();
+        const auto supplied = std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(value)}};
+        return available == 2 ? core::RawTime::doubtful(supplied) : core::RawTime::available(supplied);
     }
     [[nodiscard]] Anchor anchor() {
         Anchor out;
@@ -160,6 +164,7 @@ public:
 private:
     std::span<const std::uint8_t> bytes;
     std::size_t                   offset = 0;
+    bool                          doubtfulAllowed;
 };
 [[nodiscard]] inline const Anchor& anchorOf(const StreamEntry& entry) {
     if (const auto* retired = std::get_if<Retirement>(&entry))

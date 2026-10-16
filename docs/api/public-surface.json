@@ -76,7 +76,11 @@
     "canonical-event": {
       "file": "include/mddlog/adapter/AuditCanonical.cppm",
       "pattern": "canonicalContractVersion = (\\d+);",
-      "version": 1
+      "version": 2,
+      "reads": [
+        1,
+        2
+      ]
     },
     "segment-layout": {
       "file": "include/mddlog/adapter/AuditLayout.cppm",
@@ -91,7 +95,7 @@
     "witness-protocol": {
       "file": "include/mddlog/adapter/WitnessCodec.cppm",
       "pattern": "protocolVersion = (\\d+);",
-      "version": 1
+      "version": 2
     },
     "retained-position": {
       "file": "include/mddlog/adapter/FileRetainedPosition.cppm",
@@ -101,12 +105,16 @@
     "evidence-package": {
       "file": "include/mddlog/adapter/AuditEvidence.cppm",
       "pattern": "auditEvidenceVersion = (\\d+);",
-      "version": 1
+      "version": 2,
+      "reads": [
+        1,
+        2
+      ]
     },
     "projection-json": {
       "file": "include/mddlog/adapter/AuditProjection.cppm",
       "pattern": "auditProjectionVersion = (\\d+);",
-      "version": 1
+      "version": 2
     },
     "cli-configuration": {
       "file": "tools/AuditTool.cpp",

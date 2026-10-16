@@ -120,7 +120,8 @@ private:
         record.location         = source.location();
         record.operationId      = source.operationId();
         record.correlationId    = source.correlationId();
-        record.timeAvailable    = source.time().availability() == core::TimeAvailability::Available;
+        record.timeAvailable    = source.time().availability() != core::TimeAvailability::Unavailable;
+        record.timeDoubtful     = source.time().availability() == core::TimeAvailability::Doubtful;
         record.timestamp        = core::LogRecord::TimePoint{};
         if (record.timeAvailable)
             record.timestamp = std::chrono::time_point_cast<core::LogRecord::TimePoint::duration>(source.time().value());
