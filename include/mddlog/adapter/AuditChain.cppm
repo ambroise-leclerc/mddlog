@@ -190,7 +190,7 @@ private:
         } else if (version != streamVersion) {
             return ChainFinding::VersionChange;
         }
-        if (version != canonicalContractVersion)
+        if (!detail::supportedCanonicalVersion(version))
             return ChainFinding::UnsupportedVersion;
 
         const CanonicalReadResult read = decodeCanonical(bytes);

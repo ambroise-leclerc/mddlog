@@ -54,7 +54,7 @@ struct Anchor {
     }
     /** @brief Usable: complete and in a layout and contract version this library knows (7.1). */
     [[nodiscard]] bool usable() const noexcept {
-        return hasMandatoryFields() && anchorFormat == anchorFormatVersion && canonicalVersion == canonicalContractVersion;
+        return hasMandatoryFields() && anchorFormat == anchorFormatVersion && detail::supportedCanonicalVersion(canonicalVersion);
     }
 };
 

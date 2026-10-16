@@ -48,6 +48,28 @@ constexpr std::array<Vector, 4> vectors{
      }
 };
 
+// V2 reference bytes and SHA-256 computed independently with Python hashlib from the v1 vectors,
+// changing the version to 2 and appending the absent-monotonic tag 00.
+constexpr std::array<Vector, 4> currentVectors{
+    {
+     {.canonicalHex = "000200106465766963652d34322f626f6f742d37000000000000000102030118867251f555cd150010746865726170792e726174652e73657400116f70657261746f7"
+                         "23a6e757273652d3037000e70756d702f6368616e6e656c2d41000b5245512d414c4d2d303132000552432d313700076f702d30303031010000000000000029001872"
+                         "6174652031322e35206d4c2f6820636f6e6669726d65640000",
+         .digestHex    = "ba0ad3a9ff6bae5cbf0cf0311a53d4b8d7b72c296a0887c6cc6d76ce7a2d9dcd"},
+     {.canonicalHex =
+             "000200106465766963652d34322f626f6f742d370000000000000002010100000c6465766963652e7374617274000000096465766963652d34320000000000000000000000",
+         .digestHex = "ae987e6f4130c9c06b9c873e57b101a71518bbb38300db5a70914061af307d05"},
+     {.canonicalHex = "000200106465766963652d34322f626f6f742d37000000000000000304040100000000000000000009616c61726d2e61636b0000000f616c61726d2f6f63636c75736"
+                         "96f6e0000000552432d30330000010000000000000000009f616161616161616161616161616161616161616161616161616161616161616161616161616161616161"
+                         "6161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616"
+                         "161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161610100",
+         .digestHex    = "b1014b2637983a2da6324e20c99f4ec4750b35701a81333eeb8dbf59e4ee009c"},
+     {.canonicalHex = "000200106465766963652d34322f626f6f742d370000000000000004030201ffffffffffffffff000d73657373696f6e2e6c6f67696e000b7376633a7570646174657"
+                         "2000973657373696f6e2f3300000000000001ffffffffffffffff0002c3a90000",
+         .digestHex    = "8adad403acde46f3d384ffb727040dd2901c203ec057ef9ee1ddcb10c18a3274"},
+     }
+};
+
 [[nodiscard]] constexpr std::uint8_t nibble(char c) noexcept {
     return static_cast<std::uint8_t>(c <= '9' ? c - '0' : c - 'a' + 10);
 }
@@ -137,7 +159,7 @@ const speclab::Register canonicalVectors{
     "unit",
     [] {
         return speclab::Test("audit-canonical-vectors")
-            .Then("each vector's bytes and chained digest are those of Decision 8.7",
+            .Then("the v2 vectors extend the frozen Decision 8.7 inputs without elapsed time",
                   [] {
                       speclab::core::Checks checks;
                       Sha256Digest          previous = chainInitialValue;
@@ -147,10 +169,10 @@ const speclab::Register canonicalVectors{
                           checks.expect(encoded.has_value(), "the event is encodable");
                           if (!encoded)
                               continue;
-                          const auto expectedBytes = fromHex(vectors[k - 1].canonicalHex);
+                          const auto expectedBytes = fromHex(currentVectors[k - 1].canonicalHex);
                           checks.expect(std::ranges::equal(encoded->bytes(), expectedBytes), "canonical bytes of V" + std::to_string(k));
                           const Sha256Digest digest = chainDigest(encoded->bytes(), previous);
-                          checks.expect(hexOf(digest) == vectors[k - 1].digestHex, "digest of V" + std::to_string(k));
+                          checks.expect(hexOf(digest) == currentVectors[k - 1].digestHex, "digest of V" + std::to_string(k));
                           previous = digest;
                       }
                       checks.expect(eventFor(3).detailTruncated() && eventFor(3).detail().size() == 159, "V3 detail was cut at admission");
@@ -160,10 +182,10 @@ const speclab::Register canonicalVectors{
             .Then("sizes and the largest possible record agree with the contract",
                   [] {
                       speclab::core::Checks checks;
-                      checks.expect(encodeCanonical(eventFor(1))->size() == 157 && encodeCanonical(eventFor(2))->size() == 68
-                                        && encodeCanonical(eventFor(3))->size() == 251 && encodeCanonical(eventFor(4))->size() == 98,
-                                    "sizes 157, 68, 251 and 98");
-                      checks.expect(canonicalMaxSize == 2 + 98 + 8 + 2 + 9 + 66 + 66 + 98 + 66 + 66 + 119 + 9 + 162 + 1, "maximum record size");
+                      checks.expect(encodeCanonical(eventFor(1))->size() == 158 && encodeCanonical(eventFor(2))->size() == 69
+                                        && encodeCanonical(eventFor(3))->size() == 252 && encodeCanonical(eventFor(4))->size() == 99,
+                                    "v2 sizes 158, 69, 252 and 99");
+                      checks.expect(canonicalMaxSize == 2 + 98 + 8 + 2 + 9 + 66 + 66 + 98 + 66 + 66 + 119 + 9 + 162 + 1 + 9, "maximum record size");
                       checks.raise();
                   })
             .Execute();
@@ -181,9 +203,10 @@ const speclab::Register chainAndVerifier{
                       checks.expect(chain.valid() && chain.chainedThrough() == 0 && chain.headDigest() == chainInitialValue, "starts at H_0");
                       for (std::size_t k = 1; k <= vectors.size(); ++k) {
                           const auto chained = chain.append(eventFor(k));
-                          checks.expect(chained.has_value() && hexOf(chained->digest) == vectors[k - 1].digestHex, "chained digest of V" + std::to_string(k));
+                          checks.expect(chained.has_value() && hexOf(chained->digest) == currentVectors[k - 1].digestHex,
+                                        "chained digest of V" + std::to_string(k));
                       }
-                      checks.expect(chain.chainedThrough() == 4 && hexOf(chain.headDigest()) == vectors[3].digestHex, "head is H_4");
+                      checks.expect(chain.chainedThrough() == 4 && hexOf(chain.headDigest()) == currentVectors[3].digestHex, "head is H_4");
                       checks.raise();
                   })
             .Then("a refused event leaves the chain where it was",
@@ -214,9 +237,19 @@ const speclab::Register chainAndVerifier{
                                         && read.record.category == AuditCategory::RiskControl && read.record.phase == AuditPhase::Failed,
                                     "V3 fields");
                       const auto none = decodeCanonical(fromHex(vectors[1].canonicalHex));
+                      checks.expect(!read.record.monotonicTime && !none.record.monotonicTime, "v1 has no elapsed startup time");
                       checks.expect(none.status == CanonicalReadStatus::Ok && !none.record.sourceSequence.has_value()
                                         && none.record.time.availability() == mddlog::core::TimeAvailability::Unavailable,
                                     "absent is not zero (V2)");
+                      auto legacyDoubt   = fromHex(vectors[0].canonicalHex);
+                      legacyDoubt.at(30) = 2;
+                      checks.expect(decodeCanonical(legacyDoubt).status == CanonicalReadStatus::Malformed, "v1 time tag cannot acquire v2 doubt semantics");
+                      const auto         first  = fromHex(vectors[0].canonicalHex);
+                      const auto         second = encodeCanonical(eventFor(2));
+                      AuditChainVerifier mixed{streamName};
+                      checks.expect(mixed.check(first, digestFromHex(vectors[0].digestHex)) == ChainFinding::Ok
+                                        && mixed.check(second->bytes(), {}) == ChainFinding::VersionChange,
+                                    "a stream cannot change between two supported versions");
                       checks.raise();
                   })
             .Then("tampering, removal, reordering and version faults are each found",
@@ -269,7 +302,7 @@ const speclab::Register chainAndVerifier{
                       }
                       {
                           auto v2 = stored[0];
-                          v2[1]   = 2;
+                          v2[1]   = 3;
                           AuditChainVerifier v{streamName};
                           checks.expect(v.check(v2, digests[0]) == ChainFinding::UnsupportedVersion, "an unknown stream version cannot be verified");
                           checks.expect(v.cannotVerify() && !v.failedAt(), "an unknown version alone is Cannot verify");
@@ -280,20 +313,20 @@ const speclab::Register chainAndVerifier{
                       {
                           // 8.3: version 0 and a version change are found even when the stream's version is unknown.
                           auto v2   = stored[0];
-                          v2[1]     = 2;
+                          v2[1]     = 3;
                           auto v3   = stored[1];
-                          v3[1]     = 3;
+                          v3[1]     = 4;
                           auto zero = stored[1];
                           zero[0]   = 0;
                           zero[1]   = 0;
                           AuditChainVerifier a{streamName};
                           checks.expect(a.check(v2, digests[0]) == ChainFinding::UnsupportedVersion && a.check(v3, digests[1]) == ChainFinding::VersionChange,
-                                        "2 then 3 is a version change, not a second Cannot verify");
+                                        "3 then 4 is a version change, not a second Cannot verify");
                           checks.expect(a.failedAt() == 2 && !a.cannotVerify(), "the first inconsistent record is named, and Inconsistent wins");
                           AuditChainVerifier b{streamName};
                           checks.expect(b.check(v2, digests[0]) == ChainFinding::UnsupportedVersion && b.check(zero, digests[1]) == ChainFinding::Malformed
                                             && b.failedAt() == 2,
-                                        "2 then 0 is malformed");
+                                        "3 then 0 is malformed");
                           AuditChainVerifier c{streamName};
                           checks.expect(c.check(v2, digests[0]) == ChainFinding::UnsupportedVersion
                                             && c.check(v2, digests[1]) == ChainFinding::UnsupportedVersion && c.cannotVerify() && !c.failedAt(),

@@ -48,9 +48,9 @@ struct Log {
 
 /** @brief The same log with record `k` (1-based) altered and every later digest recomputed: the rewrite the anchor exists to catch. */
 [[nodiscard]] Log rewriteWithRecompute(const Log& original, std::size_t k) {
-    Log rewritten                  = original;
-    rewritten.bytes[k - 1].back() ^= 0x01;  // flip detailTruncated
-    Sha256Digest previous          = rewritten.digestAt(k - 1);
+    Log rewritten                                                 = original;
+    rewritten.bytes[k - 1].at(rewritten.bytes[k - 1].size() - 2) ^= 0x01;  // flip detailTruncated
+    Sha256Digest previous                                         = rewritten.digestAt(k - 1);
     for (std::size_t i = k - 1; i < rewritten.bytes.size(); ++i) {
         previous             = chainDigest(rewritten.bytes[i], previous);
         rewritten.digests[i] = previous;
@@ -182,7 +182,7 @@ const speclab::Register coverageStates{
                                     "Anchored through 5");
                       checks.expect(report.firstRetained == 1 && report.lastPresent == 5, "coverage 1 … 5");
                       checks.expect(report.anchor.has_value() && report.anchor->providerId == "witness-1" && report.anchor->counter == 1
-                                        && report.anchor->canonicalVersion == 1,
+                                        && report.anchor->canonicalVersion == canonicalContractVersion,
                                     "the report names the anchor's provider, counter and version");
                       checks.expect(report.rollbackNotExcluded(), "with no retained position, rollback is not excluded");
                       checks.raise();
@@ -258,8 +258,8 @@ const speclab::Register coverageStates{
                       RetainedPosition       retained;
                       AnchorVerifier         verifier{provider, retained};
                       (void)anchorAt(provider, log, 4);
-                      log.bytes[2].back() ^= 0x01;
-                      const auto report    = run(verifier, log);
+                      log.bytes[2].at(log.bytes[2].size() - 2) ^= 0x01;
+                      const auto report                         = run(verifier, log);
                       checks.expect(report.verdict == Verdict::Inconsistent && report.chainFinding == ChainFinding::DigestMismatch
                                         && report.failedAt == std::uint64_t{3},
                                     "Inconsistent, naming record 3");
@@ -315,7 +315,7 @@ const speclab::Register coverageStates{
                           if (variant == 0)
                               anchor.anchorFormat = 9;
                           else if (variant == 1)
-                              anchor.canonicalVersion = 2;
+                              anchor.canonicalVersion = canonicalContractVersion + 1;
                           else
                               anchor.providerId.clear();
                           provider.inject(anchor);
@@ -327,12 +327,28 @@ const speclab::Register coverageStates{
                       }
                       checks.raise();
                   })
+            .Then("a known legacy anchor version cannot cover a v2 stream",
+                  [] {
+                      speclab::core::Checks  checks;
+                      const Log              log = writeLog(3);
+                      InMemoryAnchorProvider provider{"witness-1"};
+                      RetainedPosition       retained;
+                      (void)anchorAt(provider, log, 3);
+                      auto legacy             = std::get<Anchor>(provider.latest(streamName));
+                      legacy.canonicalVersion = 1;
+                      provider.inject(legacy);
+                      AnchorVerifier verifier{provider, retained};
+                      const auto     report = run(verifier, log);
+                      checks.expect(report.verdict == Verdict::Altered && report.cause == VerdictCause::AnchorVersionMismatch && retained.empty(),
+                                    "a known version mismatch is explicit and never retained");
+                      checks.raise();
+                  })
             .Then("an unknown stream version is Cannot verify with no coverage",
                   [] {
                       speclab::core::Checks checks;
                       Log                   log = writeLog(2);
-                      log.bytes[0][1]           = 2;
-                      log.bytes[1][1]           = 2;
+                      log.bytes[0][1]           = canonicalContractVersion + 1;
+                      log.bytes[1][1]           = canonicalContractVersion + 1;
                       InMemoryAnchorProvider provider{"witness-1"};
                       RetainedPosition       retained;
                       AnchorVerifier         verifier{provider, retained};

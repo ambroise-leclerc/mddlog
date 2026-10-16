@@ -12,6 +12,14 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Carry optional host-supplied startup nanoseconds through `AuditInput`, `AuditEvent` and
+  `AuditEventOptions`; persist and project them without consuming detail capacity (#154).
+- Add `TimeAvailability::Doubtful` and `RawTime::doubtful(value)`, preserving civil time with
+  an explicit quality flag in audit and diagnostic text adapters (#155).
+- Write canonical, witness, evidence and projection format v2. Keep canonical/evidence v1
+  archives and witness v1 durable state readable; live witness peers upgrade together.
+  See [audit time migration](docs/migration/audit-time.md).
+
 - Propose the 1.0 compatibility commitments in
   [ADR-007](docs/adr/ADR-007-compatibility-and-distribution.md): surface tiers recorded in a
   checked [inventory](docs/api/public-surface.json), SemVer and deprecation without an ABI/BMI

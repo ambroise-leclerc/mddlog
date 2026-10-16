@@ -170,7 +170,7 @@ def verify_evidence(root):
             for history in chain['histories']:
                 require(history['command'][0] != 'sudo', 'chain worker unexpectedly elevated')
                 trace.write_bytes(archive.read(str(prefix / f"seed-{history['seed']}" / 'trace.jsonl')))
-                result = oracle.verify_trace(trace, profile['boots'], profile['records'])
+                result = oracle.verify_trace(trace, profile['boots'], profile['records'], canonical_version=1)
                 require(all(history[key] == value for key, value in result.items()), 'replayed history differs from report')
     return {'status': 'PASS', 'members': len(inventory), 'histories': 32,
             'baseline_records': sum(item['baseline_records'] for item in chain['histories']),

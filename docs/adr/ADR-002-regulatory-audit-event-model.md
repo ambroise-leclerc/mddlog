@@ -16,8 +16,10 @@ Accepted with these stated limits, which acceptance does not lift:
   loss remains outside every guarantee;
 - the `Lifecycle` and `Operator` categories have no runtime call site in any known consumer; their
   vocabularies are host-defined (Decision 6);
-- the optional monotonic value of Decision 5 is not carried: ordering within a stream rests on the
-  sequence, and civil time is an attribute;
+- since the unreleased implementation of #154/#155, events also carry optional host-supplied
+  startup nanoseconds (`monotonicTime`) and civil time can retain an explicit `Doubtful` state.
+  Sequence remains the strict per-stream ordering key. This addition is outside the historical
+  acceptance cited above; see [migration](../migration/audit-time.md);
 - stream uniqueness is enforced per consumer adapter only; across adapters, processes and boot
   sessions it remains the host's obligation (Decision 5).
 

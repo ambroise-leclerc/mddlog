@@ -116,7 +116,7 @@ enum class StorageConfigError : std::uint8_t {
 };
 
 /**
- * @brief Segments kept free for the ledger: the number that holds `N + S + 3` record frames of 813 bytes, at `⌊(segmentSize − 125) / 813⌋` frames per
+ * @brief Segments kept free for the ledger: the number that holds `N + S + 3` record frames of 822 bytes, at `⌊(segmentSize − 125) / 822⌋` frames per
  * segment, plus one segment (9.6). Zero when the segment is too small to hold one frame.
  */
 [[nodiscard]] constexpr std::size_t ledgerReserveSegments(std::size_t segmentSize, std::size_t segmentCount, std::size_t maxProducerStreams) noexcept {

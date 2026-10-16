@@ -19,18 +19,20 @@ robustness = module_from_spec(spec)
 spec.loader.exec_module(robustness)
 
 
-def canonical(stream, sequence, detail):
-    """ADR-004 8.2, for the campaign's explicit Lifecycle/Requested/unavailable input."""
+def canonical(stream, sequence, detail, version=2):
+    """ADR-004 8.2a (v2), for the campaign's explicit Lifecycle/Requested/unavailable input."""
     def string(value):
         encoded = value.encode('utf-8')
         return struct.pack('>H', len(encoded)) + encoded
-    return (struct.pack('>H', 1) + string(stream) + struct.pack('>Q', sequence)
+    if version not in (1, 2):
+        raise AssertionError('unsupported campaign canonical version')
+    return (struct.pack('>H', version) + string(stream) + struct.pack('>Q', sequence)
             + bytes([1, 1, 0]) + string('campaign.record') + string('')
             + string('test') + string('') + string('') + string('')
-            + bytes([1]) + struct.pack('>Q', sequence) + string(detail[:160]) + bytes([int(len(detail.encode('utf-8')) > 160)]))
+            + bytes([1]) + struct.pack('>Q', sequence) + string(detail[:160]) + bytes([int(len(detail.encode('utf-8')) > 160)]) + (b'\0' if version == 2 else b''))
 
 
-def verify_trace(path, boots, records):
+def verify_trace(path, boots, records, canonical_version=2):
     """The expected bytes derive from requests, never the tested decoder or encoder."""
     if not path.is_file() or path.stat().st_size > 16 * 1024 * 1024:
         raise AssertionError('missing/excessive trace')
@@ -50,7 +52,7 @@ def verify_trace(path, boots, records):
             sequence = len(stream['inputs']) + 1
             if event['sequence'] != sequence or stream['fault'] or sequence - 1 - stream['handed'] >= 4:
                 raise AssertionError('admission identity mismatch')
-            encoded = canonical(event['stream'], sequence, event['detail'])
+            encoded = canonical(event['stream'], sequence, event['detail'], canonical_version)
             previous = stream['digests'][-1] if sequence > 1 else bytes(32)
             stream['inputs'].append(encoded)
             stream['digests'].append(hashlib.sha256(encoded + previous).digest())

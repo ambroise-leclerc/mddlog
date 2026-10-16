@@ -26,7 +26,8 @@ struct LogRecord {
 
     // Core logging information
     TimePoint   timestamp;                ///< Event time; host-supplied for governed records
-    bool        timeAvailable{true};      ///< False when the governed producer had no usable clock
+    bool        timeDoubtful{false};      ///< Host marks the supplied civil time as unreliable
+    bool        timeAvailable{true};      ///< True when a numeric timestamp exists; inspect timeDoubtful too
     LogLevel    level{LogLevel::Info};    ///< Severity level
     std::string message;                  ///< Log message content
     bool        messageTruncated{false};  ///< True when the governed message was shortened
@@ -110,7 +111,7 @@ struct LogRecord {
 
     /**
      * @brief Get formatted timestamp string
-     * @return ISO 8601 UTC timestamp with millisecond precision, or "unavailable" when the host
+     * @return ISO 8601 UTC timestamp with millisecond precision and an explicit doubtful marker, or "unavailable" when the host
      *         supplied no usable time.
      *
      * Formats via std::chrono's formatter rather than std::gmtime(): gmtime() returns a
@@ -121,7 +122,8 @@ struct LogRecord {
         if (!timeAvailable)
             return "unavailable";
         using namespace std::chrono;
-        return std::format("{:%Y-%m-%dT%H:%M:%S}Z", time_point_cast<milliseconds>(timestamp));
+        const auto formatted = std::format("{:%Y-%m-%dT%H:%M:%S}Z", time_point_cast<milliseconds>(timestamp));
+        return timeDoubtful ? formatted + " [doubtful]" : formatted;
     }
 
     /**

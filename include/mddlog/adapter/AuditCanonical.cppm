@@ -1,4 +1,4 @@
-/** @brief Canonical byte contract, version 1, for AuditEvent (ADR-004 Decision 8). */
+/** @brief Canonical byte contract, writing version 2 and reading versions 1 and 2, for AuditEvent (ADR-004 Decision 8). */
 
 export module mddlog.adapter.auditcanonical;
 
@@ -10,9 +10,9 @@ import mddlog.core.auditevent;
 export namespace mddlog::adapter {
 
 /** @brief The contract version this encoder writes (ADR-004 8.1). Version 0 is never valid. */
-inline constexpr std::uint16_t canonicalContractVersion = 1;
+inline constexpr std::uint16_t canonicalContractVersion = 2;
 
-/** @brief Largest canonical record of version 1: every field at its AuditEvent capacity (8.2). */
+/** @brief Largest canonical record of version 2: every field at its AuditEvent capacity (8.2). */
 inline constexpr std::size_t canonicalMaxSize = 2                                     // contract version
                                                 + 2 + core::auditStreamCapacity       // streamId
                                                 + 8                                   // sequence
@@ -26,14 +26,19 @@ inline constexpr std::size_t canonicalMaxSize = 2                               
                                                 + 2 + core::auditCorrelationCapacity  // correlationId
                                                 + 1 + 8                               // sourceSequence
                                                 + 2 + core::auditDetailCapacity       // detail
-                                                + 1;                                  // detailTruncated
+                                                + 1                                   // detailTruncated
+                                                + 1 + 8;                              // optional monotonicTime
 
 // The i64 time field takes the nanosecond count as RawTime holds it, with no conversion (8.2).
 // Width and signedness, not type identity: int64_t is `long` on Linux but nanoseconds::rep is `long long`.
 static_assert(std::is_signed_v<std::chrono::nanoseconds::rep> && sizeof(std::chrono::nanoseconds::rep) == sizeof(std::int64_t),
-              "canonical contract version 1 requires 64-bit signed nanoseconds");
+              "canonical contract requires 64-bit signed nanoseconds");
 
 namespace detail {
+
+[[nodiscard]] constexpr bool supportedCanonicalVersion(std::uint16_t version) noexcept {
+    return version == 1 || version == canonicalContractVersion;
+}
 
 [[nodiscard]] constexpr std::uint8_t categoryByte(core::AuditCategory value) noexcept {
     switch (value) {
@@ -119,8 +124,8 @@ public:
         w.u64(event.sequence());
         w.u8(category);
         w.u8(phase);
-        if (event.time().availability() == core::TimeAvailability::Available) {
-            w.u8(0x01);
+        if (event.time().availability() != core::TimeAvailability::Unavailable) {
+            w.u8(event.time().availability() == core::TimeAvailability::Doubtful ? 0x02 : 0x01);
             w.u64(static_cast<std::uint64_t>(event.time().value().time_since_epoch().count()));
         } else {
             w.u8(0x00);
@@ -139,6 +144,12 @@ public:
         }
         w.string(event.detail());
         w.u8(event.detailTruncated() ? 0x01 : 0x00);
+        if (const auto monotonic = event.monotonicTime(); monotonic.has_value()) {
+            w.u8(0x01);
+            w.u64(static_cast<std::uint64_t>(monotonic->count()));
+        } else {
+            w.u8(0x00);
+        }
         record.length = w.size();
         return record;
     }
@@ -171,21 +182,22 @@ enum class CanonicalReadStatus : std::uint8_t {
 
 /** @brief Fields of a decoded record; the string views point into the bytes that were read. */
 struct DecodedAuditRecord {
-    std::uint16_t                version = 0;
-    std::string_view             streamId;
-    std::uint64_t                sequence = 0;
-    core::AuditCategory          category = core::AuditCategory::Lifecycle;
-    core::AuditPhase             phase    = core::AuditPhase::Requested;
-    core::RawTime                time     = core::RawTime::unavailable();
-    std::string_view             action;
-    std::string_view             actor;
-    std::string_view             target;
-    std::string_view             requirementRef;
-    std::string_view             riskRef;
-    std::string_view             correlationId;
-    std::optional<std::uint64_t> sourceSequence;
-    std::string_view             detail;
-    bool                         detailTruncated = false;
+    std::uint16_t                           version = 0;
+    std::string_view                        streamId;
+    std::uint64_t                           sequence = 0;
+    core::AuditCategory                     category = core::AuditCategory::Lifecycle;
+    core::AuditPhase                        phase    = core::AuditPhase::Requested;
+    core::RawTime                           time     = core::RawTime::unavailable();
+    std::string_view                        action;
+    std::string_view                        actor;
+    std::string_view                        target;
+    std::string_view                        requirementRef;
+    std::string_view                        riskRef;
+    std::string_view                        correlationId;
+    std::optional<std::uint64_t>            sourceSequence;
+    std::string_view                        detail;
+    bool                                    detailTruncated = false;
+    std::optional<std::chrono::nanoseconds> monotonicTime;
 };
 
 struct CanonicalReadResult {
@@ -253,10 +265,10 @@ private:
 }  // namespace detail
 
 /**
- * @brief Decode one stored record under version 1 and apply every check of 8.3.
+ * @brief Decode a stored v1 or v2 record and apply the field checks of ADR-004 8.3.
  *
- * The caller passes exactly one record's bytes (the storage frame is Decision 9). A version other
- * than 1 is reported without decoding anything; version 0 and short input are Malformed whatever
+ * The caller passes exactly one record's bytes (the storage frame is Decision 9). An unsupported version
+ * is reported without decoding anything; version 0 and short input are Malformed whatever
  * the reader supports.
  */
 [[nodiscard]] constexpr CanonicalReadResult decodeCanonical(std::span<const std::uint8_t> bytes) noexcept {
@@ -264,7 +276,7 @@ private:
     result.version = canonicalVersionOf(bytes);
     if (bytes.size() < 2 || result.version == 0)
         return result;
-    if (result.version != canonicalContractVersion) {
+    if (!detail::supportedCanonicalVersion(result.version)) {
         result.status = CanonicalReadStatus::UnsupportedVersion;
         return result;
     }
@@ -281,11 +293,22 @@ private:
     std::uint64_t timeValue = 0;
     std::uint64_t srcValue  = 0;
     if (!r.string(d.streamId, core::auditStreamCapacity, true, true) || !r.u64(d.sequence) || d.sequence == 0 || !r.u8(cat) || !r.u8(pha) || !r.u8(timeP)
-        || timeP > 1 || (timeP == 1 && !r.u64(timeValue)) || !r.string(d.action, core::auditActionCapacity, true, true)
+        || timeP > (result.version == 1 ? 1 : 2) || (timeP != 0 && !r.u64(timeValue)) || !r.string(d.action, core::auditActionCapacity, true, true)
         || !r.string(d.actor, core::auditActorCapacity, true, false) || !r.string(d.target, core::auditTargetCapacity, true, true)
         || !r.string(d.requirementRef, core::auditReferenceCapacity, true, false) || !r.string(d.riskRef, core::auditReferenceCapacity, true, false)
         || !r.string(d.correlationId, core::auditCorrelationCapacity, true, false) || !r.u8(srcP) || srcP > 1 || (srcP == 1 && !r.u64(srcValue))
-        || !r.string(d.detail, core::auditDetailCapacity, false, false) || !r.u8(trunc) || trunc > 1 || !r.atEnd())
+        || !r.string(d.detail, core::auditDetailCapacity, false, false) || !r.u8(trunc) || trunc > 1)
+        return result;
+
+    if (result.version != 1) {
+        std::uint8_t  present   = 0;
+        std::uint64_t monotonic = 0;
+        if (!r.u8(present) || present > 1 || (present == 1 && !r.u64(monotonic)))
+            return result;
+        if (present == 1)
+            d.monotonicTime = std::chrono::nanoseconds{std::bit_cast<std::int64_t>(monotonic)};
+    }
+    if (!r.atEnd())
         return result;
 
     switch (cat) {
@@ -323,8 +346,11 @@ private:
         default:
             return result;
     }
+    const auto civilTime = std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{std::bit_cast<std::int64_t>(timeValue)}};
     if (timeP == 1)
-        d.time = core::RawTime::available(std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{static_cast<std::int64_t>(timeValue)}});
+        d.time = core::RawTime::available(civilTime);
+    else if (timeP == 2)
+        d.time = core::RawTime::doubtful(civilTime);
     if (srcP == 1)
         d.sourceSequence = srcValue;
     d.detailTruncated = trunc == 1;

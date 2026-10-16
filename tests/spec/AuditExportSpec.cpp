@@ -103,7 +103,7 @@ const speclab::Register refusals{"Evidence decoder rejects unsupported, truncate
                                                    for (const auto size : {std::size_t{0}, std::size_t{8}, encoded.size() - 1, encoded.size() / 2})
                                                        checks.expect(refused(std::span(encoded).first(size)), "truncation refused");
                                                    auto unknown  = encoded;
-                                                   unknown.at(8) = 2;
+                                                   unknown.at(8) = auditEvidenceVersion + 1;
                                                    checks.expect(refused(unknown), "unknown schema refused");
                                                    auto damaged                    = encoded;
                                                    damaged.at(damaged.size() / 2) ^= std::uint8_t{1};

@@ -130,6 +130,7 @@ add_executable(mddlog_specs
     spec/AuditResourceSpec.cpp
     spec/AuditExportSpec.cpp
     spec/AuditServiceSpec.cpp
+    spec/AuditTimeSpec.cpp
     spec/AuditCanonicalSpec.cpp
     spec/AuditAnchorSpec.cpp
     spec/AuditStorageSpec.cpp

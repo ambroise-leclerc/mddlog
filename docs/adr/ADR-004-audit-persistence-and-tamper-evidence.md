@@ -593,6 +593,31 @@ this decision. Changing one is a new version (8.5).
 - **Self-delimiting.** A reader that knows version 1 finds the end of a record from its own bytes.
   How records are framed in storage is Decision 9 (9.4).
 
+#### 8.2a Canonical version 2 (#154, #155, unreleased)
+
+The current writer emits version 2. Version 1 above remains a frozen read contract, including
+its reference vectors in 8.7; both versions remain readable and verifiable from their original
+bytes. A stream instance uses exactly one version, including across segment boundaries. Start a
+new stream identity when moving a producer to version 2; never append v2 to an existing v1 stream.
+
+Version 2 retains fields 1–15 of 8.2 in the same order, with these explicit changes:
+
+- The first `u16be` is 2.
+- Civil time uses tag `00` (unavailable, no value), `01` (available, signed i64 nanoseconds since
+  Unix epoch), or `02` (doubtful, the same signed i64 value). Tag 02 is invalid in v1.
+- Field 16 follows `detailTruncated`: `monotonicTime`, tag `00` without a value or tag `01`
+  followed by a signed i64 nanosecond count, in two's complement, big endian. Other tags,
+  missing bytes and trailing bytes are malformed. Absent differs from zero. V1 decodes as absent.
+
+The host supplies elapsed time since its producer startup; the library reads no clock and checks
+neither sign nor progression. Values are comparable only within one producer's boot/stream
+instance; sequence remains the strict ordering key. Civil-time doubt is also a host assessment,
+never inferred from either clock by the library. All tags and values enter C and its hash chain.
+The maximum canonical record is 781 bytes (772 + 9), and the maximum frame under layout v1 is
+822 bytes (813 + 9). Current reserve calculations in 9.6 therefore use 822 in place of 813;
+segment/header layouts and their version stay unchanged. A known anchor canonical version that
+differs from its stored stream is Altered; an unknown anchor version remains CannotVerify.
+
 #### 8.3 Reading a record
 
 A reader checks the stream in three steps, in this order. The first two need no knowledge of any

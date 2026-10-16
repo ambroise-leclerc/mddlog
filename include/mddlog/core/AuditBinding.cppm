@@ -9,8 +9,9 @@ export namespace mddlog::core {
 
 /** @brief Facts specific to this emission; views are read synchronously and copied on admission. */
 struct AuditEventOptions {
-    std::string_view             detail;
-    std::optional<std::uint64_t> sourceSequence;
+    std::string_view                        detail;
+    std::optional<std::uint64_t>            sourceSequence;
+    std::optional<std::chrono::nanoseconds> monotonicTime;
 };
 
 /**
@@ -40,7 +41,8 @@ public:
                                      .riskRef        = description.riskRef(),
                                      .correlationId  = context.correlationId(),
                                      .sourceSequence = options.sourceSequence,
-                                     .detail         = options.detail});
+                                     .detail         = options.detail,
+                                     .monotonicTime  = options.monotonicTime});
     }
 
 private:

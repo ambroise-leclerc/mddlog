@@ -51,17 +51,17 @@ void require(bool condition, std::string_view message = "witness test preconditi
             .providerId       = std::move(providerId),
             .counter          = counter};
 }
-[[nodiscard]] std::vector<std::uint8_t> stateBytes(const ProviderListing& listing) {
+[[nodiscard]] std::vector<std::uint8_t> stateBytes(const ProviderListing& listing, std::uint64_t version = witness::protocolVersion) {
     witness::Encoder encoder;
     encoder.text("mddlog-witness");
-    encoder.number(witness::protocolVersion);
+    encoder.number(version);
     encoder.listing(listing);
     const auto checksum = sha256(encoder.bytes);
     encoder.raw(checksum);
     return encoder.bytes;
 }
-void seedState(const Directory& directory, const ProviderListing& listing) {
-    const auto    bytes = stateBytes(listing);
+void seedState(const Directory& directory, const ProviderListing& listing, std::uint64_t version = witness::protocolVersion) {
+    const auto    bytes = stateBytes(listing, version);
     std::ofstream output(directory.path / "witness.bin", std::ios::binary | std::ios::trunc);
     for (const auto byte : bytes)
         output.put(static_cast<char>(byte));
@@ -131,6 +131,29 @@ const speclab::Register durable{
     "unit",
     [] {
         return speclab::Test("witness-durable-authority")
+            .Then("a legacy v1 state is readable and its next durable update writes v2",
+                  [] {
+                      Directory directory;
+                      require(FileAnchorAuthority::initialize(directory.config()).has_value());
+                      auto legacy             = fixtureAnchor("allowed", "witness", 1);
+                      legacy.canonicalVersion = 1;
+                      seedState(directory, {.providerId = "witness", .head = 1, .entries = {legacy}}, 1);
+                      {
+                          auto made = FileAnchorAuthority::open(directory.config());
+                          require(made.has_value(), "legacy state opened");
+                          const auto held = std::get<Anchor>((*made)->latest("allowed"));
+                          require(held.canonicalVersion == 1 && held.counter == 1, "legacy anchor preserved");
+                          require(std::holds_alternative<AnchorStamp>((*made)->retire("allowed", 1)), "legacy state can be updated");
+                      }
+                      std::ifstream             input(directory.path / "witness.bin", std::ios::binary);
+                      std::vector<std::uint8_t> bytes;
+                      for (char byte = 0; input.get(byte);)
+                          bytes.push_back(static_cast<std::uint8_t>(byte));
+                      witness::Decoder decoder(bytes);
+                      require(decoder.text() == "mddlog-witness" && decoder.number() == witness::protocolVersion, "updated state writes current version");
+                      auto made = FileAnchorAuthority::open(directory.config());
+                      require(made.has_value() && std::holds_alternative<Retirement>((*made)->latest("allowed")), "updated state reopens");
+                  })
             .Then("enrolment is explicit; reopening preserves counters and conflicts",
                   [] {
                       Directory  directory;

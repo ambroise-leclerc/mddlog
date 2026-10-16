@@ -6,7 +6,7 @@ export import mddlog.adapter.auditlogverifier;
 import mddlog.adapter.witnesscodec;
 
 export namespace mddlog::adapter {
-inline constexpr std::uint64_t auditEvidenceVersion = 1;
+inline constexpr std::uint64_t auditEvidenceVersion = 2;
 inline constexpr std::size_t   defaultEvidenceBytes = std::size_t{144} * 1024 * 1024;
 
 struct EvidenceSegment {
@@ -210,7 +210,7 @@ private:
 };
 }  // namespace evidencecodec
 
-/** @brief Decode v1 only. Local budgets cap all embedded budgets, and are checked before copying fields. */
+/** @brief Decode v1 and v2. Local budgets cap all embedded budgets, and are checked before copying fields. */
 [[nodiscard]] inline AuditEvidence
 decodeAuditEvidence(std::span<const std::uint8_t> bytes, AuditResourceLimits local = {}, std::size_t maxBytes = defaultEvidenceBytes) {
     using namespace evidencecodec;
@@ -223,7 +223,8 @@ decodeAuditEvidence(std::span<const std::uint8_t> bytes, AuditResourceLimits loc
     const auto payload = bytes.first(bytes.size() - sha256DigestSize);
     Decoder    input(payload);
     (void)input.raw(magic.size());
-    if (input.number() != auditEvidenceVersion)
+    const auto version = input.number();
+    if (version != 1 && version != auditEvidenceVersion)
         throw std::invalid_argument("unsupported evidence version");
     if (!std::ranges::equal(sha256(payload), bytes.last(sha256DigestSize)))
         throw std::invalid_argument("evidence checksum mismatch or truncation");
@@ -231,7 +232,7 @@ decodeAuditEvidence(std::span<const std::uint8_t> bytes, AuditResourceLimits loc
     out.source                 = input.text(local.maxProviderTextBytes);
     out.providerProvenance     = input.text(local.maxProviderTextBytes);
     const auto       timeBytes = input.blob(metadataBytes);
-    witness::Decoder clock(timeBytes);
+    witness::Decoder clock(timeBytes, version != 1);
     out.verification.verificationTime = clock.time();
     clock.end();
     const auto age = input.number();
@@ -250,7 +251,7 @@ decodeAuditEvidence(std::span<const std::uint8_t> bytes, AuditResourceLimits loc
     const auto& limits        = out.verification.resources;
     const auto  providerBytes = input.blob(metadataBytes);
     if (!providerBytes.empty()) {
-        witness::Decoder providerInput(providerBytes);
+        witness::Decoder providerInput(providerBytes, version != 1);
         out.provider = providerInput.listing();
         providerInput.end();
         if (!witness::validListing(*out.provider, out.provider->providerId) || out.provider->entries.size() > limits.maxProviderEntries

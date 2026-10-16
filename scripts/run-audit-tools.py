@@ -144,7 +144,7 @@ def main():
             run(inspect + ['--max-total-bytes', '1'], 2)
             run([args.cli, 'verify', '--archive', package, '--max-archive-bytes', '1'], 2)
             data = package.read_bytes()
-            for name, damaged in [('cut', data[:-1]), ('unknown', data[:8] + number(2) + data[16:]), ('checksum', data[:-1] + bytes([data[-1] ^ 1]))]:
+            for name, damaged in [('cut', data[:-1]), ('unknown', data[:8] + number(3) + data[16:]), ('checksum', data[:-1] + bytes([data[-1] ^ 1]))]:
                 path = root / (name + '.mda')
                 path.write_bytes(damaged)
                 run([args.cli, 'verify', '--archive', path], 2)
