@@ -44,13 +44,14 @@ const speclab::Register persistedTime{
                       const std::array                                clocks{RawTime::available(civil), RawTime::doubtful(civil), RawTime::unavailable()};
                       const std::array<std::optional<nanoseconds>, 3> elapsed{std::nullopt, nanoseconds{0}, nanoseconds::max()};
                       for (std::size_t i = 0; i < clocks.size(); ++i) {
-                          checks.expect(binding.record(AuditPhase::Executed, clocks[i], {.detail = longDetail, .monotonicTime = elapsed[i]}).wasAdmitted(),
-                                        "admitted");
+                          checks.expect(
+                              binding.record(AuditPhase::Executed, clocks.at(i), {.detail = longDetail, .monotonicTime = elapsed.at(i)}).wasAdmitted(),
+                              "admitted");
                       }
                       const auto view = ring.drain();
                       for (const auto& event : view.first()) {
                           const auto i = static_cast<std::size_t>(event.sequence() - 1);
-                          checks.expect(event.monotonicTime() == elapsed[i] && event.detailTruncated(), "elapsed value is independent of detail truncation");
+                          checks.expect(event.monotonicTime() == elapsed.at(i) && event.detailTruncated(), "elapsed value is independent of detail truncation");
                           checks.expect(rig->sink->accept(event), "persisted");
                       }
                       rig->sink->close();
@@ -72,9 +73,9 @@ const speclab::Register persistedTime{
                           for (std::size_t i = 0; i < stream->records.size(); ++i) {
                               const auto& stored  = stream->records[i];
                               const auto  decoded = decodeCanonical(stored.bytes);
-                              checks.expect(decoded.status == CanonicalReadStatus::Ok && decoded.record.monotonicTime == elapsed[i]
-                                                && decoded.record.time.availability() == clocks[i].availability()
-                                                && decoded.record.time.value() == clocks[i].value(),
+                              checks.expect(decoded.status == CanonicalReadStatus::Ok && decoded.record.monotonicTime == elapsed.at(i)
+                                                && decoded.record.time.availability() == clocks.at(i).availability()
+                                                && decoded.record.time.value() == clocks.at(i).value(),
                                             "exact time and quality round trip");
                               checks.expect(chain.check(stored.bytes, stored.digest) == ChainFinding::Ok, "original chain verifies");
                           }
@@ -82,8 +83,8 @@ const speclab::Register persistedTime{
                       RetainedPosition retained;
                       const auto       report     = LogVerifier(medium, provider, retained).verify();
                       const auto       projection = auditProjectionJson(archive, report, image, "test");
-                      checks.expect(projection.contains("\"timeStatus\":\"doubtful\"") && projection.contains("\"timeNs\":-123")
-                                        && projection.contains("\"monotonicTimeNs\":0") && projection.contains("\"monotonicTimeNs\":null"),
+                      checks.expect(projection.contains(R"("timeStatus":"doubtful")") && projection.contains(R"("timeNs":-123)")
+                                        && projection.contains(R"("monotonicTimeNs":0)") && projection.contains(R"("monotonicTimeNs":null)"),
                                     "reader renders explicit states and elapsed value");
                       checks.raise();
                   })
