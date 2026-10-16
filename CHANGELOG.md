@@ -12,6 +12,11 @@ is a certification, a validation for medical-device use, or a production-readine
 
 ## Unreleased
 
+- Fix `mddlog::mddlog` failing to compile with Clang on libstdc++ (Clang's Linux default) under
+  warnings-as-errors: `SinkRegistry`'s deliberate use of the deprecated `shared_ptr` atomic free
+  functions is now silenced for Clang too, including clang-cl on MSVC's STL. The core was not
+  affected (#150).
+
 - Propose the 1.0 compatibility commitments in
   [ADR-007](docs/adr/ADR-007-compatibility-and-distribution.md): surface tiers recorded in a
   checked [inventory](docs/api/public-surface.json), SemVer and deprecation without an ABI/BMI

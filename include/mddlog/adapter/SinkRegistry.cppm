@@ -498,36 +498,48 @@ private:
     // included - must go through them; a plain load/store on a shared_ptr is not thread-safe.
     // GCC 16.1's libstdc++ and MSVC's STL *do* have that specialization and deprecate these free
     // functions in favor of it; keeping them anyway is intentional portability, not an oversight,
-    // so the two helpers below silence that one diagnostic on those toolchains rather than letting
+    // so the two helpers below silence that one diagnostic on those libraries rather than letting
     // warnings-as-errors block a build whose real fix (migrating to std::atomic<shared_ptr<T>>)
-    // would drop libc++ 21 support.
+    // would drop libc++ 21 support. The deprecation belongs to the standard library, not the
+    // compiler: Clang reports it too when it uses libstdc++ (its Linux default) or MSVC's STL
+    // (clang-cl), so Clang gets its own branch, tested first because it also defines __GNUC__.
     [[nodiscard]] static std::shared_ptr<const Snapshot> loadPublished(const std::shared_ptr<const Snapshot>& target, std::memory_order order) noexcept {
-#if defined(__GNUC__) && !defined(__clang__)
+#ifdef __clang__
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elifdef __GNUC__
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#elif defined(_MSC_VER) && !defined(__clang__)
+#elifdef _MSC_VER
     #pragma warning(push)
     #pragma warning(disable : 4996)
 #endif
         return std::atomic_load_explicit(&target, order);
-#if defined(__GNUC__) && !defined(__clang__)
+#ifdef __clang__
+    #pragma clang diagnostic pop
+#elifdef __GNUC__
     #pragma GCC diagnostic pop
-#elif defined(_MSC_VER) && !defined(__clang__)
+#elifdef _MSC_VER
     #pragma warning(pop)
 #endif
     }
     static void storePublished(std::shared_ptr<const Snapshot>& target, std::shared_ptr<const Snapshot> value, std::memory_order order) noexcept {
-#if defined(__GNUC__) && !defined(__clang__)
+#ifdef __clang__
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elifdef __GNUC__
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#elif defined(_MSC_VER) && !defined(__clang__)
+#elifdef _MSC_VER
     #pragma warning(push)
     #pragma warning(disable : 4996)
 #endif
         std::atomic_store_explicit(&target, std::move(value), order);
-#if defined(__GNUC__) && !defined(__clang__)
+#ifdef __clang__
+    #pragma clang diagnostic pop
+#elifdef __GNUC__
     #pragma GCC diagnostic pop
-#elif defined(_MSC_VER) && !defined(__clang__)
+#elifdef _MSC_VER
     #pragma warning(pop)
 #endif
     }
